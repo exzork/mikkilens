@@ -8,6 +8,7 @@ require (
 	github.com/hajimehoshi/go-mp3 v0.3.4
 	github.com/kbinani/screenshot v0.0.0-20250624051815-089614a94018
 	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/yalue/onnxruntime_go v1.35.0
 	golang.org/x/image v0.45.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sys v0.47.0

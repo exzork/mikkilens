@@ -115,28 +115,30 @@
     <main id="main">
       <section role="tabpanel" id="panel-status" aria-labelledby="tab-status" tabindex="0">
         <h2 data-i18n="status.heading">Status</h2>
-        <dl class="status-grid" id="status-grid"></dl>
 
-        <h3 data-i18n="status.connections">Connections</h3>
-        <ul class="health" id="health-list"></ul>
+        <div class="scroller">
+          <dl class="status-grid" id="status-grid"></dl>
 
-        <p>
+          <h3 data-i18n="status.connections">Connections</h3>
+          <ul class="health" id="health-list"></ul>
+        </div>
+
+        <div class="actions">
           <button type="button" id="listen-now" class="primary" data-i18n="status.listenNow">
             Listen now
           </button>
           <span class="hint" data-i18n="status.listenNowHint"></span>
-        </p>
-        <p>
           <button type="button" id="restart-engine" data-i18n="status.restartEngine">
             Restart the engine
           </button>
           <span class="hint" data-i18n="status.restartHint"></span>
-        </p>
+        </div>
       </section>
 
       <section role="tabpanel" id="panel-audio" aria-labelledby="tab-audio" tabindex="0" hidden>
         <h2 data-i18n="audio.heading">Audio</h2>
 
+        <div class="scroller columns">
         <fieldset>
           <legend data-i18n="audio.outputLegend">Output device</legend>
           <p class="hint" data-i18n="audio.outputHint"></p>
@@ -168,15 +170,17 @@
             <input type="range" id="earcon-volume" min="0" max="1" step="0.05" />
             <output id="earcon-volume-out"></output>
           </p>
-          <p>
-            <button type="button" id="preview-voice" data-i18n="audio.preview">
-              Play a sample
-            </button>
-            <button type="button" id="save-audio" class="primary" data-i18n="common.save">
-              Save
-            </button>
-          </p>
         </fieldset>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="preview-voice" data-i18n="audio.preview">
+            Play a sample
+          </button>
+          <button type="button" id="save-audio" class="primary" data-i18n="common.save">
+            Save
+          </button>
+        </div>
       </section>
 
       <section
@@ -189,15 +193,16 @@
         <h2 data-i18n="commands.heading">Commands</h2>
         <p class="hint" data-i18n="commands.hint"></p>
         <p id="command-warnings" class="warnings" role="status" hidden></p>
-        <div id="command-list"></div>
-        <p>
+        <div id="command-list" class="scroller"></div>
+
+        <div class="actions">
           <button type="button" id="save-commands" class="primary" data-i18n="commands.save">
             Save commands
           </button>
           <button type="button" id="reload-commands" data-i18n="commands.reload">
             Reload from the file
           </button>
-        </p>
+        </div>
       </section>
 
       <section
@@ -209,6 +214,7 @@
       >
         <h2 data-i18n="connections.heading">Connections</h2>
 
+        <div class="scroller columns">
         <fieldset>
           <legend data-i18n="obs.legend">OBS Studio</legend>
           <p><label for="obs-host" data-i18n="obs.host">Address</label> <input type="text" id="obs-host" /></p>
@@ -257,6 +263,7 @@
           </p>
           <p class="result" id="vision-result" role="status"></p>
         </fieldset>
+        </div>
       </section>
 
       <section
@@ -267,6 +274,7 @@
         hidden
       >
         <h2 data-i18n="language.heading">Language</h2>
+        <div class="scroller">
         <p>
           <label for="lang-output" data-i18n="language.spoken">The language MikkiLens speaks</label>
           <select id="lang-output"></select>
@@ -290,9 +298,10 @@
           <input type="text" id="hotkey" size="24" />
           <span class="hint" data-i18n="language.hotkeyHint"></span>
         </p>
-        <p>
+        </div>
+        <div class="actions">
           <button type="button" id="save-language" class="primary" data-i18n="common.save">Save</button>
-        </p>
+        </div>
       </section>
 
       <section role="tabpanel" id="panel-log" aria-labelledby="tab-log" tabindex="0" hidden>
@@ -303,6 +312,7 @@
         <p id="last-heard" class="big"></p>
 
         <h3 data-i18n="log.spoken">What was said</h3>
+        <div class="scroller" tabindex="0">
         <table>
           <caption class="visually-hidden" data-i18n="log.caption"></caption>
           <thead>
@@ -313,11 +323,13 @@
           </thead>
           <tbody id="log-rows"></tbody>
         </table>
-        <p>
+        <pre id="engine-log" class="engine-log" tabindex="0" hidden></pre>
+        </div>
+
+        <div class="actions">
           <button type="button" id="refresh-log" data-i18n="log.refresh">Refresh</button>
           <button type="button" id="show-engine-log" data-i18n="log.engineLog">Engine log</button>
-        </p>
-        <pre id="engine-log" class="engine-log" tabindex="0" hidden></pre>
+        </div>
       </section>
     </main>
 

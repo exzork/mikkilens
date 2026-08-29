@@ -73,6 +73,19 @@ function reason(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/**
+ * Read a number out of a field, falling back to what is already configured.
+ *
+ * A blank or half-typed field must never be saved as zero. Zero earcon volume
+ * is a MikkiLens that has quietly stopped making its tones; zero for the OBS
+ * port is one that can no longer reach OBS. Both look like the app breaking
+ * for no reason, and neither is anything she asked for.
+ */
+function numberFrom(id: string, fallback: number): number {
+  const parsed = Number.parseFloat(element<HTMLInputElement>(id).value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 // -- tabs ---------------------------------------------------------------------
 
 const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
@@ -162,11 +175,20 @@ function renderStatus(): void {
   grid.replaceChildren()
 
   for (const [key, labelKey] of statusLabels) {
+    // A div around each pair is valid inside a dl, and it is what lets the
+    // readings flow into as many columns as the window has room for.
+    const pair = document.createElement('div')
+
     const term = document.createElement('dt')
     term.textContent = t(labelKey)
+
     const value = document.createElement('dd')
-    value.textContent = displayValue(key, snapshot[key])
-    grid.append(term, value)
+    const text = displayValue(key, snapshot[key])
+    value.textContent = text
+    value.title = text // the whole reading, when the column has clipped it
+
+    pair.append(term, value)
+    grid.append(pair)
   }
 
   const health = element('health-list')
@@ -236,11 +258,10 @@ function connectSocket(): void {
       type: 'snapshot' | 'delta'
       data: Snapshot
     }
-    if (message.type === 'snapshot') {
-      snapshot = message.data
-    } else {
-      Object.assign(snapshot, message.data)
-    }
+    // Merged, never replaced: a snapshot from an older engine might not carry
+    // every field, and blanking the page on reconnect would lose exactly the
+    // readings she opened it to see.
+    snapshot = { ...snapshot, ...message.data }
     renderStatus()
 
     if (message.type === 'delta' && 'listening' in message.data) {
@@ -433,7 +454,7 @@ element('save-audio').addEventListener('click', () => {
         voice: element<HTMLSelectElement>('voice').value,
         rate: element<HTMLInputElement>('rate').value,
         chat_rate: element<HTMLInputElement>('chat-rate').value,
-        earcon_volume: Number.parseFloat(element<HTMLInputElement>('earcon-volume').value),
+        earcon_volume: numberFrom('earcon-volume', settings?.speech.earcon_volume ?? 0.25),
       },
       audio: { input_device: input ? input.value : '' },
     },
@@ -469,7 +490,7 @@ element('save-obs').addEventListener('click', () => {
     {
       obs: {
         host: element<HTMLInputElement>('obs-host').value,
-        port: Number.parseInt(element<HTMLInputElement>('obs-port').value, 10),
+        port: numberFrom('obs-port', settings?.obs.port ?? 4455),
         password: element<HTMLInputElement>('obs-password').value,
         mic_source: element<HTMLInputElement>('obs-mic').value,
       },
@@ -560,7 +581,7 @@ element('save-language').addEventListener('click', async () => {
       language: { output: wanted, stt: element<HTMLSelectElement>('lang-stt').value },
       wake: {
         model: element<HTMLInputElement>('wake-model').value,
-        threshold: Number.parseFloat(element<HTMLInputElement>('wake-threshold').value),
+        threshold: numberFrom('wake-threshold', settings?.wake.threshold ?? 0.6),
       },
       hotkey: { combination: element<HTMLInputElement>('hotkey').value },
     },

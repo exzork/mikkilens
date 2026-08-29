@@ -74,6 +74,17 @@ func (s *Server) getHealth(writer http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) getState(writer http.ResponseWriter, _ *http.Request) {
+	respond(writer, http.StatusOK, s.fullSnapshot())
+}
+
+// fullSnapshot is the live state plus the things that are not state exactly --
+// which backend recognition ended up on, which wake word loaded, how many
+// commands are defined.
+//
+// The socket sends this too, not just the bare state. A client that connected
+// and then only listened would otherwise show blanks for half the status page,
+// which is the page she opens when something is wrong.
+func (s *Server) fullSnapshot() map[string]any {
 	snapshot := map[string]any{}
 	for key, value := range s.engine.State().Snapshot() {
 		snapshot[key] = value
@@ -99,8 +110,7 @@ func (s *Server) getState(writer http.ResponseWriter, _ *http.Request) {
 		snapshot["mic_frames"] = microphone.FramesSeen()
 		snapshot["mic_error"] = microphone.LastError()
 	}
-
-	respond(writer, http.StatusOK, snapshot)
+	return snapshot
 }
 
 // getLog is the diagnosis page: what MikkiLens heard, and what it said back.

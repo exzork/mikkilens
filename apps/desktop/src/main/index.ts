@@ -27,14 +27,36 @@ let strings: Catalog = catalog(fallbackLanguage)
 const t = (key: string, values?: Record<string, string | number>): string =>
   translate(strings, key, values)
 
+// A real name rather than the package one, so the settings and cache land in
+// a folder a person can find: %APPDATA%/MikkiLens.
+app.setName('MikkiLens')
+
 /**
- * One instance only. A second window would start a second engine, and two
- * engines would fight over the microphone -- which she would experience as
- * MikkiLens randomly ignoring her.
+ * One window at a time, but never at the cost of no window at all.
+ *
+ * The lock is worth having: a second launch should raise the window that is
+ * already open rather than adding another. But Electron leaves the lock behind
+ * when it is killed rather than closed, and a stale one made the next launch
+ * exit silently -- she double-clicks the icon and nothing happens, with
+ * nothing anywhere to say why. That is the worse failure by a long way, so a
+ * lock we cannot take is a warning and we carry on.
+ *
+ * Carrying on is safe: the engine is a separate process and a second window
+ * attaches to the one already running rather than starting its own, so the
+ * worst case is two windows onto the same engine.
  */
-if (!app.requestSingleInstanceLock()) {
-  app.quit()
-} else {
+async function acquireSingleInstanceLock(): Promise<boolean> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (app.requestSingleInstanceLock()) {
+      return true
+    }
+    // A window that has just closed can hold the lock for a moment longer.
+    await new Promise((resolve) => setTimeout(resolve, 600))
+  }
+  return false
+}
+
+{
   app.on('second-instance', () => showWindow())
   main().catch((error: unknown) => {
     // Startup must never fail silently: the window is the only place a problem
@@ -50,6 +72,12 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function main(): Promise<void> {
+  if (!(await acquireSingleInstanceLock())) {
+    console.warn(
+      'MikkiLens could not take the single-instance lock. ' +
+        'Opening anyway: a stale lock must not leave you without a window.',
+    )
+  }
   await app.whenReady()
 
   createWindow()
@@ -106,10 +134,10 @@ async function adoptEngineLanguage(): Promise<void> {
 
 function createWindow(): void {
   window = new BrowserWindow({
-    width: 1000,
-    height: 760,
-    minWidth: 560,
-    minHeight: 420,
+    width: 1180,
+    height: 820,
+    minWidth: 620,
+    minHeight: 460,
     show: false,
     title: 'MikkiLens',
     backgroundColor: '#12131a',

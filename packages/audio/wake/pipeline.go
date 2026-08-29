@@ -1,74 +1,301 @@
 package wake
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
+
+	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
-// The wake word needs ONNX Runtime, and ONNX Runtime is a native library.
+// The openWakeWord pipeline runs in three stages, and the rates between them
+// are what the buffering here is built around:
 //
-// It used to be reached through a cgo binding. That binding is gone, because
-// cgo cost the whole build a C toolchain -- and an old one silently produces
-// an executable Windows refuses to start. Everything else in MikkiLens is
-// pure Go now and builds anywhere.
+//	1280 audio samples (80 ms)  ->  8 mel frames  ->  1 embedding
+//	the last 16 embeddings (1.28 s)  ->  one score
 //
-// Reaching the runtime without cgo is possible: its public surface is a C ABI
-// in a struct of function pointers, and syscall can call those directly. It is
-// deliberately not done here, because getting a slot index wrong does not
-// return an error -- it calls an arbitrary function pointer and takes the
-// process down. Losing the engine mid-stream would take away her voice control
-// entirely, which is a far worse failure than not having the trigger word.
-//
-// So the wake word reports itself unavailable, clearly, at startup. The hotkey
-// is unaffected, and it was always the more reliable of the two triggers.
-//
-// To bring it back, either bind the runtime through cgo again with a current
-// toolchain, or verify the OrtApi slot offsets against the onnxruntime version
-// being shipped and implement the three-stage pipeline against them. The
-// buffering the pipeline needs is described in wake.go.
+// So one chunk of audio produces exactly one score, and the classifier always
+// sees the same 1.28 seconds of context openWakeWord trained it on.
+const (
+	melBins       = 32
+	melHop        = 160 // samples per mel frame
+	melWindow     = 76  // mel frames the embedding model consumes
+	melContext    = 480 // extra left context, so new frames have history
+	embeddingSize = 96
+	featureWindow = 16 // embeddings the classifier consumes
 
-type pipeline struct{}
+	melFramesPerChunk = ChunkSamples / melHop // 8
+)
 
-func newPipeline(wakeword string) (*pipeline, error) {
-	return nil, &Error{Reason: unavailableReason(wakeword)}
+var (
+	runtimeOnce sync.Once
+	runtimeErr  error
+)
+
+// initRuntime loads the ONNX runtime shared library.
+//
+// It is a separate download rather than something linked in, because the build
+// that suits her machine (CPU, CUDA, DirectML) is her choice, and shipping one
+// would be shipping the wrong one.
+func initRuntime() error {
+	runtimeOnce.Do(func() {
+		if ort.IsInitialized() {
+			return
+		}
+		library, err := findRuntimeLibrary()
+		if err != nil {
+			runtimeErr = err
+			return
+		}
+		ort.SetSharedLibraryPath(library)
+		if err := ort.InitializeEnvironment(); err != nil {
+			runtimeErr = &Error{Reason: "the ONNX runtime could not start: " + err.Error()}
+		}
+	})
+	return runtimeErr
 }
 
-func (p *pipeline) close() {}
-func (p *pipeline) reset() {}
-
-func (p *pipeline) score([]float32) (float64, error) { return 0, nil }
-
-// unavailableReason says what is missing in the order she would fix it, so the
-// message is useful rather than merely accurate.
-func unavailableReason(wakeword string) string {
-	const base = "the wake word is not available in this build; the hotkey still works"
-
-	if _, err := os.Stat(paths.ModelsDir()); err != nil {
-		return base
+func findRuntimeLibrary() (string, error) {
+	names := []string{"onnxruntime.dll", "libonnxruntime.so", "libonnxruntime.dylib"}
+	directories := []string{
+		paths.ModelsDir(),
+		filepath.Join(paths.ModelsDir(), "onnxruntime"),
+		filepath.Join(paths.Root(), "vendor", "onnxruntime"),
+		paths.Root(),
 	}
-	missing := []string{}
-	for _, name := range []string{"onnxruntime.dll", "melspectrogram", "embedding_model", wakeword} {
-		if _, err := findModelFile(paths.ModelsDir(), name); err != nil {
-			if _, err := os.Stat(filepath.Join(paths.ModelsDir(), name)); err != nil {
-				missing = append(missing, name)
+	for _, directory := range directories {
+		for _, name := range names {
+			candidate := filepath.Join(directory, name)
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				return candidate, nil
 			}
 		}
 	}
-	if len(missing) > 0 {
-		return base + " (and these are not installed either: " + join(missing) + ")"
-	}
-	return base
+	return "", &Error{Reason: "onnxruntime.dll was not found; put it in data/models to " +
+		"use a wake word. The hotkey works without it."}
 }
 
-func join(values []string) string {
-	out := ""
-	for index, value := range values {
-		if index > 0 {
-			out += ", "
-		}
-		out += value
+// model wraps one ONNX session with the input and output names the file
+// itself declares.
+type model struct {
+	session *ort.DynamicAdvancedSession
+	input   string
+	output  string
+}
+
+func loadModel(path string) (*model, error) {
+	// The names come from the model rather than being hard-coded: openWakeWord
+	// has used several over the years, and guessing them is how this breaks
+	// silently rather than loudly.
+	inputs, outputs, err := ort.GetInputOutputInfo(path)
+	if err != nil {
+		return nil, &Error{Reason: fmt.Sprintf("could not read %s: %v", filepath.Base(path), err)}
 	}
-	return out
+	if len(inputs) == 0 || len(outputs) == 0 {
+		return nil, &Error{Reason: filepath.Base(path) + " has no usable inputs or outputs"}
+	}
+
+	session, err := ort.NewDynamicAdvancedSession(
+		path, []string{inputs[0].Name}, []string{outputs[0].Name}, nil)
+	if err != nil {
+		return nil, &Error{Reason: fmt.Sprintf("could not load %s: %v", filepath.Base(path), err)}
+	}
+	return &model{session: session, input: inputs[0].Name, output: outputs[0].Name}, nil
+}
+
+// run feeds one float32 tensor through and returns the flattened output.
+func (m *model) run(shape ort.Shape, data []float32) ([]float32, error) {
+	input, err := ort.NewTensor(shape, data)
+	if err != nil {
+		return nil, err
+	}
+	defer input.Destroy()
+
+	// A nil output lets onnxruntime allocate whatever shape the model
+	// produces, which keeps this working across openWakeWord's revisions.
+	outputs := []ort.Value{nil}
+	if err := m.session.Run([]ort.Value{input}, outputs); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if outputs[0] != nil {
+			_ = outputs[0].Destroy()
+		}
+	}()
+
+	tensor, ok := outputs[0].(*ort.Tensor[float32])
+	if !ok {
+		return nil, fmt.Errorf("the model returned %T rather than float32", outputs[0])
+	}
+	return append([]float32(nil), tensor.GetData()...), nil
+}
+
+func (m *model) close() {
+	if m != nil && m.session != nil {
+		_ = m.session.Destroy()
+	}
+}
+
+// pipeline holds the three models and the buffers between them.
+type pipeline struct {
+	mel        *model
+	embedding  *model
+	classifier *model
+
+	audio     []float32 // recent raw audio, for mel left-context
+	melFrames [][]float32
+	features  [][]float32
+}
+
+func newPipeline(wakeword string) (*pipeline, error) {
+	if err := initRuntime(); err != nil {
+		return nil, err
+	}
+	root := paths.ModelsDir()
+
+	melPath, err := findModelFile(root, "melspectrogram")
+	if err != nil {
+		return nil, &Error{Reason: err.Error()}
+	}
+	embeddingPath, err := findModelFile(root, "embedding_model")
+	if err != nil {
+		return nil, &Error{Reason: err.Error()}
+	}
+	classifierPath, err := findModelFile(root, wakeword)
+	if err != nil {
+		return nil, &Error{Reason: fmt.Sprintf(
+			"the wake word model %q was not found in %s", wakeword, root)}
+	}
+
+	built := &pipeline{}
+	if built.mel, err = loadModel(melPath); err != nil {
+		return nil, err
+	}
+	if built.embedding, err = loadModel(embeddingPath); err != nil {
+		built.close()
+		return nil, err
+	}
+	if built.classifier, err = loadModel(classifierPath); err != nil {
+		built.close()
+		return nil, err
+	}
+	return built, nil
+}
+
+func (p *pipeline) close() {
+	for _, m := range []*model{p.mel, p.embedding, p.classifier} {
+		m.close()
+	}
+}
+
+// reset clears the buffers, so resuming after a command does not score against
+// the command she just spoke.
+func (p *pipeline) reset() {
+	p.audio = p.audio[:0]
+	p.melFrames = p.melFrames[:0]
+	p.features = p.features[:0]
+}
+
+// score pushes one 80 ms chunk through and returns the current confidence.
+//
+// It returns 0 until the buffers have filled, which takes about 1.3 seconds
+// from a reset. Scoring on a half-full window is what produces false triggers.
+func (p *pipeline) score(chunk []float32) (float64, error) {
+	p.audio = append(p.audio, chunk...)
+	if keep := ChunkSamples + melContext; len(p.audio) > keep {
+		p.audio = append(p.audio[:0], p.audio[len(p.audio)-keep:]...)
+	}
+	if len(p.audio) < ChunkSamples {
+		return 0, nil
+	}
+
+	newFrames, err := p.melFramesFor(p.audio)
+	if err != nil {
+		return 0, err
+	}
+	p.melFrames = append(p.melFrames, newFrames...)
+	if keep := melWindow + melFramesPerChunk; len(p.melFrames) > keep {
+		p.melFrames = p.melFrames[len(p.melFrames)-keep:]
+	}
+	if len(p.melFrames) < melWindow {
+		return 0, nil
+	}
+
+	feature, err := p.embed(p.melFrames[len(p.melFrames)-melWindow:])
+	if err != nil {
+		return 0, err
+	}
+	p.features = append(p.features, feature)
+	if len(p.features) > featureWindow {
+		p.features = p.features[len(p.features)-featureWindow:]
+	}
+	if len(p.features) < featureWindow {
+		return 0, nil
+	}
+	return p.classify(p.features)
+}
+
+// melFramesFor computes the spectrogram over the buffered audio and keeps only
+// the frames belonging to the newest chunk. The left context is there so those
+// frames are computed with history rather than against a hard edge.
+func (p *pipeline) melFramesFor(audio []float32) ([][]float32, error) {
+	raw, err := p.mel.run(ort.NewShape(1, int64(len(audio))), audio)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw)%melBins != 0 {
+		return nil, fmt.Errorf("the spectrogram returned %d values, not a multiple of %d",
+			len(raw), melBins)
+	}
+
+	total := len(raw) / melBins
+	wanted := min(melFramesPerChunk, total)
+
+	frames := make([][]float32, 0, wanted)
+	for index := total - wanted; index < total; index++ {
+		frame := make([]float32, melBins)
+		for bin := 0; bin < melBins; bin++ {
+			// openWakeWord's models were trained on this scaling, so it is part
+			// of the model contract rather than a tuning knob.
+			frame[bin] = raw[index*melBins+bin]/10.0 + 2.0
+		}
+		frames = append(frames, frame)
+	}
+	return frames, nil
+}
+
+func (p *pipeline) embed(window [][]float32) ([]float32, error) {
+	flat := make([]float32, 0, melWindow*melBins)
+	for _, frame := range window {
+		flat = append(flat, frame...)
+	}
+
+	raw, err := p.embedding.run(ort.NewShape(1, melWindow, melBins, 1), flat)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) < embeddingSize {
+		return nil, fmt.Errorf("the embedding model returned %d values, want %d",
+			len(raw), embeddingSize)
+	}
+	return raw[len(raw)-embeddingSize:], nil
+}
+
+func (p *pipeline) classify(features [][]float32) (float64, error) {
+	flat := make([]float32, 0, featureWindow*embeddingSize)
+	for _, feature := range features {
+		flat = append(flat, feature...)
+	}
+
+	raw, err := p.classifier.run(ort.NewShape(1, featureWindow, embeddingSize), flat)
+	if err != nil {
+		return 0, err
+	}
+	if len(raw) == 0 {
+		return 0, fmt.Errorf("the wake word model returned nothing")
+	}
+	return float64(raw[len(raw)-1]), nil
 }

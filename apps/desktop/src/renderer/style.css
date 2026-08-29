@@ -2,6 +2,12 @@
   The page is built for a screen reader first and eyes second, so the visual
   design stays out of the way: large text, strong contrast, visible focus, and
   no colour that carries meaning on its own.
+
+  The window itself never scrolls. Header, tabs and the active panel share the
+  height between them, and the two lists that are genuinely unbounded -- the
+  commands and the spoken log -- scroll inside their own box. Hunting for a
+  control that has drifted below the fold is exactly the problem this app
+  exists to avoid.
 */
 
 :root {
@@ -16,6 +22,7 @@
   --bad: #ff8080;
   --warn: #ffcb6b;
   --radius: 8px;
+  --gap: 1rem;
 }
 
 /* High contrast is a real setting, not a filter: everything gets pure black
@@ -36,12 +43,21 @@ html[data-contrast='high'] {
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  padding: 0 0 3rem;
   background: var(--bg);
   color: var(--ink);
-  font: 16px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif;
+  font: 15px/1.5 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+  /* The page is a fixed frame; only the panels inside it ever move. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* A visible focus ring everywhere. Removing it would make the app unusable by
@@ -76,28 +92,31 @@ body {
   border: 0;
 }
 
+/* -- frame ---------------------------------------------------------------- */
+
 header {
   display: flex;
   align-items: baseline;
-  gap: 1rem;
+  gap: var(--gap);
   flex-wrap: wrap;
-  padding: 1.25rem 1.5rem 0.75rem;
+  flex: none;
+  padding: 0.7rem 1.25rem;
   border-bottom: 1px solid var(--edge);
 }
 
 h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
 }
 
 h2 {
-  margin-top: 0;
-  font-size: 1.3rem;
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
 }
 
 h3 {
-  font-size: 1.05rem;
-  margin-bottom: 0.4rem;
+  font-size: 0.95rem;
+  margin: 0.75rem 0 0.35rem;
 }
 
 .sub {
@@ -107,20 +126,25 @@ h3 {
 }
 
 .banner {
+  flex: none;
   margin: 0;
-  padding: 0.75rem 1.5rem;
+  padding: 0.6rem 1.25rem;
   background: var(--panel);
   border-bottom: 2px solid var(--warn);
   color: var(--warn);
 }
 
+nav {
+  flex: none;
+}
+
 nav ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: 0.2rem;
   list-style: none;
   margin: 0;
-  padding: 0.5rem 1rem 0;
+  padding: 0.4rem 1rem 0;
   border-bottom: 1px solid var(--edge);
 }
 
@@ -132,7 +156,7 @@ nav ul {
   color: var(--muted);
   cursor: pointer;
   font: inherit;
-  padding: 0.6rem 1rem;
+  padding: 0.45rem 0.9rem;
 }
 
 [role='tab'][aria-selected='true'] {
@@ -143,33 +167,108 @@ nav ul {
 }
 
 main {
-  padding: 1.5rem;
-  max-width: 60rem;
+  flex: 1;
+  min-height: 0; /* lets the panel shrink instead of pushing the page taller */
+  padding: var(--gap) 1.25rem;
 }
 
+/* Each panel fills the frame and manages its own overflow. */
 section[role='tabpanel'] {
   background: var(--panel);
   border: 1px solid var(--edge);
   border-radius: var(--radius);
-  padding: 1.25rem 1.5rem;
+  padding: 0.9rem 1.1rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+section[role='tabpanel'][hidden] {
+  display: none;
+}
+
+/* The part of a panel that may need to scroll when the window is small. */
+.scroller {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+
+/* -- layout --------------------------------------------------------------- */
+
+/* Content spreads sideways before it runs down the page, which is what keeps
+   a panel inside the window. */
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16.5rem, 1fr));
+  gap: 0.75rem;
+  align-content: start;
 }
 
 fieldset {
   border: 1px solid var(--edge);
   border-radius: var(--radius);
-  margin: 0 0 1.25rem;
-  padding: 1rem 1.25rem;
+  margin: 0;
+  padding: 0.5rem 0.8rem 0.6rem;
+  min-width: 0;
 }
 
 legend {
   font-weight: 600;
-  padding: 0 0.4rem;
+  padding: 0 0.35rem;
+}
+
+/* A label and its field share one line, with the field taking whatever room
+   is left. Letting the label force a line break of its own doubled the height
+   of every box, which is what pushed the vision settings off the panel. */
+fieldset p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  margin: 0.3rem 0;
+}
+
+fieldset p > label {
+  flex: none;
+  min-width: 0;
+}
+
+fieldset p > input[type='text'],
+fieldset p > input[type='number'],
+fieldset p > input[type='password'],
+fieldset p > select {
+  flex: 1 1 7rem;
+  min-width: 0;
+}
+
+fieldset p > input[type='range'] {
+  flex: 1 1 5rem;
+  min-width: 0;
+}
+
+fieldset p > input[type='checkbox'] {
+  flex: none;
+}
+
+/* An explanation belongs under the field it explains, not squeezed beside it. */
+fieldset p > .hint {
+  flex-basis: 100%;
 }
 
 label {
   display: inline-block;
-  min-width: 13rem;
+  min-width: 8.5rem;
   vertical-align: middle;
+}
+
+/* Inside a box the label sizes to its text; the 8.5rem floor is for the
+   free-standing fields on the Language page. */
+fieldset p > label {
+  min-width: 0;
 }
 
 input[type='text'],
@@ -182,12 +281,13 @@ textarea {
   border-radius: 4px;
   color: var(--ink);
   font: inherit;
-  padding: 0.45rem 0.6rem;
+  padding: 0.35rem 0.5rem;
+  max-width: 100%;
 }
 
 textarea {
   width: 100%;
-  min-height: 6rem;
+  min-height: 4.5rem;
   resize: vertical;
 }
 
@@ -198,7 +298,7 @@ button {
   color: var(--ink);
   cursor: pointer;
   font: inherit;
-  padding: 0.5rem 0.9rem;
+  padding: 0.4rem 0.8rem;
 }
 
 button:hover {
@@ -216,50 +316,86 @@ button.ghost {
   color: var(--muted);
 }
 
+.actions {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--edge);
+}
+
 .hint {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .result {
-  min-height: 1.5rem;
   color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0.3rem 0 0;
+}
+
+.result:empty {
+  display: none;
 }
 
 .warnings {
   border-left: 4px solid var(--warn);
   color: var(--warn);
-  padding-left: 0.75rem;
+  padding-left: 0.7rem;
+  margin: 0 0 0.5rem;
 }
 
+/* -- status --------------------------------------------------------------- */
+
+/* Pairs flow into as many columns as fit, so twelve readings stay one screen
+   rather than one long list. */
 .status-grid {
   display: grid;
-  grid-template-columns: minmax(10rem, 16rem) 1fr;
-  gap: 0.35rem 1rem;
-  margin: 0 0 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.3rem 1.25rem;
+  margin: 0 0 0.9rem;
+}
+
+.status-grid > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--edge);
+  padding-bottom: 0.2rem;
+  min-width: 0;
 }
 
 .status-grid dt {
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .status-grid dd {
   margin: 0;
   font-weight: 600;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .health {
   list-style: none;
-  margin: 0 0 1.5rem;
+  margin: 0 0 0.5rem;
   padding: 0;
-  display: grid;
-  gap: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
 }
 
 .health li {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 /* The badge carries a word as well as a colour, so it still reads correctly
@@ -267,8 +403,8 @@ button.ghost {
 .badge {
   border: 1px solid currentColor;
   border-radius: 999px;
-  font-size: 0.85rem;
-  padding: 0.1rem 0.7rem;
+  font-size: 0.8rem;
+  padding: 0.05rem 0.6rem;
 }
 
 .badge.connected {
@@ -282,27 +418,55 @@ button.ghost {
   color: var(--muted);
 }
 
+/* -- devices -------------------------------------------------------------- */
+
 .device-list {
   display: grid;
-  gap: 0.4rem;
+  gap: 0.2rem;
 }
 
 .device-row {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .device-row label {
   min-width: 0;
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+.device-row button {
+  flex: none;
+  padding: 0.15rem 0.55rem;
+}
+
+/* Inputs give up their fixed width in a narrow column rather than forcing the
+   column wider or wrapping onto a second line. */
+fieldset input[type='text'],
+fieldset input[type='number'],
+fieldset input[type='password'],
+fieldset select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+fieldset input[type='range'] {
+  max-width: 8rem;
+  vertical-align: middle;
+}
+
+/* -- commands ------------------------------------------------------------- */
 
 details.command {
   border: 1px solid var(--edge);
   border-radius: var(--radius);
-  margin-bottom: 0.5rem;
-  padding: 0.5rem 0.9rem;
+  margin-bottom: 0.35rem;
+  padding: 0.35rem 0.7rem;
 }
 
 details.command summary {
@@ -315,6 +479,8 @@ details.command .meta {
   font-weight: 400;
 }
 
+/* -- log ------------------------------------------------------------------ */
+
 table {
   border-collapse: collapse;
   width: 100%;
@@ -323,7 +489,7 @@ table {
 th,
 td {
   border-bottom: 1px solid var(--edge);
-  padding: 0.4rem 0.6rem;
+  padding: 0.25rem 0.5rem;
   text-align: left;
   vertical-align: top;
 }
@@ -331,19 +497,31 @@ td {
 th {
   color: var(--muted);
   font-weight: 600;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+
+td:first-child {
+  white-space: nowrap;
+  color: var(--muted);
+  width: 6rem;
 }
 
 .big {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
+  margin: 0.2rem 0 0.6rem;
 }
 
 .engine-log {
   background: var(--bg);
   border: 1px solid var(--edge);
   border-radius: var(--radius);
-  max-height: 22rem;
+  margin: 0.5rem 0 0;
+  max-height: 14rem;
   overflow: auto;
-  padding: 0.75rem;
+  padding: 0.6rem;
+  font-size: 0.85rem;
   white-space: pre-wrap;
   word-break: break-word;
 }

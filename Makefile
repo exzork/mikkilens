@@ -9,13 +9,23 @@ NPM     ?= npm
 DIST    ?= dist
 ENGINE  := $(DIST)/mikkilensd.exe
 
+# The C debug sections must be stripped from the link.
+#
+# cgo (needed by the wake word, for ONNX Runtime) links with the system C
+# toolchain, and an old MinGW places its DWARF sections at a virtual address
+# outside the image. Windows then refuses the executable with "not a valid
+# application for this OS platform", which points nowhere near the cause.
+# --strip-debug drops those sections and keeps Go's own symbols, so panic
+# traces stay readable.
+LDFLAGS := -ldflags "-extldflags=-Wl,--strip-debug"
+
 .PHONY: all engine desktop install test test-go test-desktop lint fmt run setup devices selftest clean
 
 all: engine desktop
 
 ## engine: build the voice engine
 engine:
-	$(GO) build -o $(ENGINE) ./apps/daemon
+	$(GO) build $(LDFLAGS) -o $(ENGINE) ./apps/daemon
 
 ## desktop: build the settings app
 desktop:

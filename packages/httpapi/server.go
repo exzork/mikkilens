@@ -237,7 +237,7 @@ func (s *Server) handleWebSocket(writer http.ResponseWriter, request *http.Reque
 	})
 	defer unsubscribe()
 
-	if err := writeJSON(connection, envelope{Type: "snapshot", Data: s.engine.State().Snapshot()}); err != nil {
+	if err := writeJSON(connection, envelope{Type: "snapshot", Data: s.fullSnapshot()}); err != nil {
 		return
 	}
 
