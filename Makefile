@@ -61,3 +61,4 @@ selftest: engine
 
 clean:
 	rm -rf $(DIST) apps/desktop/out
+	rm -f apps/desktop/*.tsbuildinfo

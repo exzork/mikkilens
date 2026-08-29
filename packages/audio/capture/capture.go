@@ -15,15 +15,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gen2brain/malgo"
-
 	"github.com/exzork/mikkilens/packages/audio/devices"
+	"github.com/exzork/mikkilens/packages/audio/wasapi"
 )
 
 const (
-	// SampleRate is what the recognizer and the wake word both want. miniaudio
+	// SampleRate is what the recognizer and the wake word both want. WASAPI
 	// resamples from whatever the device natively runs at, so nothing here has
-	// to care that WASAPI shared mode refuses any other rate.
+	// to care that shared mode otherwise refuses any other rate.
 	SampleRate = 16000
 
 	// FrameMS is the frame size everything downstream is built around.
@@ -49,13 +48,12 @@ type Listener func(frame []float32)
 type Stream struct {
 	mu        sync.RWMutex
 	device    *devices.Device
-	handle    *malgo.Device
+	recorder  *wasapi.Recorder
 	listeners map[int]Listener
 	nextID    int
 
 	preroll    [][]float32
 	partial    []float32
-	scratch    []float32
 	framesSeen int
 	lastError  string
 }
@@ -69,77 +67,47 @@ func NewStream(device *devices.Device) *Stream {
 // Start opens the microphone.
 func (s *Stream) Start() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.handle != nil {
+	if s.recorder != nil {
+		s.mu.Unlock()
 		return nil
 	}
-
-	allocated, err := devices.Context()
-	if err != nil {
-		return &Error{Reason: fmt.Sprintf("could not open the microphone: %v", err)}
-	}
-
-	settings := malgo.DefaultDeviceConfig(malgo.Capture)
-	settings.SampleRate = SampleRate
-	settings.Capture.Format = malgo.FormatF32
-	settings.Capture.Channels = 1
-	settings.PeriodSizeInFrames = FrameSamples
-	if s.device != nil {
-		settings.Capture.DeviceID = devices.Pointer(s.device.ID())
-	}
-
-	handle, err := malgo.InitDevice(allocated.Context, settings, malgo.DeviceCallbacks{
-		Data: func(_, input []byte, _ uint32) { s.onAudio(input) },
-		Stop: func() { s.noteUnexpectedStop() },
-	})
-	if err != nil {
-		return &Error{Reason: fmt.Sprintf("could not open the microphone: %v", err)}
-	}
-	if err := handle.Start(); err != nil {
-		handle.Uninit()
-		return &Error{Reason: fmt.Sprintf("could not start the microphone: %v", err)}
-	}
-
-	s.handle = handle
+	id := ""
 	name := "system default"
 	if s.device != nil {
-		name = s.device.Name
+		id, name = s.device.ID, s.device.Name
 	}
+	s.mu.Unlock()
+
+	recorder, err := wasapi.StartCapture(id, SampleRate, 1, s.onAudio)
+	if err != nil {
+		return &Error{Reason: fmt.Sprintf("could not open the microphone: %v", err)}
+	}
+
+	s.mu.Lock()
+	s.recorder = recorder
+	s.mu.Unlock()
+
 	slog.Info("microphone started", "device", name, "sample_rate", SampleRate)
 	return nil
-}
-
-// noteUnexpectedStop records a microphone that went away on its own -- a
-// headset unplugged mid-stream, most often. The engine watches for this and
-// says so, because a silently dead microphone is indistinguishable from
-// MikkiLens ignoring her.
-func (s *Stream) noteUnexpectedStop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.handle != nil {
-		s.lastError = "the microphone stopped unexpectedly"
-	}
 }
 
 // Stop closes the microphone.
 func (s *Stream) Stop() {
 	s.mu.Lock()
-	handle := s.handle
-	s.handle = nil
+	recorder := s.recorder
+	s.recorder = nil
 	s.mu.Unlock()
 
-	if handle == nil {
-		return
+	if recorder != nil {
+		recorder.Stop()
 	}
-	_ = handle.Stop()
-	handle.Uninit()
 }
 
 // Running reports whether the microphone is open.
 func (s *Stream) Running() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.handle != nil
+	return s.recorder != nil && s.recorder.Running()
 }
 
 // Device is the microphone in use.
@@ -157,11 +125,22 @@ func (s *Stream) FramesSeen() int {
 	return s.framesSeen
 }
 
-// LastError is the most recent problem miniaudio reported.
+// LastError is the most recent problem the capture thread hit.
+//
+// A microphone that dies quietly -- a headset unplugged mid-stream, most often
+// -- is indistinguishable from MikkiLens ignoring her, so the engine watches
+// this and says so.
 func (s *Stream) LastError() string {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.lastError
+	recorder, stored := s.recorder, s.lastError
+	s.mu.RUnlock()
+
+	if recorder != nil {
+		if err := recorder.LastError(); err != nil {
+			return err.Error()
+		}
+	}
+	return stored
 }
 
 // AddListener registers a consumer and returns the function that removes it.
@@ -196,13 +175,12 @@ func (s *Stream) Preroll() []float32 {
 	return joined
 }
 
-// onAudio runs on the audio thread. It re-blocks into exact frames, because
-// miniaudio does not promise the block size we asked for and everything
-// downstream is built around a fixed frame.
-func (s *Stream) onAudio(input []byte) {
+// onAudio runs on the capture thread. It re-blocks into exact frames, because
+// WASAPI hands over whatever packet size it has and everything downstream is
+// built around a fixed frame.
+func (s *Stream) onAudio(input []float32) {
 	s.mu.Lock()
-	s.scratch = devices.ReadFloat32(input, s.scratch)
-	chunk := append(s.partial, s.scratch...)
+	chunk := append(s.partial, input...)
 
 	count := len(chunk) / FrameSamples
 	frames := make([][]float32, 0, count)

@@ -1,4 +1,5 @@
 {
   "files": [],
-  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }]
+  "include": [],
+  "//": "The two real configs are built directly: tsconfig.node.json for the main and preload processes, tsconfig.web.json for the page."
 }

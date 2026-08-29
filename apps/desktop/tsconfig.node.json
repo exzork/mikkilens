@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "Node16",
     "moduleResolution": "Node16",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "outDir": "out",
     "rootDir": "src",
     "strict": true,
@@ -12,8 +14,13 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "sourceMap": true,
-    "composite": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "incremental": false
   },
-  "include": ["src/main/**/*.ts", "src/preload/**/*.ts"]
+  "include": [
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts"
+  ]
 }

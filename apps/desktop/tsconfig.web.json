@@ -3,7 +3,11 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "outDir": "out/renderer",
     "rootDir": "src/renderer",
     "strict": true,
@@ -12,8 +16,10 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "sourceMap": true,
-    "composite": true,
-    "types": []
+    "types": [],
+    "incremental": false
   },
-  "include": ["src/renderer/**/*.ts"]
+  "include": [
+    "src/renderer/**/*.ts"
+  ]
 }

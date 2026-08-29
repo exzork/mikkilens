@@ -136,7 +136,10 @@ func SetFromMap(document map[string]any, source string) (*Set, error) {
 		return nil, &FileError{Reason: "no [commands] section found"}
 	}
 
-	set := &Set{Commands: map[string]Command{}, Source: source}
+	// Warnings starts empty rather than nil: "no problems" is an empty list,
+	// and a nil slice would reach the settings app as JSON null, where every
+	// caller that counts it would fail.
+	set := &Set{Commands: map[string]Command{}, Warnings: []string{}, Source: source}
 
 	ids := make([]string, 0, len(section))
 	for id := range section {

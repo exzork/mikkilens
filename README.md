@@ -82,10 +82,9 @@ Kalau kamu lebih suka mengirim suara ke server, isi `[stt] base_url` di
 
 ### Kata pemicu
 
-Kata pemicu perlu empat berkas di `data\models`: `onnxruntime.dll`,
-`melspectrogram.onnx`, `embedding_model.onnx`, dan `<nama_model>.onnx`.
-Kalau tidak ada, MikkiLens mengatakannya saat mulai dan mematikan kata pemicu.
-Tombol pintasan tetap jalan, dan memang lebih andal.
+Kata pemicu belum tersedia di versi ini. MikkiLens mengatakannya saat mulai,
+lalu mematikan kata pemicu. Tombol pintasan tetap jalan — dan memang lebih
+andal.
 
 ### Yang perlu bantuan orang lain, sekali saja
 
@@ -198,11 +197,18 @@ can be exercised with `curl` when something is wrong.
 
 ### Stack
 
-Go 1.25 and Electron 33. Audio in and out is miniaudio through
-[malgo](https://github.com/gen2brain/malgo), opened on a single backend
-(WASAPI where available) so each physical device appears exactly once —
+Go 1.25 and Electron 33, and **no cgo**. Audio in and out is a small pure-Go
+binding to WASAPI: COM reached through vtable calls, in `packages/audio/wasapi`.
+Because it speaks to one backend, each physical device appears exactly once —
 Windows otherwise lists seven devices thirty-one times, which is unusable read
-aloud.
+aloud. WASAPI's own format conversion does the resampling, so nothing above it
+has to care that the hardware runs at 48 kHz.
+
+Dropping cgo was not cosmetic. A C toolchain old enough to emit debug sections
+at a virtual address outside the image produces an executable Windows refuses
+to start, reporting only "not a valid application for this OS platform" —
+which points nowhere near the cause. A pure-Go build cannot fail that way, it
+needs no compiler on the streaming machine, and it cross-compiles.
 
 Speech synthesis speaks Microsoft's Edge voice protocol directly, with a
 Windows SAPI fallback so a dropped connection cannot produce silence. Speech
@@ -212,8 +218,7 @@ endpoint. Running whisper.cpp out of process costs a few tens of milliseconds
 per command and buys a build that needs no CUDA SDK on the streaming machine —
 you drop in whichever prebuilt binary suits your GPU.
 
-The wake word runs openWakeWord's three-stage ONNX pipeline locally, so the
-always-open microphone never leaves the machine. OBS is driven over its
+OBS is driven over its
 WebSocket with [goobs](https://github.com/andreykaipov/goobs). Vision and chat
 summaries go through any **OpenAI-compatible endpoint** — `base_url` is
 configuration, so OpenAI, z.ai, OpenRouter, Groq, or a local Ollama or LM
@@ -247,9 +252,14 @@ file much harder to read for the one job it exists to do.
 - Voice activity detection is an adaptive energy detector rather than WebRTC's
   model. It adapts better to a room that changes and needs no C toolchain;
   WebRTC is better at picking a voice out of loud broadband noise.
-- The wake word models are English-trained; a custom "hey mikki" model needs
-  separate training. The ONNX pipeline is implemented but has not been run
-  against the real models here.
+- The wake word is unavailable in this build. It needs ONNX Runtime, which is
+  a native library; reaching it without cgo means calling into a struct of
+  function pointers by index, and a wrong index does not return an error, it
+  takes the process down. Losing the engine mid-stream would take away her
+  voice control entirely, which is far worse than not having the trigger word.
+  It reports itself unavailable at startup and the hotkey — always the more
+  reliable trigger — is unaffected. `packages/audio/wake/pipeline.go` says what
+  it would take to restore it.
 - Google's OAuth consent screen needs one-time sighted or screen-reader help.
 - A global hotkey is Windows-only. The wake word and the settings app work
   anywhere Go and Electron do.

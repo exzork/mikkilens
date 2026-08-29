@@ -13,7 +13,7 @@ import (
 // experiences as MikkiLens having no voice at all.
 
 func TestEnumeratesRealDevices(t *testing.T) {
-	if _, err := devices.Context(); err != nil {
+	if _, err := devices.List(devices.Output); err != nil {
 		t.Skipf("no audio backend in this environment: %v", err)
 	}
 	t.Logf("audio backend: %s", devices.HostAPI())
@@ -29,6 +29,13 @@ func TestEnumeratesRealDevices(t *testing.T) {
 		}
 		if len(found) == 0 {
 			continue
+		}
+
+		// An endpoint id is what config stores, so every device needs one.
+		for _, device := range found {
+			if device.ID == "" {
+				t.Errorf("%s device %q has no endpoint id", kind, device.Name)
+			}
 		}
 
 		// One entry per physical device is the whole point of picking a single

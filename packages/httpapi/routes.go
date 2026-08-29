@@ -82,7 +82,7 @@ func (s *Server) getState(writer http.ResponseWriter, _ *http.Request) {
 	snapshot["stt_backend"] = s.engine.Transcriber().Describe()
 	snapshot["stt_loaded"] = s.engine.Transcriber().Loaded()
 	snapshot["command_count"] = s.engine.Commands().Len()
-	snapshot["unhandled"] = s.engine.Router().UnhandledCommands()
+	snapshot["unhandled"] = orEmpty(s.engine.Router().UnhandledCommands())
 
 	if detector := s.engine.Wake(); detector != nil {
 		snapshot["wake_model"] = detector.ModelName()
@@ -127,7 +127,7 @@ func (s *Server) getLog(writer http.ResponseWriter, request *http.Request) {
 		"spoken":           reversed,
 		"last_transcript":  s.engine.State().Get("last_transcript"),
 		"last_command":     s.engine.State().Get("last_command"),
-		"command_warnings": s.engine.Commands().Warnings,
+		"command_warnings": orEmpty(s.engine.Commands().Warnings),
 	})
 }
 
@@ -341,8 +341,8 @@ func (s *Server) getCommands(writer http.ResponseWriter) {
 	respond(writer, http.StatusOK, map[string]any{
 		"language": language,
 		"path":     paths.CommandsFile(language),
-		"order":    set.Order,
-		"warnings": set.Warnings,
+		"order":    orEmpty(set.Order),
+		"warnings": orEmpty(set.Warnings),
 		"commands": described,
 	})
 }
@@ -403,7 +403,7 @@ func (s *Server) putCommands(writer http.ResponseWriter, request *http.Request) 
 
 	s.engine.AdoptCommands(candidate)
 	respond(writer, http.StatusOK, map[string]any{
-		"ok": true, "count": candidate.Len(), "warnings": candidate.Warnings,
+		"ok": true, "count": candidate.Len(), "warnings": orEmpty(candidate.Warnings),
 	})
 }
 
@@ -411,7 +411,7 @@ func (s *Server) reloadCommands(writer http.ResponseWriter, _ *http.Request) {
 	s.engine.ReloadCommands()
 	set := s.engine.Commands()
 	respond(writer, http.StatusOK, map[string]any{
-		"ok": true, "count": set.Len(), "warnings": set.Warnings,
+		"ok": true, "count": set.Len(), "warnings": orEmpty(set.Warnings),
 	})
 }
 
@@ -542,4 +542,15 @@ func (s *Server) handleStartup(writer http.ResponseWriter, request *http.Request
 func (s *Server) triggerListen(writer http.ResponseWriter, _ *http.Request) {
 	s.engine.BeginListening()
 	respond(writer, http.StatusOK, map[string]any{"ok": true})
+}
+
+// orEmpty keeps a nil slice from reaching the settings app as JSON null.
+//
+// "No warnings" is an empty list, not the absence of a list, and a page that
+// counts them should not have to defend against the difference.
+func orEmpty(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }

@@ -308,12 +308,17 @@ function renderDevices(
 // -- commands -----------------------------------------------------------------
 
 function renderCommands(payload: CommandsPayload): void {
-  commands = payload.commands
-  commandOrder = payload.order.length > 0 ? payload.order : Object.keys(payload.commands)
+  // Everything here is defended against a missing list. This page is how she
+  // diagnoses a MikkiLens that is misbehaving, so it has to survive a server
+  // that is misbehaving too.
+  commands = payload.commands ?? {}
+  const order = payload.order ?? []
+  commandOrder = order.length > 0 ? order : Object.keys(commands)
 
+  const problems = payload.warnings ?? []
   const warnings = element('command-warnings')
-  warnings.hidden = payload.warnings.length === 0
-  warnings.textContent = payload.warnings.join(' · ')
+  warnings.hidden = problems.length === 0
+  warnings.textContent = problems.join(' · ')
 
   const list = element('command-list')
   list.replaceChildren()
@@ -692,7 +697,7 @@ async function loadLog(): Promise<void> {
 
   const body = element('log-rows')
   body.replaceChildren()
-  for (const entry of log.spoken) {
+  for (const entry of log.spoken ?? []) {
     const row = document.createElement('tr')
 
     const kind = document.createElement('td')
@@ -726,8 +731,8 @@ async function boot(): Promise<void> {
   await applyLanguage(settings.language.output)
 
   const devices = await api<DeviceList>('/devices')
-  renderDevices(element('output-devices'), devices.output, 'output', settings.speech.output_device)
-  renderDevices(element('input-devices'), devices.input, 'input', settings.audio.input_device)
+  renderDevices(element('output-devices'), devices.output ?? [], 'output', settings.speech.output_device)
+  renderDevices(element('input-devices'), devices.input ?? [], 'input', settings.audio.input_device)
 
   const voices = await api<VoiceInfo[]>(
     `/voices?language=${encodeURIComponent(settings.language.output)}`,
@@ -735,7 +740,9 @@ async function boot(): Promise<void> {
   const voiceSelect = element<HTMLSelectElement>('voice')
   voiceSelect.replaceChildren()
 
-  const options = voices.length > 0 ? voices : [{ name: settings.speech.voice, gender: '', locale: '' }]
+  const available = voices ?? []
+  const options =
+    available.length > 0 ? available : [{ name: settings.speech.voice, gender: '', locale: '' }]
   for (const voice of options) {
     const option = document.createElement('option')
     option.value = voice.name
