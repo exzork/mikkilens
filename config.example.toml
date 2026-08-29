@@ -57,9 +57,20 @@ combination = "<ctrl>+<alt>+<space>"  # A foot pedal or Stream Deck key works to
 push_to_talk = true                   # false = press once to start, once to stop.
 
 [stt]
-backend = "auto"       # "auto" prefers a local whisper.cpp build and falls back
-                       # to base_url below. "whispercpp" or "openai" force one.
-model_size = "small"   # tiny / base / small / medium / large-v3.
+backend = "auto"       # "auto" prefers a local whisper.cpp server, then its
+                       # one-shot CLI, then base_url below. "whisperserver",
+                       # "whispercpp" or "openai" force one.
+model_size = "base"    # tiny / base / small / medium / large-v3.
+                       #
+                       # Measured on a 20-core CPU with 8 threads, for a
+                       # one-and-a-half second command:
+                       #   base   0.7s   -- responsive, and accurate enough
+                       #   small  2.2s   -- more accurate, long enough that you
+                       #                    start repeating yourself
+                       # Short commands are matched fuzzily anyway, so "base"
+                       # is the better default. Use "small" if you often say
+                       # long titles, or if you have a GPU build of
+                       # whisper.cpp, where "small" costs almost nothing.
 device = "auto"
 compute_type = "auto"
 beam_size = 1          # 1 is fastest and fine for short commands.

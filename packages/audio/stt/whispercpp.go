@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"math"
 	"os"
 	"os/exec"
@@ -51,10 +50,6 @@ func newWhisperCPP(settings config.STT) (Backend, error) {
 		return nil, err
 	}
 
-	threads := runtime.NumCPU()
-	if threads > 8 {
-		threads = 8 // beyond this whisper.cpp gains nothing and starves OBS
-	}
 	beam := settings.BeamSize
 	if beam < 1 {
 		beam = 1
@@ -64,45 +59,40 @@ func newWhisperCPP(settings config.STT) (Backend, error) {
 		binary:    binary,
 		modelPath: model,
 		beamSize:  beam,
-		threads:   threads,
+		threads:   recognitionThreads(),
 		label: fmt.Sprintf("whisper.cpp %s (%s)",
 			strings.TrimSuffix(filepath.Base(model), filepath.Ext(model)),
 			filepath.Base(binary)),
 	}, nil
 }
 
-// findBinary looks where a person would actually put it: the configured path,
-// then data/models, then anywhere on PATH.
-func findBinary(configured string) (string, error) {
-	if configured != "" {
-		if resolved, err := exec.LookPath(configured); err == nil {
-			return resolved, nil
-		}
-		if _, err := os.Stat(configured); err == nil {
-			return configured, nil
-		}
-		return "", &Error{Reason: "the configured whisper.cpp binary was not found: " + configured}
-	}
-
-	searchDirs := []string{
+// binarySearchPath is where a person would actually put a whisper.cpp build.
+func binarySearchPath() []string {
+	return []string{
 		paths.ModelsDir(),
 		filepath.Join(paths.ModelsDir(), "whisper"),
 		filepath.Join(paths.Root(), "vendor", "whisper"),
 	}
-	for _, directory := range searchDirs {
-		for _, name := range candidateBinaries {
-			candidate := filepath.Join(directory, name)
-			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-				return candidate, nil
-			}
-		}
+}
+
+// recognitionThreads leaves the machine some room.
+//
+// Recognition runs while she is streaming, and taking every core would stutter
+// the encode she is actually broadcasting. Half the machine, capped, is plenty
+// for a few seconds of speech.
+func recognitionThreads() int {
+	threads := runtime.NumCPU() / 2
+	if threads < 1 {
+		threads = 1
 	}
-	for _, name := range candidateBinaries {
-		if resolved, err := exec.LookPath(name); err == nil {
-			return resolved, nil
-		}
+	if threads > 8 {
+		threads = 8
 	}
-	return "", &Error{Reason: "no whisper.cpp build was found"}
+	return threads
+}
+
+func findBinary(configured string) (string, error) {
+	return findNamedBinary(configured, candidateBinaries)
 }
 
 // findModel looks for a GGML model matching the configured size.
@@ -156,7 +146,6 @@ func (w *whisperCPP) Load(context.Context) error {
 	if _, err := os.Stat(w.modelPath); err != nil {
 		return &Error{Reason: "the speech model could not be read: " + err.Error()}
 	}
-	slog.Info("speech recognition ready", "backend", w.label)
 	return nil
 }
 

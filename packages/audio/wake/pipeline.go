@@ -2,6 +2,7 @@ package wake
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -98,12 +99,66 @@ func loadModel(path string) (*model, error) {
 		return nil, &Error{Reason: filepath.Base(path) + " has no usable inputs or outputs"}
 	}
 
+	options, err := modestOptions()
+	if err != nil {
+		return nil, err
+	}
+	defer options.Destroy()
+
 	session, err := ort.NewDynamicAdvancedSession(
-		path, []string{inputs[0].Name}, []string{outputs[0].Name}, nil)
+		path, []string{inputs[0].Name}, []string{outputs[0].Name}, options)
 	if err != nil {
 		return nil, &Error{Reason: fmt.Sprintf("could not load %s: %v", filepath.Base(path), err)}
 	}
 	return &model{session: session, input: inputs[0].Name, output: outputs[0].Name}, nil
+}
+
+// modestOptions keep the runtime from taking the whole machine.
+//
+// By default ONNX Runtime sizes a thread pool to the core count for every
+// session, and those threads spin rather than sleep while waiting for work.
+// Three sessions of that pegged every core on this machine and made typing lag
+// in other applications -- on a box that is also encoding video, which is the
+// one thing MikkiLens must never disturb.
+//
+// These models are tiny: one thread scores a chunk in about six milliseconds,
+// against the eighty milliseconds of audio it represents. There is nothing for
+// a pool to do but burn power.
+func modestOptions() (*ort.SessionOptions, error) {
+	options, err := ort.NewSessionOptions()
+	if err != nil {
+		return nil, &Error{Reason: "could not configure the ONNX runtime: " + err.Error()}
+	}
+
+	failed := func(err error) (*ort.SessionOptions, error) {
+		options.Destroy()
+		return nil, &Error{Reason: "could not configure the ONNX runtime: " + err.Error()}
+	}
+
+	if err := options.SetIntraOpNumThreads(1); err != nil {
+		return failed(err)
+	}
+	if err := options.SetInterOpNumThreads(1); err != nil {
+		return failed(err)
+	}
+	if err := options.SetExecutionMode(ort.ExecutionModeSequential); err != nil {
+		return failed(err)
+	}
+
+	// Spinning is what actually burns the cores. It is a performance knob for
+	// servers running back-to-back batches, and the opposite of what a
+	// background listener wants.
+	for key, value := range map[string]string{
+		"session.intra_op.allow_spinning": "0",
+		"session.inter_op.allow_spinning": "0",
+	} {
+		if err := options.AddSessionConfigEntry(key, value); err != nil {
+			// An older runtime may not know the key. Not worth failing over:
+			// the thread limits above already do most of the work.
+			slog.Debug("the ONNX runtime did not accept a setting", "key", key, "error", err)
+		}
+	}
+	return options, nil
 }
 
 // run feeds one float32 tensor through and returns the flattened output.

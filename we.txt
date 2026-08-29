@@ -1,0 +1,8 @@
+time=2026-08-29T18:45:54.920+07:00 level=INFO msg="settings API listening" url=http://127.0.0.1:8760
+time=2026-08-29T18:45:54.921+07:00 level=INFO msg="speech recognition ready" backend="whisper.cpp ggml-small (whisper-cli.exe)"
+time=2026-08-29T18:45:54.922+07:00 level=INFO msg="speech recognition ready" backend="whisper.cpp ggml-small (whisper-cli.exe)"
+time=2026-08-29T18:45:54.934+07:00 level=INFO msg="microphone started" device="Microphone (G733 Gaming Headset)" sample_rate=16000
+time=2026-08-29T18:45:55.019+07:00 level=INFO msg="wake word ready" model=hey_jarvis
+time=2026-08-29T18:45:55.020+07:00 level=WARN msg="could not restore the YouTube session" error="missing data/client_secret.json; download OAuth desktop credentials from Google Cloud and save them there"
+time=2026-08-29T18:45:55.021+07:00 level=INFO msg="YouTube is not connected; open the settings app to sign in"
+time=2026-08-29T18:45:55.021+07:00 level=INFO msg=ready hotkey=<ctrl>+<alt>+<space> wake_word=hey_jarvis api=http://127.0.0.1:8760

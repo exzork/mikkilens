@@ -398,11 +398,18 @@ func (e *Engine) startYouTube(ctx context.Context) {
 	// and must never appear unasked in the middle of a stream.
 	connected, err := controller.LoadSavedCredentials(ctx)
 	if err != nil {
-		slog.Warn("could not restore the YouTube session", "error", err)
+		// Having no credentials yet is where everyone starts, not a fault.
+		// Reporting it as one at every launch teaches her to ignore the log,
+		// which is the last thing this application can afford.
+		if youtube.HasClientSecret() {
+			slog.Warn("could not restore the YouTube session", "error", err)
+		} else {
+			slog.Info("YouTube is not set up yet",
+				"next", "add data/client_secret.json, then connect in the settings app")
+		}
 	}
 	if !connected {
 		e.store.Update(state.Changes{"youtube": state.Disconnected})
-		slog.Info("YouTube is not connected; open the settings app to sign in")
 		return
 	}
 

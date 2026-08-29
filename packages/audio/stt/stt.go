@@ -178,11 +178,19 @@ func (t *Transcriber) Transcribe(ctx context.Context, audio []float32) (Transcri
 // is no local model to use.
 func chooseBackend(settings config.STT) (Backend, error) {
 	switch strings.ToLower(strings.TrimSpace(settings.Backend)) {
-	case "whispercpp", "local":
+	case "whisperserver", "server":
+		return newWhisperServer(settings)
+	case "whispercpp", "local", "cli":
 		return newWhisperCPP(settings)
 	case "openai", "remote", "http":
 		return newRemote(settings)
 	case "", "auto":
+		// The server first: it holds the model in memory, where the one-shot
+		// CLI reloads it for every command and costs seconds she spends
+		// waiting in silence.
+		if server, err := newWhisperServer(settings); err == nil {
+			return server, nil
+		}
 		if local, err := newWhisperCPP(settings); err == nil {
 			return local, nil
 		}

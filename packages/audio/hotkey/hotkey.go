@@ -1,12 +1,16 @@
 // Package hotkey watches one key combination and reports press and release.
 //
-// A global low-level keyboard hook rather than RegisterHotKey, for two
-// reasons: RegisterHotKey reports only the press, and push-to-talk needs the
-// release too; and a hook needs no administrator rights, which asking her to
-// grant on every launch would be a poor trade for a convenience feature.
+// Windows is asked to register the combination, so nothing of ours runs on
+// anyone else's keystrokes. The earlier version used a low-level keyboard
+// hook -- because RegisterHotKey reports only the press, and push-to-talk
+// needs the release too -- and that put our code in the path of every key on
+// the machine. On a box that is also encoding video it showed up as typing
+// lag in other applications, which is a bad way to pay for a convenience.
+// The release is found by polling the key while it is held instead, which
+// costs nothing when she is not talking.
 //
-// A foot pedal or a Stream Deck key works here without any special handling.
-// Both present as ordinary key events.
+// Neither approach needs administrator rights. A foot pedal or a Stream Deck
+// key works without special handling: both present as ordinary keys.
 package hotkey
 
 import (

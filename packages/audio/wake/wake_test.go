@@ -103,9 +103,17 @@ func repoRoot(t *testing.T) string {
 
 // feed pushes audio through the detector one chunk at a time and returns the
 // last score it produced.
+//
+// Scoring runs on its own goroutine, so a chunk is handed over rather than
+// computed here. Feeding in real time, a frame at a time, is also what the
+// microphone actually does -- pushing everything at once would just overflow
+// the queue and drop most of it.
 func feed(d *wake.Detector, samples []float32) float64 {
 	for start := 0; start+wake.ChunkSamples <= len(samples); start += wake.ChunkSamples {
 		d.Feed(samples[start : start+wake.ChunkSamples])
+		if !d.WaitIdle(5 * time.Second) {
+			panic("wake word scoring never caught up")
+		}
 	}
 	return d.LastScore()
 }

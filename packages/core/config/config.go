@@ -176,7 +176,7 @@ func Default() Config {
 		Wake:   Wake{Enabled: true, Model: "hey_jarvis", Threshold: 0.6, CooldownS: 2.0},
 		Hotkey: Hotkey{Enabled: true, Combination: "<ctrl>+<alt>+<space>", PushToTalk: true},
 		STT: STT{
-			Backend: "auto", ModelSize: "small", Device: "auto",
+			Backend: "auto", ModelSize: "base", Device: "auto",
 			ComputeType: "auto", BeamSize: 1, APIKeyEnv: "MIKKILENS_STT_KEY",
 		},
 		OBS: OBS{

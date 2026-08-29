@@ -5,42 +5,54 @@ package hotkey
 import (
 	"runtime"
 	"sync"
+	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-// The hook has to live on one OS thread with a message pump, because Windows
-// delivers low-level keyboard events by posting to that thread's queue.
-// runtime.LockOSThread is what keeps the Go scheduler from moving it.
+// Windows registers the combination for us and only tells us when it is
+// pressed. Nothing runs on anyone else's keystrokes.
+//
+// The first version of this used a low-level keyboard hook, because
+// RegisterHotKey reports only the press and push-to-talk needs the release
+// too. That was the wrong trade: a hook puts our code in the path of every
+// keystroke on the machine, and on a box that is also encoding video that
+// showed up as typing lag in other applications. Windows will even remove a
+// hook that takes too long, so the hotkey would vanish mid-stream.
+//
+// So the press comes from RegisterHotKey, and the release is found by polling
+// the key while it is held. The polling costs nothing when she is not talking,
+// which is almost always.
 
 var (
-	user32                  = windows.NewLazySystemDLL("user32.dll")
-	procSetWindowsHookExW   = user32.NewProc("SetWindowsHookExW")
-	procUnhookWindowsHookEx = user32.NewProc("UnhookWindowsHookEx")
-	procCallNextHookEx      = user32.NewProc("CallNextHookEx")
-	procGetMessageW         = user32.NewProc("GetMessageW")
-	procPostThreadMessageW  = user32.NewProc("PostThreadMessageW")
-	kernel32                = windows.NewLazySystemDLL("kernel32.dll")
-	procGetCurrentThreadId  = kernel32.NewProc("GetCurrentThreadId")
+	user32                 = windows.NewLazySystemDLL("user32.dll")
+	procRegisterHotKey     = user32.NewProc("RegisterHotKey")
+	procUnregisterHotKey   = user32.NewProc("UnregisterHotKey")
+	procGetMessageW        = user32.NewProc("GetMessageW")
+	procPostThreadMessageW = user32.NewProc("PostThreadMessageW")
+	procGetAsyncKeyState   = user32.NewProc("GetAsyncKeyState")
+	kernel32               = windows.NewLazySystemDLL("kernel32.dll")
+	procGetCurrentThreadId = kernel32.NewProc("GetCurrentThreadId")
 )
 
 const (
-	whKeyboardLL = 13
-	wmKeyDown    = 0x0100
-	wmKeyUp      = 0x0101
-	wmSysKeyDown = 0x0104
-	wmSysKeyUp   = 0x0105
-	wmQuit       = 0x0012
-)
+	wmHotkey = 0x0312
+	wmQuit   = 0x0012
 
-type keyboardLLHookStruct struct {
-	VkCode    uint32
-	ScanCode  uint32
-	Flags     uint32
-	Time      uint32
-	ExtraInfo uintptr
-}
+	modAlt      = 0x0001
+	modControl  = 0x0002
+	modShift    = 0x0004
+	modWin      = 0x0008
+	modNoRepeat = 0x4000 // one message per press, not a storm while held
+
+	hotkeyID = 1
+
+	// releasePoll is how often the key is checked while it is held down. Fast
+	// enough that letting go feels immediate, slow enough to be free.
+	releasePoll = 15 * time.Millisecond
+)
 
 type message struct {
 	HWnd    uintptr
@@ -52,36 +64,58 @@ type message struct {
 }
 
 type windowsWatcher struct {
-	options Options
-	wanted  map[uint32]bool
+	options   Options
+	modifiers uint32
+	trigger   uint32 // the one non-modifier key
 
-	mu        sync.Mutex
-	pressed   map[uint32]bool
-	active    bool
-	toggledOn bool
-	running   bool
-	threadID  uint32
-	ready     chan error
-	done      chan struct{}
-	hook      uintptr
+	mu       sync.Mutex
+	running  bool
+	threadID uint32
+	ready    chan error
+	done     chan struct{}
 
-	// events carries callbacks off the hook thread. Windows silently removes a
-	// low-level hook that takes too long to return (300 ms by default), which
-	// would take the hotkey away mid-stream with nothing to explain it -- so
-	// the hook only ever enqueues, and a separate goroutine does the work.
-	events chan func()
+	held    atomic.Bool // an utterance is in progress
+	toggled atomic.Bool
 }
 
 func newWatcher(options Options, keys []uint32) (Watcher, error) {
-	wanted := make(map[uint32]bool, len(keys))
-	for _, code := range keys {
-		wanted[code] = true
+	modifiers, trigger, err := split(keys, options.Combination)
+	if err != nil {
+		return nil, err
 	}
-	return &windowsWatcher{
-		options: options,
-		wanted:  wanted,
-		pressed: map[uint32]bool{},
-	}, nil
+	return &windowsWatcher{options: options, modifiers: modifiers, trigger: trigger}, nil
+}
+
+// split separates the modifiers from the one key that actually triggers.
+//
+// Windows can only register a combination that ends in a real key, so a
+// modifiers-only hotkey is refused here with an explanation rather than
+// failing later with a number.
+func split(keys []uint32, combination string) (uint32, uint32, error) {
+	var modifiers, trigger uint32
+	for _, code := range keys {
+		switch code {
+		case 0x11, 0xA2, 0xA3: // ctrl, left, right
+			modifiers |= modControl
+		case 0x12, 0xA4, 0xA5: // alt
+			modifiers |= modAlt
+		case 0x10, 0xA0, 0xA1: // shift
+			modifiers |= modShift
+		case 0x5B, 0x5C: // windows key
+			modifiers |= modWin
+		default:
+			if trigger != 0 {
+				return 0, 0, &Error{Reason: "the hotkey " + combination +
+					" has more than one ordinary key in it; use modifiers plus one key"}
+			}
+			trigger = code
+		}
+	}
+	if trigger == 0 {
+		return 0, 0, &Error{Reason: "the hotkey " + combination +
+			" is only modifiers; add a key, for example <ctrl>+<alt>+<space>"}
+	}
+	return modifiers, trigger, nil
 }
 
 func (w *windowsWatcher) Combination() string { return w.options.Combination }
@@ -100,16 +134,9 @@ func (w *windowsWatcher) Start() error {
 	}
 	w.ready = make(chan error, 1)
 	w.done = make(chan struct{})
-	w.events = make(chan func(), 32)
-	events := w.events
 	w.mu.Unlock()
 
 	go w.pump()
-	go func() {
-		for handle := range events {
-			handle()
-		}
-	}()
 
 	if err := <-w.ready; err != nil {
 		return err
@@ -127,76 +154,41 @@ func (w *windowsWatcher) Stop() {
 		return
 	}
 	w.running = false
-	threadID := w.threadID
-	done := w.done
-	events := w.events
-	w.events = nil
-	w.pressed = map[uint32]bool{}
-	w.active = false
+	threadID, done := w.threadID, w.done
 	w.mu.Unlock()
 
-	// Waking the message loop is what lets it unhook and exit cleanly.
+	// Waking the message loop is what lets it unregister and exit cleanly.
 	procPostThreadMessageW.Call(uintptr(threadID), wmQuit, 0, 0)
-	<-done
-	if events != nil {
-		close(events)
-	}
-}
-
-// dispatch hands a callback to the worker goroutine. A full queue is dropped
-// rather than blocking: stalling here would stall every keystroke on the
-// machine, and one missed trigger beats a frozen keyboard.
-func (w *windowsWatcher) dispatch(callback func()) {
-	w.mu.Lock()
-	events := w.events
-	w.mu.Unlock()
-	if events == nil {
-		return
-	}
 	select {
-	case events <- callback:
-	default:
+	case <-done:
+	case <-time.After(2 * time.Second):
 	}
 }
 
-// pump installs the hook and runs the message loop that feeds it.
+// pump registers the hotkey and runs the message loop that receives it.
 func (w *windowsWatcher) pump() {
+	// The registration belongs to the thread that made it, so the thread must
+	// not move underneath us.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	defer close(w.done)
 
 	threadID, _, _ := procGetCurrentThreadId.Call()
 
-	// Taking the event as a typed pointer rather than a uintptr keeps this
-	// honest: Windows really does pass a pointer here, and converting back from
-	// an integer would be the unsafe version of the same thing.
-	callback := windows.NewCallback(func(code int32, wParam uintptr, event *keyboardLLHookStruct) uintptr {
-		if code >= 0 && event != nil {
-			switch wParam {
-			case wmKeyDown, wmSysKeyDown:
-				w.onPress(event.VkCode)
-			case wmKeyUp, wmSysKeyUp:
-				w.onRelease(event.VkCode)
-			}
-		}
-		next, _, _ := procCallNextHookEx.Call(
-			0, uintptr(code), wParam, uintptr(unsafe.Pointer(event)))
-		return next
-	})
-
-	hook, _, err := procSetWindowsHookExW.Call(whKeyboardLL, callback, 0, 0)
-	if hook == 0 {
-		w.ready <- &Error{Reason: "could not watch the keyboard: " + err.Error()}
+	ok, _, err := procRegisterHotKey.Call(
+		0, hotkeyID, uintptr(w.modifiers|modNoRepeat), uintptr(w.trigger))
+	if ok == 0 {
+		w.ready <- &Error{Reason: "could not register the hotkey " +
+			w.options.Combination + " (another application may already have it): " +
+			err.Error()}
 		return
 	}
+	defer procUnregisterHotKey.Call(0, hotkeyID)
 
 	w.mu.Lock()
-	w.hook = hook
 	w.threadID = uint32(threadID)
 	w.mu.Unlock()
 	w.ready <- nil
-
-	defer procUnhookWindowsHookEx.Call(hook)
 
 	var msg message
 	for {
@@ -205,67 +197,67 @@ func (w *windowsWatcher) pump() {
 		if int32(result) <= 0 {
 			return
 		}
-	}
-}
-
-func (w *windowsWatcher) onPress(code uint32) {
-	if !w.wanted[code] {
-		return
-	}
-	w.mu.Lock()
-	w.pressed[code] = true
-	fire := w.allHeldLocked() && !w.active
-	if fire {
-		w.active = true
-	}
-	w.mu.Unlock()
-
-	if fire {
-		w.dispatch(w.fireActivate)
-	}
-}
-
-func (w *windowsWatcher) onRelease(code uint32) {
-	if !w.wanted[code] {
-		return
-	}
-	w.mu.Lock()
-	delete(w.pressed, code)
-	fire := w.active && !w.allHeldLocked()
-	if fire {
-		w.active = false
-		fire = w.options.PushToTalk
-	}
-	w.mu.Unlock()
-
-	if fire {
-		w.dispatch(func() { safely(w.options.OnRelease) })
-	}
-}
-
-func (w *windowsWatcher) allHeldLocked() bool {
-	for code := range w.wanted {
-		if !w.pressed[code] {
-			return false
+		if msg.Message == wmHotkey {
+			w.onPressed()
 		}
 	}
-	return true
 }
 
-func (w *windowsWatcher) fireActivate() {
-	if w.options.PushToTalk {
-		safely(w.options.OnActivate)
+func (w *windowsWatcher) onPressed() {
+	if !w.options.PushToTalk {
+		// Toggle mode: odd presses start listening, even presses stop.
+		if w.toggled.CompareAndSwap(false, true) {
+			safely(w.options.OnActivate)
+			return
+		}
+		w.toggled.Store(false)
+		safely(w.options.OnRelease)
 		return
 	}
-	// Toggle mode: odd presses start listening, even presses stop.
-	w.mu.Lock()
-	w.toggledOn = !w.toggledOn
-	on := w.toggledOn
-	w.mu.Unlock()
 
-	if on {
-		safely(w.options.OnActivate)
+	// Hold to talk. One utterance at a time: a repeat while she is still
+	// holding must not start a second recording.
+	if !w.held.CompareAndSwap(false, true) {
 		return
 	}
-	safely(w.options.OnRelease)
+	safely(w.options.OnActivate)
+	go w.waitForRelease()
+}
+
+// waitForRelease watches the key until she lets go.
+//
+// This is the only polling in the hotkey, and it runs solely while a key is
+// held -- a few seconds per command, rather than forever.
+func (w *windowsWatcher) waitForRelease() {
+	defer w.held.Store(false)
+
+	ticker := time.NewTicker(releasePoll)
+	defer ticker.Stop()
+
+	// A safety limit, in case a key event is lost and the key looks stuck
+	// down. Recording has its own maximum length anyway.
+	deadline := time.After(2 * time.Minute)
+
+	for {
+		select {
+		case <-deadline:
+			safely(w.options.OnRelease)
+			return
+		case <-ticker.C:
+			if !keyIsDown(w.trigger) {
+				safely(w.options.OnRelease)
+				return
+			}
+			if !w.Running() {
+				return
+			}
+		}
+	}
+}
+
+// keyIsDown asks Windows whether a key is held right now. The high bit is the
+// one that means "currently down".
+func keyIsDown(code uint32) bool {
+	state, _, _ := procGetAsyncKeyState.Call(uintptr(code))
+	return state&0x8000 != 0
 }

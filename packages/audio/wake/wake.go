@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -52,6 +53,15 @@ type Detector struct {
 	lastFired time.Time
 	enabled   bool
 	lastScore float64
+
+	// Scoring happens on this channel's goroutine rather than on the audio
+	// thread. Six milliseconds of inference inside the capture callback is six
+	// milliseconds the microphone is not being drained, and a late drain is a
+	// gap in what she said.
+	chunks  chan []float32
+	stop    chan struct{}
+	worker  sync.WaitGroup
+	pending atomic.Int64
 }
 
 // New prepares a detector. Nothing is loaded until Load is called.
@@ -104,17 +114,43 @@ func (d *Detector) Load() error {
 
 	d.mu.Lock()
 	d.pipeline = built
+	d.chunks = make(chan []float32, 4)
+	d.stop = make(chan struct{})
+	chunks, stop := d.chunks, d.stop
 	d.mu.Unlock()
+
+	d.worker.Add(1)
+	go d.score(chunks, stop)
+
 	slog.Info("wake word ready", "model", model)
 	return nil
+}
+
+// score is the goroutine that runs the models, one chunk at a time.
+func (d *Detector) score(chunks <-chan []float32, stop <-chan struct{}) {
+	defer d.worker.Done()
+	for {
+		select {
+		case <-stop:
+			return
+		case chunk := <-chunks:
+			d.predict(chunk)
+			d.pending.Add(-1)
+		}
+	}
 }
 
 // Close releases the models.
 func (d *Detector) Close() {
 	d.mu.Lock()
-	built := d.pipeline
-	d.pipeline = nil
+	built, stop := d.pipeline, d.stop
+	d.pipeline, d.stop, d.chunks = nil, nil, nil
 	d.mu.Unlock()
+
+	if stop != nil {
+		close(stop)
+		d.worker.Wait()
+	}
 	if built != nil {
 		built.close()
 	}
@@ -156,17 +192,26 @@ func (d *Detector) Feed(frame []float32) {
 	}
 	d.buffer = append(d.buffer, frame...)
 
-	chunks := [][]float32{}
+	ready := [][]float32{}
 	for len(d.buffer) >= ChunkSamples {
 		chunk := make([]float32, ChunkSamples)
 		copy(chunk, d.buffer[:ChunkSamples])
-		chunks = append(chunks, chunk)
+		ready = append(ready, chunk)
 		d.buffer = d.buffer[ChunkSamples:]
 	}
+	chunks := d.chunks
 	d.mu.Unlock()
 
-	for _, chunk := range chunks {
-		d.predict(chunk)
+	for _, chunk := range ready {
+		select {
+		case chunks <- chunk:
+			d.pending.Add(1)
+		default:
+			// Scoring has fallen behind. Dropping a chunk costs one chance to
+			// hear the wake word; blocking here would stall the microphone for
+			// everything, including the command she is speaking right now.
+			slog.Debug("wake word scoring fell behind; dropped a chunk")
+		}
 	}
 }
 
