@@ -1,0 +1,121 @@
+# Perintah suara MikkiLens (Bahasa Indonesia).
+#
+# Ini milikmu -- ubah sesukamu. Kalau MikkiLens sering salah dengar sebuah
+# perintah, JANGAN ubah cara bicaramu: tambahkan saja kalimat yang salah
+# didengar itu ke daftar `phrases`. Itu cara paling cepat memperbaikinya.
+#
+# Setelah menyimpan berkas ini, ucapkan "muat ulang perintah" -- tidak perlu
+# menutup MikkiLens.
+#
+#   phrases        = daftar kalimat yang memicu perintah ini
+#   confirm        = true berarti MikkiLens bertanya dulu sebelum mengerjakan
+#   confirm_prompt = kalimat pertanyaannya (boleh kunci bahasa atau teks bebas)
+#
+# {scene}, {source}, {text}, {question} adalah "isian": bagian kalimat yang
+# berubah-ubah. Nama scene dan sumber dicocokkan dengan nama asli di OBS,
+# jadi "ganti ke just chatting" tetap menemukan scene "Just Chatting".
+
+# ---------------------------------------------------------------- siaran ----
+
+[commands.go_live]
+phrases = ["mulai siaran", "mulai streaming", "mulai live", "go live", "kita mulai siaran"]
+
+[commands.stop_stream]
+phrases = ["hentikan siaran", "akhiri siaran", "stop siaran", "stop streaming", "selesai siaran"]
+confirm = true
+confirm_prompt = "confirm.stop_stream"
+
+[commands.is_live]
+phrases = ["apakah saya sedang siaran", "apa saya sudah live", "saya sudah live belum", "cek siaran"]
+
+# ----------------------------------------------------------------- scene ----
+
+[commands.switch_scene]
+phrases = ["ganti ke {scene}", "pindah ke {scene}", "ganti scene ke {scene}", "buka scene {scene}"]
+
+[commands.current_scene]
+phrases = ["scene apa sekarang", "sekarang scene apa", "scene sekarang apa"]
+
+[commands.list_scenes]
+phrases = ["sebutkan scene", "daftar scene", "ada scene apa saja"]
+
+# ---------------------------------------------------------------- audio ----
+
+[commands.mute_mic]
+phrases = ["matikan mikrofon", "matikan mic", "mute mic", "bisukan mikrofon", "matikan suara saya"]
+
+[commands.unmute_mic]
+phrases = ["nyalakan mikrofon", "nyalakan mic", "unmute mic", "hidupkan mikrofon", "nyalakan suara saya"]
+
+[commands.mic_status]
+phrases = ["mikrofon mati atau tidak", "cek mikrofon", "status mikrofon"]
+
+# --------------------------------------------------------------- sumber ----
+
+[commands.show_source]
+phrases = ["tampilkan {source}", "munculkan {source}"]
+
+[commands.hide_source]
+phrases = ["sembunyikan {source}", "hilangkan {source}"]
+
+# -------------------------------------------------------------- youtube ----
+
+[commands.set_title]
+phrases = ["ganti judul jadi {text}", "ubah judul jadi {text}", "ganti judul menjadi {text}"]
+confirm = true
+confirm_prompt = "confirm.set_title"
+
+[commands.get_title]
+phrases = ["judulnya apa", "apa judul siaran", "judul sekarang apa"]
+
+[commands.viewer_count]
+phrases = ["berapa penontonnya", "ada berapa penonton", "jumlah penonton", "berapa yang nonton"]
+
+# ----------------------------------------------------------------- chat ----
+
+[commands.chat_pause]
+# Perintah pendek sering salah didengar ("jeda chat" pernah terdengar sebagai
+# "jidak check"), jadi sediakan juga versi yang lebih panjang -- kalimat panjang
+# lebih mudah dikenali.
+phrases = [
+    "jeda chat",
+    "jeda dulu chatnya",
+    "berhenti bacakan chat",
+    "jangan bacakan chat dulu",
+    "pause chat",
+    "stop bacakan chat",
+]
+
+[commands.chat_resume]
+phrases = ["lanjutkan chat", "lanjut chat", "bacakan chat lagi", "resume chat"]
+
+[commands.chat_skip_to_now]
+phrases = ["lompat ke chat terbaru", "susul chat", "skip ke chat sekarang", "baca chat terbaru saja"]
+
+[commands.chat_behind]
+phrases = ["ketinggalan berapa chat", "berapa chat yang belum dibaca", "seberapa tertinggal"]
+
+[commands.chat_summarize]
+phrases = ["rangkum chat", "ringkas chat", "rangkuman chat"]
+
+# ---------------------------------------------------------------- layar ----
+
+[commands.ask_screen]
+phrases = [
+    "apa yang ada di layar",
+    "bacakan layar",
+    "lihat layar",
+    "layar isinya apa",
+    "{question} di layar",
+]
+
+# --------------------------------------------------------------- sistem ----
+
+[commands.status]
+phrases = ["status", "bagaimana keadaannya", "laporan status"]
+
+[commands.help]
+phrases = ["apa saja perintahnya", "perintah apa saja", "bantuan", "aku bisa bilang apa"]
+
+[commands.reload_commands]
+phrases = ["muat ulang perintah", "reload perintah"]

@@ -1,0 +1,12 @@
+# Normalize line endings in the repository, and check out what each platform
+# expects. The batch files are the exception: cmd.exe needs CRLF.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never touch these.
+*.png binary
+*.onnx binary
+*.bin binary
+*.exe binary

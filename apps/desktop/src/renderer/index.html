@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*"
+    />
+    <title>MikkiLens</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main" data-i18n="app.skipToContent">Skip to content</a>
+
+    <header>
+      <h1>MikkiLens</h1>
+      <p class="sub" id="headline" data-i18n="app.connecting">Connecting…</p>
+      <button
+        type="button"
+        id="contrast"
+        class="ghost"
+        aria-pressed="false"
+        data-i18n="app.highContrast"
+      >
+        High contrast
+      </button>
+    </header>
+
+    <!--
+      Announcements land here so a screen reader speaks a change without the
+      user having to go looking for it. Ordinary results go in the polite
+      region; anything that went wrong goes in the assertive one.
+    -->
+    <p id="announcer" class="visually-hidden" role="status" aria-live="polite"></p>
+    <p id="alert" class="visually-hidden" role="alert"></p>
+
+    <p id="engine-banner" class="banner" role="status" hidden></p>
+
+    <nav data-i18n-aria-label="tabs.label" aria-label="Settings pages">
+      <ul role="tablist" id="tablist">
+        <li>
+          <button
+            role="tab"
+            id="tab-status"
+            aria-controls="panel-status"
+            aria-selected="true"
+            data-i18n="tabs.status"
+          >
+            Status
+          </button>
+        </li>
+        <li>
+          <button
+            role="tab"
+            id="tab-audio"
+            aria-controls="panel-audio"
+            aria-selected="false"
+            tabindex="-1"
+            data-i18n="tabs.audio"
+          >
+            Audio
+          </button>
+        </li>
+        <li>
+          <button
+            role="tab"
+            id="tab-commands"
+            aria-controls="panel-commands"
+            aria-selected="false"
+            tabindex="-1"
+            data-i18n="tabs.commands"
+          >
+            Commands
+          </button>
+        </li>
+        <li>
+          <button
+            role="tab"
+            id="tab-providers"
+            aria-controls="panel-providers"
+            aria-selected="false"
+            tabindex="-1"
+            data-i18n="tabs.connections"
+          >
+            Connections
+          </button>
+        </li>
+        <li>
+          <button
+            role="tab"
+            id="tab-language"
+            aria-controls="panel-language"
+            aria-selected="false"
+            tabindex="-1"
+            data-i18n="tabs.language"
+          >
+            Language
+          </button>
+        </li>
+        <li>
+          <button
+            role="tab"
+            id="tab-log"
+            aria-controls="panel-log"
+            aria-selected="false"
+            tabindex="-1"
+            data-i18n="tabs.log"
+          >
+            Log
+          </button>
+        </li>
+      </ul>
+    </nav>
+
+    <main id="main">
+      <section role="tabpanel" id="panel-status" aria-labelledby="tab-status" tabindex="0">
+        <h2 data-i18n="status.heading">Status</h2>
+        <dl class="status-grid" id="status-grid"></dl>
+
+        <h3 data-i18n="status.connections">Connections</h3>
+        <ul class="health" id="health-list"></ul>
+
+        <p>
+          <button type="button" id="listen-now" class="primary" data-i18n="status.listenNow">
+            Listen now
+          </button>
+          <span class="hint" data-i18n="status.listenNowHint"></span>
+        </p>
+        <p>
+          <button type="button" id="restart-engine" data-i18n="status.restartEngine">
+            Restart the engine
+          </button>
+          <span class="hint" data-i18n="status.restartHint"></span>
+        </p>
+      </section>
+
+      <section role="tabpanel" id="panel-audio" aria-labelledby="tab-audio" tabindex="0" hidden>
+        <h2 data-i18n="audio.heading">Audio</h2>
+
+        <fieldset>
+          <legend data-i18n="audio.outputLegend">Output device</legend>
+          <p class="hint" data-i18n="audio.outputHint"></p>
+          <div id="output-devices" class="device-list"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="audio.inputLegend">Microphone</legend>
+          <div id="input-devices" class="device-list"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="audio.voiceLegend">Speaking voice</legend>
+          <p>
+            <label for="voice" data-i18n="audio.voice">Voice</label>
+            <select id="voice"></select>
+          </p>
+          <p>
+            <label for="rate" data-i18n="audio.rate">Speaking rate</label>
+            <input type="text" id="rate" size="8" />
+            <span class="hint" data-i18n="audio.rateHint"></span>
+          </p>
+          <p>
+            <label for="chat-rate" data-i18n="audio.chatRate">Chat reading rate</label>
+            <input type="text" id="chat-rate" size="8" />
+          </p>
+          <p>
+            <label for="earcon-volume" data-i18n="audio.earconVolume">Tone volume</label>
+            <input type="range" id="earcon-volume" min="0" max="1" step="0.05" />
+            <output id="earcon-volume-out"></output>
+          </p>
+          <p>
+            <button type="button" id="preview-voice" data-i18n="audio.preview">
+              Play a sample
+            </button>
+            <button type="button" id="save-audio" class="primary" data-i18n="common.save">
+              Save
+            </button>
+          </p>
+        </fieldset>
+      </section>
+
+      <section
+        role="tabpanel"
+        id="panel-commands"
+        aria-labelledby="tab-commands"
+        tabindex="0"
+        hidden
+      >
+        <h2 data-i18n="commands.heading">Commands</h2>
+        <p class="hint" data-i18n="commands.hint"></p>
+        <p id="command-warnings" class="warnings" role="status" hidden></p>
+        <div id="command-list"></div>
+        <p>
+          <button type="button" id="save-commands" class="primary" data-i18n="commands.save">
+            Save commands
+          </button>
+          <button type="button" id="reload-commands" data-i18n="commands.reload">
+            Reload from the file
+          </button>
+        </p>
+      </section>
+
+      <section
+        role="tabpanel"
+        id="panel-providers"
+        aria-labelledby="tab-providers"
+        tabindex="0"
+        hidden
+      >
+        <h2 data-i18n="connections.heading">Connections</h2>
+
+        <fieldset>
+          <legend data-i18n="obs.legend">OBS Studio</legend>
+          <p><label for="obs-host" data-i18n="obs.host">Address</label> <input type="text" id="obs-host" /></p>
+          <p><label for="obs-port" data-i18n="obs.port">Port</label> <input type="number" id="obs-port" /></p>
+          <p><label for="obs-password" data-i18n="obs.password">Password</label> <input type="password" id="obs-password" /></p>
+          <p><label for="obs-mic" data-i18n="obs.micSource">Microphone source name</label> <input type="text" id="obs-mic" /></p>
+          <p>
+            <button type="button" id="save-obs" class="primary" data-i18n="common.save">Save</button>
+            <button type="button" id="test-obs" data-i18n="obs.test">Test the connection</button>
+          </p>
+          <p class="result" id="obs-result" role="status"></p>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="youtube.legend">YouTube</legend>
+          <p class="hint" data-i18n="youtube.hint"></p>
+          <p id="youtube-state" role="status" data-i18n="youtube.checking">Checking…</p>
+          <p>
+            <button type="button" id="connect-youtube" class="primary" data-i18n="youtube.connect">
+              Connect YouTube
+            </button>
+            <button type="button" id="disconnect-youtube" data-i18n="youtube.disconnect">
+              Disconnect
+            </button>
+          </p>
+          <p class="result" id="youtube-result" role="status"></p>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="startup.legend">Run automatically</legend>
+          <p>
+            <input type="checkbox" id="startup" />
+            <label for="startup" data-i18n="startup.label">Start MikkiLens when Windows starts</label>
+          </p>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="vision.legend">Vision model</legend>
+          <p class="hint" data-i18n="vision.hint"></p>
+          <p><label for="vision-url" data-i18n="vision.baseURL">Base URL</label> <input type="text" id="vision-url" size="40" /></p>
+          <p><label for="vision-model" data-i18n="vision.model">Model</label> <input type="text" id="vision-model" /></p>
+          <p><label for="vision-key" data-i18n="vision.apiKey">API key</label> <input type="password" id="vision-key" size="40" /></p>
+          <p>
+            <button type="button" id="save-vision" class="primary" data-i18n="common.save">Save</button>
+            <button type="button" id="test-vision" data-i18n="vision.test">Test the model</button>
+          </p>
+          <p class="result" id="vision-result" role="status"></p>
+        </fieldset>
+      </section>
+
+      <section
+        role="tabpanel"
+        id="panel-language"
+        aria-labelledby="tab-language"
+        tabindex="0"
+        hidden
+      >
+        <h2 data-i18n="language.heading">Language</h2>
+        <p>
+          <label for="lang-output" data-i18n="language.spoken">The language MikkiLens speaks</label>
+          <select id="lang-output"></select>
+        </p>
+        <p>
+          <label for="lang-stt" data-i18n="language.yours">The language you speak</label>
+          <select id="lang-stt"></select>
+        </p>
+        <p>
+          <label for="wake-model" data-i18n="language.wakeModel">Wake word</label>
+          <input type="text" id="wake-model" />
+        </p>
+        <p>
+          <label for="wake-threshold" data-i18n="language.wakeThreshold">Wake word sensitivity</label>
+          <input type="range" id="wake-threshold" min="0.1" max="0.95" step="0.05" />
+          <output id="wake-threshold-out"></output>
+          <span class="hint" data-i18n="language.wakeHint"></span>
+        </p>
+        <p>
+          <label for="hotkey" data-i18n="language.hotkey">Hotkey</label>
+          <input type="text" id="hotkey" size="24" />
+          <span class="hint" data-i18n="language.hotkeyHint"></span>
+        </p>
+        <p>
+          <button type="button" id="save-language" class="primary" data-i18n="common.save">Save</button>
+        </p>
+      </section>
+
+      <section role="tabpanel" id="panel-log" aria-labelledby="tab-log" tabindex="0" hidden>
+        <h2 data-i18n="log.heading">Log</h2>
+        <p class="hint" data-i18n="log.hint"></p>
+
+        <h3 data-i18n="log.lastHeard">Last heard</h3>
+        <p id="last-heard" class="big"></p>
+
+        <h3 data-i18n="log.spoken">What was said</h3>
+        <table>
+          <caption class="visually-hidden" data-i18n="log.caption"></caption>
+          <thead>
+            <tr>
+              <th scope="col" data-i18n="log.kind">Kind</th>
+              <th scope="col" data-i18n="log.sentence">Sentence</th>
+            </tr>
+          </thead>
+          <tbody id="log-rows"></tbody>
+        </table>
+        <p>
+          <button type="button" id="refresh-log" data-i18n="log.refresh">Refresh</button>
+          <button type="button" id="show-engine-log" data-i18n="log.engineLog">Engine log</button>
+        </p>
+        <pre id="engine-log" class="engine-log" tabindex="0" hidden></pre>
+      </section>
+    </main>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

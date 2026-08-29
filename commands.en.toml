@@ -1,0 +1,115 @@
+# MikkiLens voice commands (English).
+#
+# This file is yours to edit. If a command is often misheard, do NOT change the
+# way you speak -- add the misheard text as another phrase. That is the fastest
+# fix. After saving, say "reload my commands".
+#
+# {scene}, {source}, {text} and {question} are slots: the part that varies.
+# Scene and source names are matched against what OBS actually has.
+#
+# Note: short two-word commands are recognised less reliably than longer ones.
+
+# ---------------------------------------------------------------- stream ----
+
+[commands.go_live]
+phrases = ["go live", "start streaming", "start the stream", "we are going live"]
+
+[commands.stop_stream]
+phrases = ["stop the stream", "end the stream", "stop streaming", "we are done streaming"]
+confirm = true
+confirm_prompt = "confirm.stop_stream"
+
+[commands.is_live]
+phrases = ["am i live", "am i streaming", "are we live right now"]
+
+# ----------------------------------------------------------------- scene ----
+
+[commands.switch_scene]
+phrases = ["switch to {scene}", "go to {scene}", "change scene to {scene}", "open scene {scene}"]
+
+[commands.current_scene]
+phrases = ["what scene am i on", "which scene is this", "what is the current scene"]
+
+[commands.list_scenes]
+phrases = ["list my scenes", "what scenes do i have", "name my scenes"]
+
+# ----------------------------------------------------------------- audio ----
+
+# "mute X" and "unmute X" differ by two letters, which speech recognition can
+# and does confuse -- and getting it backwards on a live stream is exactly the
+# mistake you cannot see happen. So the alternates below are deliberately
+# distinct words rather than near-identical ones. (Indonesian avoids this
+# naturally: "matikan" and "nyalakan" share almost nothing.)
+[commands.mute_mic]
+phrases = ["mute my mic", "mic off", "silence my mic", "cut my audio"]
+
+[commands.unmute_mic]
+phrases = ["unmute my mic", "mic back on", "turn my mic on", "restore my audio"]
+
+[commands.mic_status]
+phrases = ["is my mic muted", "check my microphone", "microphone status"]
+
+# --------------------------------------------------------------- sources ----
+
+[commands.show_source]
+phrases = ["show {source}", "bring up {source}"]
+
+[commands.hide_source]
+phrases = ["hide {source}", "remove {source}"]
+
+# --------------------------------------------------------------- youtube ----
+
+[commands.set_title]
+phrases = ["set my title to {text}", "change the title to {text}", "rename the stream to {text}"]
+confirm = true
+confirm_prompt = "confirm.set_title"
+
+[commands.get_title]
+phrases = ["what is my title", "what is the stream title", "read my title"]
+
+[commands.viewer_count]
+phrases = ["how many viewers", "how many people are watching", "viewer count"]
+
+# ------------------------------------------------------------------ chat ----
+
+[commands.chat_pause]
+phrases = [
+    "pause the chat",
+    "pause chat reading",
+    "stop reading my chat",
+    "do not read the chat for now",
+]
+
+[commands.chat_resume]
+phrases = ["resume the chat", "resume chat reading", "start reading my chat again"]
+
+[commands.chat_skip_to_now]
+phrases = ["skip to now", "catch up to live", "jump to the newest chat", "skip the backlog"]
+
+[commands.chat_behind]
+phrases = ["how far behind am i", "how many messages did i miss", "how much chat is waiting"]
+
+[commands.chat_summarize]
+phrases = ["summarise my chat", "summarize my chat", "give me a chat summary"]
+
+# ---------------------------------------------------------------- screen ----
+
+[commands.ask_screen]
+phrases = [
+    "what is on my screen",
+    "read my screen",
+    "describe my screen",
+    "look at my screen",
+    "{question} on screen",
+]
+
+# ---------------------------------------------------------------- system ----
+
+[commands.status]
+phrases = ["status", "give me a status report", "how are things"]
+
+[commands.help]
+phrases = ["what can i say", "list my commands", "help me", "what are my commands"]
+
+[commands.reload_commands]
+phrases = ["reload my commands", "reload the commands"]

@@ -1,0 +1,131 @@
+# MikkiLens configuration.
+#
+# Copy this to config.toml, or run `dist\mikkilensd.exe setup`, which writes
+# config.toml for you and reads every choice aloud as you make it.
+#
+# Every value here has a working default -- you only need to write the lines
+# you want to change. An unknown key is ignored with a warning rather than
+# stopping MikkiLens from starting.
+#
+# API keys do NOT belong in this file. They live in data/secrets.toml (written
+# by the settings app) or in an environment variable, so this file stays safe
+# to share when you need someone to help you troubleshoot.
+
+[language]
+output = "id"       # The language MikkiLens speaks. "id" or "en".
+stt = "id"          # The language it expects you to speak. "auto" detects, but
+                    # is less accurate on short commands.
+chat_tts = "follow" # "follow" reads chat in the output-language voice.
+
+[speech]
+voice = ""            # Empty uses the language default (id -> id-ID-GadisNeural).
+                      # The other Indonesian voice is id-ID-ArdiNeural.
+rate = "+0%"          # Speed of confirmations. "+25%" is noticeably faster.
+volume = "+0%"
+chat_voice = ""       # Empty means the same voice as above.
+chat_rate = "+15%"    # Chat is usually wanted faster than system feedback.
+output_device = ""    # Part of the device name, e.g. "Headphones". Empty uses
+                      # the Windows default -- but see the warning below.
+earcon_volume = 0.25  # Volume of the short tones (listening, ok, error).
+confirm_timeout_s = 8.0
+
+# Note: if output_device is a device OBS captures (usually the Windows
+# default), your viewers will hear MikkiLens too. That is fine and expected.
+# Set this to a headphones-only device if you ever want it private instead.
+
+[audio]
+input_device = ""       # Part of the microphone name. Empty uses the default.
+sample_rate = 16000
+vad_aggressiveness = 2  # 0-3. Higher trims silence harder and ends a command sooner.
+max_utterance_s = 12.0
+silence_ms = 700        # How long a pause ends a command.
+
+[wake]
+enabled = true
+model = "hey_jarvis"  # Pretrained. A custom "hey mikki" model can replace this.
+threshold = 0.6       # Raise it if it triggers while you are talking to chat.
+cooldown_s = 2.0
+
+# The wake word needs three files in data/models: onnxruntime.dll,
+# melspectrogram.onnx and embedding_model.onnx, plus <model>.onnx for the word
+# itself. Without them the wake word says so at startup and switches itself
+# off; the hotkey keeps working either way, and is the more reliable trigger.
+
+[hotkey]
+enabled = true
+combination = "<ctrl>+<alt>+<space>"  # A foot pedal or Stream Deck key works too.
+push_to_talk = true                   # false = press once to start, once to stop.
+
+[stt]
+backend = "auto"       # "auto" prefers a local whisper.cpp build and falls back
+                       # to base_url below. "whispercpp" or "openai" force one.
+model_size = "small"   # tiny / base / small / medium / large-v3.
+device = "auto"
+compute_type = "auto"
+beam_size = 1          # 1 is fastest and fine for short commands.
+
+# For local recognition, put a whisper.cpp build and a GGML model in
+# data/models: whisper-cli.exe (or main.exe) and ggml-small.bin. Any build
+# works, including the CUDA and Vulkan ones, so you can pick whichever suits
+# your GPU without rebuilding MikkiLens.
+binary = ""            # Empty searches data/models and then PATH.
+model_path = ""        # Empty searches data/models for ggml-<model_size>.bin.
+
+# Or send audio to any endpoint that speaks the OpenAI transcription API:
+# a local faster-whisper-server, OpenAI, or Groq.
+base_url = ""          # e.g. "http://localhost:8000/v1"
+model = ""             # e.g. "whisper-1"
+api_key_env = "MIKKILENS_STT_KEY"
+
+[obs]
+host = "localhost"
+port = 4455
+password = ""          # From OBS: Tools -> WebSocket Server Settings.
+                       # `mikkilensd enable-obs` copies it here for you.
+mic_source = "Mic/Aux" # The exact name of your microphone source in OBS.
+auto_connect = true
+reconnect_max_s = 30.0
+
+[youtube]
+enabled = true
+transport = "auto"     # "auto" prefers the streaming endpoint, "poll" forces
+                       # polling. Polling uses far more of the daily quota.
+quota_budget = 10000
+quota_warn_percent = 80
+
+[chat]
+enabled = true
+autostart_reading = true
+translate = false            # Translate chat before reading. Slower, costs money.
+skip_emote_only = true
+collapse_duplicates = true
+read_superchats_first = true
+max_message_chars = 200      # Longer messages are cut off.
+muted_users = []             # Names here are never read aloud.
+
+[vision]
+base_url = ""                # Any OpenAI-compatible endpoint, for example:
+                             #   https://api.openai.com/v1
+                             #   https://api.z.ai/api/paas/v4
+                             #   http://localhost:11434/v1   (Ollama, free)
+model = ""                   # e.g. "gpt-4o-mini", "glm-4.6v", "llava"
+api_key_env = "MIKKILENS_VISION_KEY"
+max_edge = 1568              # Screenshots are downscaled to this before sending.
+timeout_s = 30.0
+monitors = "all"             # "all", "primary", or a monitor number.
+max_answer_chars = 700       # Keeps spoken answers from running on forever.
+
+[llm]
+# Text model for "summarize my chat". Leave empty to reuse [vision].
+base_url = ""
+model = ""
+api_key_env = ""
+
+[ui]
+host = "127.0.0.1"
+port = 8760
+open_on_start = false
+lan_access = false   # true also lets other devices on your network reach the
+                     # settings API, which is how someone can help remotely.
+                     # It can mute your microphone and end your stream, so it
+                     # is off unless you turn it on.

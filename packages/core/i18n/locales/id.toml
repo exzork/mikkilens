@@ -1,0 +1,117 @@
+# Bahasa Indonesia — bahasa keluaran bawaan MikkiLens.
+# Setiap kalimat yang diucapkan MikkiLens ada di sini. Ubah sesuka hati;
+# yang penting nama kuncinya (di kiri) jangan diganti.
+
+[meta]
+name = "Bahasa Indonesia"
+code = "id"
+voice = "id-ID-GadisNeural"
+yes = ["ya", "iya", "oke", "ok", "benar", "betul", "lanjut"]
+no = ["tidak", "ga", "gak", "nggak", "enggak", "batal", "jangan"]
+
+[app]
+ready = "MikkiLens siap."
+starting = "MikkiLens sedang dimulai."
+shutdown = "MikkiLens dimatikan."
+restarted = "MikkiLens dimulai ulang."
+ui_ready = "Halaman pengaturan terbuka di alamat {url}"
+
+[status]
+live = "Kamu sedang siaran."
+not_live = "Belum siaran."
+scene = "Scene sekarang {scene}."
+mic_muted = "Mikrofon mati."
+mic_live = "Mikrofon menyala."
+viewers = "Penonton {count} orang."
+chat_backlog = "Ada {count} chat yang belum dibacakan."
+chat_empty = "Tidak ada chat yang tertunda."
+summary = "{live} {scene} {mic} {viewers} {chat}"
+
+[obs]
+connected = "OBS terhubung."
+disconnected = "OBS terputus. Mencoba menyambung lagi."
+reconnected = "OBS tersambung kembali."
+not_responding = "OBS tidak merespons."
+scene_switched = "Pindah ke {scene}."
+scene_not_found = "Tidak menemukan scene {scene}."
+scene_list = "Scene yang tersedia: {scenes}."
+mic_muted = "Mikrofon dimatikan."
+mic_unmuted = "Mikrofon dinyalakan."
+source_shown = "{source} ditampilkan."
+source_hidden = "{source} disembunyikan."
+source_not_found = "Tidak menemukan sumber {source}."
+stream_started = "Kamu sudah live."
+stream_stopped = "Siaran dihentikan."
+already_live = "Kamu memang sudah siaran."
+not_streaming = "Kamu memang belum siaran."
+
+[confirm]
+stop_stream = "Hentikan siaran? Jawab ya atau tidak."
+end_broadcast = "Akhiri siaran di YouTube? Jawab ya atau tidak."
+set_title = "Ganti judul menjadi {text}? Jawab ya atau tidak."
+timeout = "Tidak ada jawaban. Dibatalkan."
+cancelled = "Dibatalkan."
+not_understood = "Aku tidak paham. Jawab ya atau tidak."
+
+[listen]
+heard = "Saya mendengar: {text}"
+unknown_command = "Saya mendengar {text}, tapi saya tidak tahu perintah itu."
+no_speech = "Saya tidak mendengar apa-apa."
+ambiguous = "Perintah {phrase} cocok dengan lebih dari satu perintah."
+
+[chat]
+paused = "Pembacaan chat dijeda."
+resumed = "Pembacaan chat dilanjutkan."
+already_paused = "Chat memang sedang dijeda."
+already_playing = "Chat memang sedang dibacakan."
+skipped = "Melompati {count} chat. Sekarang sudah paling baru."
+behind = "Kamu tertinggal {count} chat, sekitar {minutes} menit."
+up_to_date = "Chat sudah paling baru."
+message = "{author} bilang: {text}"
+superchat = "Super chat dari {author}, {amount}. {text}"
+member = "{author} baru saja menjadi member."
+connected = "Chat YouTube tersambung."
+disconnected = "Chat YouTube terputus. Mencoba menyambung lagi."
+summarizing = "Sedang merangkum chat."
+summary = "Ringkasan chat: {text}"
+quota_warning = "Kuota YouTube sudah terpakai {percent} persen. Pembacaan chat diperlambat."
+
+[vision]
+looking = "Sedang melihat layar kamu."
+failed = "Gagal membaca layar: {reason}"
+no_provider = "Model penglihatan belum diatur. Buka halaman pengaturan dulu."
+
+[youtube]
+connected = "YouTube tersambung sebagai {channel}."
+not_connected = "YouTube belum tersambung. Buka halaman pengaturan dulu."
+no_broadcast = "Tidak ada siaran yang sedang aktif."
+title_changed = "Judul diganti menjadi {text}."
+title_is = "Judul sekarang: {text}"
+
+[commands]
+reloaded = "Perintah dimuat ulang. Ada {count} perintah."
+reload_failed = "Gagal memuat perintah: {reason}"
+help_intro = "Perintah yang bisa kamu ucapkan:"
+help_item = "{phrase}"
+
+[wizard]
+welcome = "Selamat datang di MikkiLens. Saya akan memandu pengaturan lewat suara."
+output_intro = "Sekarang saya akan menyebutkan perangkat suara keluaran satu per satu."
+output_device = "Perangkat nomor {index}. {name}. Ini suaranya."
+output_chosen = "Baik. Suara MikkiLens akan keluar lewat {name}."
+output_warning = "Catatan: perangkat ini ikut terekam OBS, jadi penonton juga akan mendengar suara saya. Itu tidak masalah."
+input_intro = "Sekarang mikrofon. Silakan bicara sebentar setelah nada."
+input_ok = "Mikrofon terdengar bagus."
+input_silent = "Saya tidak mendengar apa-apa dari mikrofon itu."
+selftest_intro = "Memeriksa semuanya."
+selftest_ok = "{item} baik."
+selftest_fail = "{item} bermasalah: {reason}"
+done = "Pengaturan selesai."
+
+[error]
+generic = "Terjadi kesalahan: {reason}"
+not_available = "Perintah {command} belum tersedia."
+no_audio_device = "Tidak menemukan perangkat suara."
+mic_lost = "Mikrofon terputus."
+network = "Koneksi internet bermasalah."
+config_invalid = "Berkas pengaturan bermasalah: {reason}"

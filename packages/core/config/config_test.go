@@ -1,0 +1,213 @@
+package config_test
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/exzork/mikkilens/packages/core/config"
+	"github.com/exzork/mikkilens/packages/core/paths"
+)
+
+// Config loading must be forgiving. A hand-edited config with a typo in it
+// should still start and still speak; refusing to boot would leave her with a
+// silent machine and no way to see why.
+
+func TestDefaultsAreIndonesian(t *testing.T) {
+	settings := config.Default()
+	if settings.Language.Output != "id" || settings.Language.STT != "id" {
+		t.Errorf("defaults are %+v", settings.Language)
+	}
+}
+
+func TestEmptyVoiceFallsBackToTheLocaleVoice(t *testing.T) {
+	settings := config.Default()
+	if got := settings.Voice("id-ID-GadisNeural"); got != "id-ID-GadisNeural" {
+		t.Errorf("Voice() = %q", got)
+	}
+	settings.Speech.Voice = "id-ID-ArdiNeural"
+	if got := settings.Voice("id-ID-GadisNeural"); got != "id-ID-ArdiNeural" {
+		t.Errorf("Voice() = %q", got)
+	}
+}
+
+func TestChatVoiceDefaultsToTheMainVoice(t *testing.T) {
+	settings := config.Default()
+	settings.Speech.Voice = "id-ID-ArdiNeural"
+	if got := settings.VoiceForChat("x"); got != "id-ID-ArdiNeural" {
+		t.Errorf("VoiceForChat() = %q", got)
+	}
+	settings.Speech.ChatVoice = "id-ID-GadisNeural"
+	if got := settings.VoiceForChat("x"); got != "id-ID-GadisNeural" {
+		t.Errorf("VoiceForChat() = %q", got)
+	}
+}
+
+func TestUnknownKeysAreIgnoredRatherThanFatal(t *testing.T) {
+	settings := config.FromMap(map[string]any{
+		"speech": map[string]any{"rate": "+20%", "typo_here": int64(1)},
+	})
+	if settings.Speech.Rate != "+20%" {
+		t.Errorf("rate = %q", settings.Speech.Rate)
+	}
+}
+
+func TestUnknownSectionsAreIgnored(t *testing.T) {
+	settings := config.FromMap(map[string]any{
+		"not_a_section": map[string]any{"a": int64(1)},
+		"language":      map[string]any{"output": "en"},
+	})
+	if settings.Language.Output != "en" {
+		t.Errorf("output = %q", settings.Language.Output)
+	}
+}
+
+func TestPartialSectionKeepsOtherDefaults(t *testing.T) {
+	settings := config.FromMap(map[string]any{"language": map[string]any{"output": "en"}})
+	if settings.Language.STT != "id" {
+		t.Errorf("unspecified keys must keep their defaults, stt = %q", settings.Language.STT)
+	}
+}
+
+func TestRoundTripThroughTomlIsStable(t *testing.T) {
+	original := config.FromMap(map[string]any{
+		"speech": map[string]any{"rate": "+20%"},
+		"chat":   map[string]any{"muted_users": []any{"bot"}},
+	})
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if _, err := original.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(original, reloaded) {
+		t.Errorf("round trip changed the config:\n%+v\n%+v", original, reloaded)
+	}
+}
+
+func TestSaveIsAtomicAndLeavesNoTempFile(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "config.toml")
+	if _, err := config.Default().Save(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal(err)
+	}
+	leftovers, _ := filepath.Glob(filepath.Join(directory, "*.tmp"))
+	if len(leftovers) > 0 {
+		t.Errorf("temp files left behind: %v", leftovers)
+	}
+}
+
+func TestInvalidTomlRaisesAClearError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("this is not = = valid toml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Load(path); err == nil {
+		t.Error("expected an error")
+	}
+}
+
+func TestMissingFileYieldsDefaults(t *testing.T) {
+	settings, err := config.Load(filepath.Join(t.TempDir(), "absent.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(settings, config.Default()) {
+		t.Error("a missing file must yield the defaults")
+	}
+}
+
+func TestLLMEndpointFallsBackToTheVisionProvider(t *testing.T) {
+	t.Setenv("MIKKILENS_VISION_KEY", "secret-value")
+	settings := config.FromMap(map[string]any{
+		"vision": map[string]any{"base_url": "https://example/v1", "model": "vision-model"},
+	})
+	base, model, key := settings.LLMEndpoint()
+	if base != "https://example/v1" || model != "vision-model" || key != "secret-value" {
+		t.Errorf("got %q %q %q", base, model, key)
+	}
+}
+
+func TestLLMEndpointPrefersItsOwnSettings(t *testing.T) {
+	t.Setenv("MIKKILENS_TEXT_KEY", "text-secret")
+	settings := config.FromMap(map[string]any{
+		"vision": map[string]any{"base_url": "https://vision/v1", "model": "vision-model"},
+		"llm": map[string]any{
+			"base_url": "https://text/v1", "model": "text-model",
+			"api_key_env": "MIKKILENS_TEXT_KEY",
+		},
+	})
+	base, model, key := settings.LLMEndpoint()
+	if base != "https://text/v1" || model != "text-model" || key != "text-secret" {
+		t.Errorf("got %q %q %q", base, model, key)
+	}
+}
+
+func TestVisionIsNotConsideredConfiguredWithoutAModel(t *testing.T) {
+	without := config.FromMap(map[string]any{"vision": map[string]any{"base_url": "https://x/v1"}})
+	if without.Vision.Configured() {
+		t.Error("a base_url alone is not a configured provider")
+	}
+	with := config.FromMap(map[string]any{
+		"vision": map[string]any{"base_url": "https://x/v1", "model": "m"},
+	})
+	if !with.Vision.Configured() {
+		t.Error("base_url plus model is configured")
+	}
+}
+
+// -- secrets ------------------------------------------------------------------
+
+func TestSecretsComeFromTheEnvironmentFirst(t *testing.T) {
+	paths.SetRoot(t.TempDir())
+	t.Setenv("MY_KEY", "from-env")
+	if err := config.StoreSecret("MY_KEY", "from-file"); err != nil {
+		t.Fatal(err)
+	}
+	if got := config.ResolveSecret("MY_KEY"); got != "from-env" {
+		t.Errorf("ResolveSecret() = %q, want the environment value", got)
+	}
+	t.Setenv("MY_KEY", "")
+	if got := config.ResolveSecret("MY_KEY"); got != "from-file" {
+		t.Errorf("ResolveSecret() = %q, want the stored value", got)
+	}
+}
+
+func TestSecretsNeverLandInTheConfigFile(t *testing.T) {
+	directory := t.TempDir()
+	paths.SetRoot(directory)
+	if err := config.StoreSecret("MY_KEY", "super-secret"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "config.toml")
+	if _, err := config.Default().Save(path); err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(written), "super-secret") {
+		t.Error("a secret reached config.toml")
+	}
+}
+
+func TestStoringAnEmptySecretRemovesIt(t *testing.T) {
+	paths.SetRoot(t.TempDir())
+	if err := config.StoreSecret("MY_KEY", "value"); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.StoreSecret("MY_KEY", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := config.ResolveSecret("MY_KEY"); got != "" {
+		t.Errorf("ResolveSecret() = %q, want empty", got)
+	}
+}

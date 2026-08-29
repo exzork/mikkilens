@@ -1,0 +1,115 @@
+# English strings. Key set must stay identical to id.toml — tests enforce this.
+
+[meta]
+name = "English"
+code = "en"
+voice = "en-US-AriaNeural"
+yes = ["yes", "yeah", "yep", "ok", "okay", "correct", "go ahead"]
+no = ["no", "nope", "cancel", "stop", "don't"]
+
+[app]
+ready = "MikkiLens ready."
+starting = "MikkiLens is starting."
+shutdown = "MikkiLens shutting down."
+restarted = "MikkiLens restarted."
+ui_ready = "Settings page open at {url}"
+
+[status]
+live = "You are live."
+not_live = "Not streaming."
+scene = "Current scene is {scene}."
+mic_muted = "Microphone is muted."
+mic_live = "Microphone is live."
+viewers = "{count} viewers."
+chat_backlog = "{count} chat messages waiting."
+chat_empty = "No chat messages waiting."
+summary = "{live} {scene} {mic} {viewers} {chat}"
+
+[obs]
+connected = "OBS connected."
+disconnected = "OBS disconnected. Reconnecting."
+reconnected = "OBS reconnected."
+not_responding = "OBS is not responding."
+scene_switched = "Switched to {scene}."
+scene_not_found = "I could not find a scene called {scene}."
+scene_list = "Available scenes: {scenes}."
+mic_muted = "Microphone muted."
+mic_unmuted = "Microphone unmuted."
+source_shown = "{source} shown."
+source_hidden = "{source} hidden."
+source_not_found = "I could not find a source called {source}."
+stream_started = "You are live."
+stream_stopped = "Stream stopped."
+already_live = "You are already live."
+not_streaming = "You are not streaming."
+
+[confirm]
+stop_stream = "Stop the stream? Say yes or no."
+end_broadcast = "End the YouTube broadcast? Say yes or no."
+set_title = "Change the title to {text}? Say yes or no."
+timeout = "No answer. Cancelled."
+cancelled = "Cancelled."
+not_understood = "I did not understand. Say yes or no."
+
+[listen]
+heard = "I heard: {text}"
+unknown_command = "I heard {text}, but I do not know that command."
+no_speech = "I did not hear anything."
+ambiguous = "The phrase {phrase} matches more than one command."
+
+[chat]
+paused = "Chat reading paused."
+resumed = "Chat reading resumed."
+already_paused = "Chat is already paused."
+already_playing = "Chat is already being read."
+skipped = "Skipped {count} messages. You are up to date."
+behind = "You are {count} messages behind, about {minutes} minutes."
+up_to_date = "Chat is up to date."
+message = "{author} says: {text}"
+superchat = "Super chat from {author}, {amount}. {text}"
+member = "{author} just became a member."
+connected = "YouTube chat connected."
+disconnected = "YouTube chat disconnected. Reconnecting."
+summarizing = "Summarizing chat."
+summary = "Chat summary: {text}"
+quota_warning = "YouTube quota is {percent} percent used. Slowing chat down."
+
+[vision]
+looking = "Looking at your screen."
+failed = "Could not read the screen: {reason}"
+no_provider = "The vision model is not configured yet. Open the settings page."
+
+[youtube]
+connected = "YouTube connected as {channel}."
+not_connected = "YouTube is not connected. Open the settings page."
+no_broadcast = "There is no active broadcast."
+title_changed = "Title changed to {text}."
+title_is = "The current title is: {text}"
+
+[commands]
+reloaded = "Commands reloaded. {count} commands available."
+reload_failed = "Could not reload commands: {reason}"
+help_intro = "Here is what you can say:"
+help_item = "{phrase}"
+
+[wizard]
+welcome = "Welcome to MikkiLens. I will guide you through setup by voice."
+output_intro = "I will now play a test tone through each output device in turn."
+output_device = "Device number {index}. {name}. This is what it sounds like."
+output_chosen = "Good. MikkiLens will speak through {name}."
+output_warning = "Note: OBS captures this device, so viewers will hear me too. That is fine."
+input_intro = "Now the microphone. Please say something after the tone."
+input_ok = "The microphone sounds good."
+input_silent = "I did not hear anything from that microphone."
+selftest_intro = "Checking everything."
+selftest_ok = "{item} is fine."
+selftest_fail = "{item} has a problem: {reason}"
+done = "Setup complete."
+
+[error]
+generic = "Something went wrong: {reason}"
+not_available = "The command {command} is not available yet."
+no_audio_device = "No audio device found."
+mic_lost = "The microphone was disconnected."
+network = "There is a network problem."
+config_invalid = "The configuration file is invalid: {reason}"

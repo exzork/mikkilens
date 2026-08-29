@@ -1,0 +1,23 @@
+# Build output
+/dist/
+/apps/desktop/out/
+/node_modules/
+/apps/desktop/node_modules/
+*.tsbuildinfo
+
+# Hers, not the repository's.
+#
+# config.toml holds the OBS password, so it never goes in; config.example.toml
+# is the template. data/ holds her logs, her YouTube token, her API keys and
+# the downloaded speech models.
+#
+# The command files are NOT ignored: the phrases are part of the product, the
+# tests load them, and a fresh clone needs them to have any commands at all.
+# Editing them will show up as a diff, which is the right trade.
+/config.toml
+/data/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.swp
