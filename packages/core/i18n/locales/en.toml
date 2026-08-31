@@ -70,6 +70,7 @@ superchat = "Super chat from {author}, {amount}. {text}"
 member = "{author} just became a member."
 connected = "YouTube chat connected."
 disconnected = "YouTube chat disconnected. Reconnecting."
+unavailable = "This broadcast does not have live chat switched on, so there is nothing to read. I will keep checking."
 summarizing = "Summarizing chat."
 summary = "Chat summary: {text}"
 quota_warning = "YouTube quota is {percent} percent used. Slowing chat down."
@@ -81,10 +82,18 @@ no_provider = "The vision model is not configured yet. Open the settings page."
 
 [youtube]
 connected = "YouTube connected as {channel}."
+connected_public = "YouTube connected with an API key. I can read the viewer count and the title, but changing the title needs you to sign in."
+needs_sign_in = "That needs you to sign in to YouTube. The viewer count and the title work with just the key."
 not_connected = "YouTube is not connected. Open the settings page."
+sign_in_expired = "Your YouTube sign-in has expired. Open the settings app and connect YouTube again."
 no_broadcast = "There is no active broadcast."
 title_changed = "Title changed to {text}."
 title_is = "The current title is: {text}"
+
+[matcher]
+downloading = "Downloading the language model, {percent} percent."
+downloaded = "The language model is ready. I will understand commands better now."
+download_failed = "The language model could not be downloaded: {reason}"
 
 [commands]
 reloaded = "Commands reloaded. {count} commands available."

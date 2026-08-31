@@ -14,6 +14,10 @@ import (
 // device that disappears mid-stream -- a headset unplugged, a monitor turned
 // off -- costs one failed sound rather than every sound afterwards.
 
+// SetLeadIn sets how much silence precedes a sound on a device that has gone
+// idle, which is what stops a Bluetooth headset swallowing the first word.
+func SetLeadIn(duration time.Duration) { wasapi.SetLeadIn(duration) }
+
 // Interrupt lets a caller cut a sound short from another goroutine.
 type Interrupt struct{ stopped atomic.Bool }
 

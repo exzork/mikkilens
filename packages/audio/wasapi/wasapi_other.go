@@ -42,6 +42,9 @@ func Endpoints(Direction) ([]Endpoint, error) { return nil, errUnsupported }
 
 func Play(string, []float32, int, int, Interrupt) (bool, error) { return false, errUnsupported }
 
+// SetLeadIn is a no-op off Windows.
+func SetLeadIn(time.Duration) {}
+
 func StartCapture(string, int, int, OnAudio) (*Recorder, error) { return nil, errUnsupported }
 
 func (r *Recorder) Stop()            {}

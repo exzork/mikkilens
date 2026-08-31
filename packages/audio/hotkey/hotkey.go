@@ -24,16 +24,33 @@ type Error struct{ Reason string }
 
 func (e *Error) Error() string { return e.Reason }
 
-// Options configure a push-to-talk hotkey.
+// Mode is what one press of the key means.
+type Mode int
+
+const (
+	// Hold is push to talk: it activates on the press and releases when she
+	// lets go. The default, because it is the one that cannot be left on by
+	// accident.
+	Hold Mode = iota
+
+	// Toggle presses once to start and once to stop.
+	Toggle
+
+	// Press fires once per press and never releases. A key bound to a command
+	// uses this: starting a stream has nothing to hold.
+	Press
+)
+
+// Options configure one watched key.
 type Options struct {
 	// Combination is written the way the config file has always written it,
 	// with named keys in angle brackets: <ctrl>+<alt>+<space>.
 	Combination string
 
-	// PushToTalk holds to talk. When false the key toggles: press once to
-	// start, once to stop.
-	PushToTalk bool
+	Mode Mode
 
+	// OnActivate runs on every press. OnRelease runs when she lets go in Hold,
+	// on the second press in Toggle, and never in Press.
 	OnActivate func()
 	OnRelease  func()
 }

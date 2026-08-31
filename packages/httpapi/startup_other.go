@@ -29,3 +29,4 @@ func openBrowser(url string) {
 }
 
 func youtubeHasClientSecret() bool { return youtube.HasClientSecret() }
+func youtubeClientSource() string  { return youtube.ClientSource() }

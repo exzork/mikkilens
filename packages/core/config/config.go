@@ -46,6 +46,13 @@ type Speech struct {
 	OutputDevice    string  `toml:"output_device" json:"output_device"`
 	EarconVolume    float64 `toml:"earcon_volume" json:"earcon_volume"`
 	ConfirmTimeoutS float64 `toml:"confirm_timeout_s" json:"confirm_timeout_s"`
+
+	// LeadInMs is silence played before a sound when the output device has
+	// gone idle. Bluetooth headphones drop the audio link when nothing is
+	// playing and take a few hundred milliseconds to bring it back, losing
+	// whatever was sent meanwhile -- which is how the first word of a sentence
+	// disappears. Zero is right for anything wired.
+	LeadInMs int `toml:"lead_in_ms" json:"lead_in_ms"`
 }
 
 // Audio covers the microphone side.
@@ -97,12 +104,30 @@ type OBS struct {
 }
 
 // YouTube covers the broadcast API and its daily quota.
+//
+// There are two ways in. Signing in gives everything, including changing the
+// title, and costs one browser consent screen that needs sighted help. An API
+// key gives the readable half -- viewer count, title, the chat id -- and is a
+// single string copied from one page, which is a far lower wall to get over.
 type YouTube struct {
 	Enabled          bool   `toml:"enabled" json:"enabled"`
 	Transport        string `toml:"transport" json:"transport"` // "auto" | "stream" | "poll"
 	QuotaBudget      int    `toml:"quota_budget" json:"quota_budget"`
 	QuotaWarnPercent int    `toml:"quota_warn_percent" json:"quota_warn_percent"`
+
+	// APIKeyEnv names where the read-only key lives, as with every other
+	// secret: an environment variable, or data/secrets.toml.
+	APIKeyEnv string `toml:"api_key_env" json:"api_key_env"`
+
+	// ChannelID is her channel, so the current live stream can be found.
+	// VideoID pins one stream instead, which costs far less quota.
+	// Either may be pasted as a full URL.
+	ChannelID string `toml:"channel_id" json:"channel_id"`
+	VideoID   string `toml:"video_id" json:"video_id"`
 }
+
+// YouTubeAPIKey resolves the read-only key.
+func (c Config) YouTubeAPIKey() string { return ResolveSecret(c.YouTube.APIKeyEnv) }
 
 // Chat governs how live chat is read aloud.
 type Chat struct {
@@ -145,6 +170,24 @@ type UI struct {
 	LanAccess   bool   `toml:"lan_access" json:"lan_access"` // opt-in; lets someone help remotely
 }
 
+// Binding fires one command from a key, with nothing said.
+//
+// Every device she might reach for presents as an ordinary key combination:
+// a Stream Deck key of any brand, a foot pedal, a mouse macro, a second
+// keyboard. So one mechanism covers all of them, and none of them needs to
+// know MikkiLens exists.
+type Binding struct {
+	Combination string `toml:"combination" json:"combination"`
+	Command     string `toml:"command" json:"command"`
+
+	// Confirm overrides the command's own gate. Unset leaves it alone, so a
+	// bound key that ends the stream still asks first and is answered out
+	// loud. Setting it false is how a dedicated key becomes a single press --
+	// worth having on a key that cannot be pressed by accident, and worth
+	// thinking about on one that can.
+	Confirm *bool `toml:"confirm,omitempty" json:"confirm,omitempty"`
+}
+
 // Config is every setting, in one value that can be copied and swapped live.
 type Config struct {
 	Language Language `toml:"language" json:"language"`
@@ -158,7 +201,13 @@ type Config struct {
 	Chat     Chat     `toml:"chat" json:"chat"`
 	Vision   Vision   `toml:"vision" json:"vision"`
 	LLM      LLM      `toml:"llm" json:"llm"`
+	Matcher  Matcher  `toml:"matcher" json:"matcher"`
 	UI       UI       `toml:"ui" json:"ui"`
+
+	// Bindings is a list of tables rather than a section, because the same
+	// key name repeats: [[bindings]] once per key. Left out when empty, so a
+	// config nobody has bound a key in stays a config about her voice.
+	Bindings []Binding `toml:"bindings,omitempty" json:"bindings,omitempty"`
 }
 
 // Default is the configuration MikkiLens runs with when nothing is set.
@@ -168,6 +217,7 @@ func Default() Config {
 		Speech: Speech{
 			Rate: "+0%", Volume: "+0%", ChatRate: "+15%",
 			EarconVolume: 0.25, ConfirmTimeoutS: 8.0,
+			LeadInMs: 300,
 		},
 		Audio: Audio{
 			SampleRate: 16000, VadAggressiveness: 2,
@@ -186,6 +236,7 @@ func Default() Config {
 		YouTube: YouTube{
 			Enabled: true, Transport: "auto",
 			QuotaBudget: 10000, QuotaWarnPercent: 80,
+			APIKeyEnv: "MIKKILENS_YOUTUBE_KEY",
 		},
 		Chat: Chat{
 			Enabled: true, AutostartReading: true, SkipEmoteOnly: true,
@@ -196,7 +247,8 @@ func Default() Config {
 			APIKeyEnv: "MIKKILENS_VISION_KEY", MaxEdge: 1568,
 			TimeoutS: 30.0, Monitors: "all", MaxAnswerChars: 700,
 		},
-		UI: UI{Host: "127.0.0.1", Port: 8760},
+		Matcher: Matcher{Enabled: true, APIKeyEnv: "MIKKILENS_MATCHER_KEY"},
+		UI:      UI{Host: "127.0.0.1", Port: 8760},
 	}
 }
 
@@ -269,6 +321,14 @@ func sectionFields(settings Config) map[string]map[string]bool {
 		if name == "" {
 			continue
 		}
+		if field.Type.Kind() != reflect.Struct {
+			// A list of tables, like [[bindings]]. It is recognised, but it
+			// has no fixed set of keys to check, so nil stands for "known,
+			// nothing to warn about".
+			sections[name] = nil
+			continue
+		}
+
 		keys := map[string]bool{}
 		inner := field.Type
 		for j := 0; j < inner.NumField(); j++ {
@@ -331,6 +391,30 @@ func (c Config) VoiceForChat(localeDefault string) string {
 		return c.Speech.ChatVoice
 	}
 	return c.Voice(localeDefault)
+}
+
+// Matcher is the small local model consulted when the written phrases do not
+// recognise something she said.
+//
+// It is deliberately its own endpoint rather than reusing [llm], which falls
+// back to [vision]. That fallback is right for summarising chat on request; it
+// would be quite wrong here, where it would quietly send every unrecognised
+// utterance to a paid cloud provider. Empty means no fallback at all, and
+// exactly the behaviour MikkiLens had before.
+type Matcher struct {
+	Enabled   bool   `toml:"enabled" json:"enabled"`
+	Base      string `toml:"base_url" json:"base_url"`
+	Model     string `toml:"model" json:"model"`
+	APIKeyEnv string `toml:"api_key_env" json:"api_key_env"`
+}
+
+// MatcherEndpoint resolves the fallback matcher. It stays off until it is
+// pointed at something, and never borrows another section's provider.
+func (c Config) MatcherEndpoint() (base, model, key string) {
+	if !c.Matcher.Enabled {
+		return "", "", ""
+	}
+	return c.Matcher.Base, c.Matcher.Model, ResolveSecret(c.Matcher.APIKeyEnv)
 }
 
 // LLMEndpoint is the text model to use, falling back to the vision provider so

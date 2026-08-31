@@ -1,6 +1,7 @@
 package intent
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -78,8 +79,11 @@ type Router struct {
 	bus      Speaker
 	locale   *i18n.Locale
 	timeout  time.Duration
-	handlers map[string]Handler
-	waiting  *pending
+
+	// understander is consulted only when the phrases match nothing.
+	understander Understander
+	handlers     map[string]Handler
+	waiting      *pending
 }
 
 // NewRouter wires a command set to a speech bus.
@@ -167,6 +171,27 @@ func (r *Router) UnhandledCommands() []string {
 	return missing
 }
 
+// Understander is a last resort for an utterance the phrases did not match.
+//
+// An interface rather than the model client itself, so this package stays free
+// of HTTP, providers and API keys: matching commands is the core of what
+// MikkiLens does and must remain testable without a network.
+//
+// Returning an empty command means "I did not recognise one", which is a valid
+// answer. It is expected to be slow -- a second or so of local inference --
+// which is why it is only ever reached once the cheap path has failed.
+type Understander interface {
+	Understand(ctx context.Context, transcript string, commands *Set) (command string, slots map[string]string, err error)
+}
+
+// SetUnderstander installs the fallback. Nil disables it, which restores the
+// behaviour of refusing anything the phrases do not match.
+func (r *Router) SetUnderstander(understander Understander) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.understander = understander
+}
+
 // AwaitingConfirmation reports whether a question is still open.
 func (r *Router) AwaitingConfirmation() bool {
 	r.mu.Lock()
@@ -184,6 +209,39 @@ func (r *Router) CancelPending() {
 
 	if had {
 		r.bus.Say(locale.T("confirm.cancelled"), PriorityConfirm)
+	}
+}
+
+// RenewPending restarts the clock on an open question.
+//
+// The deadline is set when the question is queued, but it is meant to measure
+// how long she has to answer -- and several seconds of that can be spent
+// speaking the question itself. Without this, a long prompt could expire
+// before she was ever given the chance to reply, which reads as MikkiLens
+// asking something and then refusing to listen.
+func (r *Router) RenewPending() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.waiting != nil {
+		r.waiting.deadline = time.Now().Add(r.timeout)
+	}
+}
+
+// TimeOutPending closes an unanswered question and says so.
+//
+// The deadline alone is not enough: it is only noticed when something else is
+// said, so a question nobody answers would otherwise sit open in silence with
+// the answer still expected. Saying "no answer, cancelled" out loud is the
+// only way she learns the thing did not happen.
+func (r *Router) TimeOutPending() {
+	r.mu.Lock()
+	had := r.waiting != nil
+	r.waiting = nil
+	locale := r.locale
+	r.mu.Unlock()
+
+	if had {
+		r.bus.Say(locale.T("confirm.timeout"), PriorityConfirm)
 	}
 }
 
@@ -221,11 +279,66 @@ func (r *Router) HandleTranscript(text string) string {
 		return ""
 	}
 	if match == nil {
+		if understood := r.understand(text); understood != nil {
+			return r.dispatch(*understood)
+		}
 		r.bus.Say(locale.T("listen.unknown_command", i18n.Args{"text": trimSpace(text)}), PriorityResult)
 		return ""
 	}
 	return r.dispatch(*match)
 }
+
+// understand asks the fallback what an unmatched utterance meant.
+//
+// Everything it returns is checked against the commands that actually exist.
+// A model inventing a plausible-sounding id, or filling in a slot nothing
+// understands, must come to nothing rather than to a command that was never
+// written -- and the result goes through dispatch like any other match, so a
+// command marked confirm still asks before it acts.
+func (r *Router) understand(text string) *Match {
+	r.mu.Lock()
+	understander := r.understander
+	commands := r.commands
+	r.mu.Unlock()
+
+	if understander == nil || commands == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), understandTimeout)
+	defer cancel()
+
+	id, slots, err := understander.Understand(ctx, text, commands)
+	if err != nil {
+		// Not spoken: she already hears "I do not know that command", and
+		// explaining that a model failed helps nobody mid-stream.
+		slog.Warn("the fallback matcher failed", "error", err)
+		return nil
+	}
+	id = trimSpace(id)
+	if id == "" {
+		return nil
+	}
+	if _, exists := commands.Commands[id]; !exists {
+		slog.Warn("the fallback matcher invented a command", "command", id)
+		return nil
+	}
+
+	kept := map[string]string{}
+	for name, value := range slots {
+		if KnownSlots[name] && trimSpace(value) != "" {
+			kept[name] = trimSpace(value)
+		}
+	}
+
+	slog.Info("understood by the fallback matcher", "text", text, "command", id)
+	return &Match{Command: id, Slots: kept, Transcript: text}
+}
+
+// understandTimeout bounds the whole fallback. The client has its own, shorter
+// deadline; this is the backstop that keeps a wedged local server from leaving
+// her waiting with no answer at all.
+const understandTimeout = 20 * time.Second
 
 func (r *Router) expirePending() {
 	r.mu.Lock()
@@ -294,6 +407,35 @@ func (r *Router) classifyAnswer(text string) (verdict bool, understood bool) {
 		}
 	}
 	return false, false
+}
+
+// Trigger runs a command that nobody said.
+//
+// A key on a Stream Deck, a mouse macro, the settings page and the command
+// line all arrive here, and from here on nothing can tell them apart from
+// speech: the same handler runs and the same sentence is spoken. That is the
+// whole point -- a key that acts silently would be the one way to change her
+// stream without her being told about it.
+//
+// confirm chooses whether the command's own gate applies. A dedicated key is
+// a deliberate act in a way that a misheard sentence is not, so a binding is
+// allowed to turn it off; leaving it on means the key asks, and she answers
+// out loud.
+func (r *Router) Trigger(id string, confirm bool) string {
+	r.mu.Lock()
+	command, known := r.commands.Commands[id]
+	locale := r.locale
+	r.mu.Unlock()
+
+	if !known {
+		slog.Warn("no such command", "command", id)
+		r.bus.Say(locale.T("error.not_available", i18n.Args{"command": id}), PriorityError)
+		return ""
+	}
+	if !confirm || !command.Confirm {
+		return r.execute(id, nil)
+	}
+	return r.dispatch(Match{Command: id})
 }
 
 func (r *Router) dispatch(match Match) string {

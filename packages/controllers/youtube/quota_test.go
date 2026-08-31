@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
+	"github.com/exzork/mikkilens/packages/core/config"
 	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
@@ -131,7 +132,7 @@ func TestMarkExhaustedSpendsTheWholeBudget(t *testing.T) {
 
 func TestCallingWithoutCredentialsIsAClearError(t *testing.T) {
 	isolated(t)
-	controller := youtube.New(10000, 80)
+	controller := youtube.New(config.YouTube{QuotaBudget: 10000, QuotaWarnPercent: 80}, "")
 	if controller.Authenticated() {
 		t.Error("a fresh controller is not authenticated")
 	}
@@ -148,7 +149,7 @@ func TestCallingWithoutCredentialsIsAClearError(t *testing.T) {
 // alternative is a request that fails slowly and reports the wrong reason.
 func TestAnExhaustedQuotaRefusesBeforeReachingTheNetwork(t *testing.T) {
 	isolated(t)
-	controller := youtube.New(1, 80)
+	controller := youtube.New(config.YouTube{QuotaBudget: 1, QuotaWarnPercent: 80}, "")
 	controller.Quota.MarkExhausted()
 
 	_, err := controller.ListChatMessages(context.Background(), "chat-1", "")
@@ -174,7 +175,7 @@ func TestSignOutRemovesTheStoredToken(t *testing.T) {
 		t.Fatal("the token should be there to start with")
 	}
 
-	youtube.New(10000, 80).SignOut()
+	youtube.New(config.YouTube{QuotaBudget: 10000, QuotaWarnPercent: 80}, "").SignOut()
 	if youtube.HasToken() {
 		t.Error("signing out must remove the stored token")
 	}

@@ -17,6 +17,16 @@
 /config.toml
 /data/
 
+# Credentials, which never belong in a public repository.
+#
+# .npmrc carries an npm auth token. The OAuth client is read from
+# data/client_secret.json at runtime rather than built into the binary: a
+# secret in a source tree is scraped within hours, and Google revokes the
+# client rather than the copy that leaked -- which would break the sign-in for
+# everyone at once, including her, mid-stream.
+/.npmrc
+/packages/controllers/youtube/embedded_client_secret.json
+
 # Editor and OS noise
 .DS_Store
 Thumbs.db

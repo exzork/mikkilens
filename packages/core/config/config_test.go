@@ -211,3 +211,68 @@ func TestStoringAnEmptySecretRemovesIt(t *testing.T) {
 		t.Errorf("ResolveSecret() = %q, want empty", got)
 	}
 }
+
+// -- bindings -----------------------------------------------------------------
+
+// A bound key is what a Stream Deck, a foot pedal or a mouse macro presses.
+// The bindings live in the same file she edits by hand, so they have to
+// survive being written back by the settings page unchanged -- a key that
+// stops working after someone saves an unrelated setting is a key she cannot
+// rely on mid-stream.
+
+func TestBindingsSurviveASaveAndReload(t *testing.T) {
+	never := false
+	original := config.Default()
+	original.Bindings = []config.Binding{
+		{Combination: "<ctrl>+<alt>+<f13>", Command: "go_live"},
+		{Combination: "<ctrl>+<alt>+<f14>", Command: "stop_stream", Confirm: &never},
+	}
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if _, err := original.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(reloaded.Bindings) != 2 {
+		t.Fatalf("bindings = %+v, want two", reloaded.Bindings)
+	}
+	if reloaded.Bindings[0].Command != "go_live" {
+		t.Errorf("first binding = %+v", reloaded.Bindings[0])
+	}
+	if reloaded.Bindings[1].Confirm == nil || *reloaded.Bindings[1].Confirm {
+		t.Errorf("a binding that waives the question must keep waiving it: %+v",
+			reloaded.Bindings[1])
+	}
+}
+
+func TestABindingWithoutConfirmLeavesTheCommandsOwnGateAlone(t *testing.T) {
+	settings := config.FromMap(map[string]any{
+		"bindings": []any{
+			map[string]any{"combination": "<ctrl>+<alt>+<f13>", "command": "stop_stream"},
+		},
+	})
+	if len(settings.Bindings) != 1 {
+		t.Fatalf("bindings = %+v, want one", settings.Bindings)
+	}
+	// nil, not false: unset means "whatever the command itself says", which
+	// for stopping a stream means it still asks.
+	if settings.Bindings[0].Confirm != nil {
+		t.Errorf("Confirm = %v, want unset", *settings.Bindings[0].Confirm)
+	}
+}
+
+func TestBindingsAreNotWarnedAboutAsAnUnknownSection(t *testing.T) {
+	// [[bindings]] is a list of tables rather than a section, and the check
+	// that walks the config's sections used to assume every one was a table.
+	settings := config.FromMap(map[string]any{
+		"bindings": []any{map[string]any{"combination": "<ctrl>+x", "command": "status"}},
+		"speech":   map[string]any{"rate": "+20%"},
+	})
+	if settings.Speech.Rate != "+20%" {
+		t.Errorf("rate = %q; the rest of the config must still load", settings.Speech.Rate)
+	}
+}

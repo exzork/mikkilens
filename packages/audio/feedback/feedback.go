@@ -212,9 +212,17 @@ func (b *Bus) Error(key string, args ...i18n.Args) {
 }
 
 // SayChat queues a chat message. Interrupted messages are re-read, not lost.
+//
+// Ordinary messages get no tone. One beep is an acknowledgement; a beep before
+// every message for an hour is a metronome, and it doubles the time chat takes
+// to get through. The voice already says who is speaking, which is the part
+// that actually needed marking.
+//
+// Super chats keep theirs. They are rare, and someone paying to be heard is
+// worth distinguishing from the stream of ordinary messages.
 func (b *Bus) SayChat(text string, superchat bool, onSpoken func(bool)) {
 	settings, locale := b.Config(), b.Locale()
-	earcon := "chat"
+	earcon := ""
 	if superchat {
 		earcon = "superchat"
 	}

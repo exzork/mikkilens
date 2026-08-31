@@ -24,10 +24,21 @@ var Costs = map[string]int{
 	"liveBroadcasts.update":     50,
 	"liveBroadcasts.transition": 50,
 	"liveChatMessages.list":     5,
-	"liveChatMessages.insert":   50,
-	"videos.list":               1,
-	"videos.update":             50,
-	"channels.list":             1,
+
+	// Streaming is charged per connection rather than per message, which is
+	// the whole reason to prefer it: a four hour stream costs a handful of
+	// units instead of thousands. It is counted on each connect, so a
+	// reconnect loop still shows up in the ledger.
+	"liveChatMessages.stream": 5,
+
+	"liveChatMessages.insert": 50,
+	"videos.list":             1,
+	"videos.update":           50,
+	"channels.list":           1,
+
+	// Finding which video is live is by far the most expensive call there is,
+	// which is why the answer is cached rather than asked for repeatedly.
+	"search.list": 100,
 }
 
 // Ledger counts the units spent today.

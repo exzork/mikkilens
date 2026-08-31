@@ -59,7 +59,7 @@ func TestRegistersAndReleases(t *testing.T) {
 	const combination = "<ctrl>+<alt>+<shift>+<f24>"
 
 	first, err := hotkey.New(hotkey.Options{
-		Combination: combination, PushToTalk: true,
+		Combination: combination, Mode: hotkey.Hold,
 		OnActivate: func() {}, OnRelease: func() {},
 	})
 	if err != nil {

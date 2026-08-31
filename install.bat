@@ -22,6 +22,7 @@ echo Done.
 echo   run.bat       starts MikkiLens
 echo   settings.bat  opens the settings window
 echo   setup.bat     walks through the spoken first-run setup
+echo   build-app.bat builds the one-click MikkiLens.exe in distpp
 exit /b 0
 
 :failed

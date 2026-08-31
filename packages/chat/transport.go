@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -25,60 +26,139 @@ type streamTransport struct {
 
 func (s *streamTransport) Name() string { return "stream" }
 
-func (s *streamTransport) Run(ctx context.Context, liveChatID string, deliver func([]Message)) error {
-	token, err := s.youtube.Token()
-	if err != nil {
-		return err
-	}
-
+func (s *streamTransport) Run(
+	ctx context.Context, liveChatID string, deliver func([]Message), ready func(),
+) error {
 	query := url.Values{}
 	query.Set("liveChatId", liveChatID)
 	query.Set("part", "id,snippet,authorDetails")
-	query.Set("maxResults", "500")
 
 	client := &http.Client{Timeout: 0} // a streaming response has no deadline
+	backoff := time.Duration(0)
 
 	for ctx.Err() == nil {
-		request, err := http.NewRequestWithContext(
-			ctx, http.MethodGet, streamURL+"?"+query.Encode(), nil)
-		if err != nil {
-			return err
-		}
-		request.Header.Set("Authorization", "Bearer "+token.AccessToken)
-
-		response, err := client.Do(request)
-		if err != nil {
-			return err
-		}
-		if response.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-			response.Body.Close()
-			return fmt.Errorf("streamList returned %s: %s", response.Status, clip(string(body), 200))
+		if backoff > 0 && sleep(ctx, backoff) {
+			return ctx.Err()
 		}
 
-		nextPage, err := s.consume(ctx, response.Body, deliver)
-		response.Body.Close()
+		started := time.Now()
+		nextPage, err := s.connect(ctx, client, query, deliver, ready)
 		if err != nil {
 			return err
 		}
 		if nextPage != "" {
 			query.Set("pageToken", nextPage)
 		}
+
+		// The server ends the response periodically by design and reconnecting
+		// is normal, so a connection that lasted a while resumes at once. One
+		// that died immediately must not: reconnecting in a tight loop would
+		// turn a transient fault into a spin against Google's front end, and
+		// the failure would look like chat simply going quiet.
+		if time.Since(started) > healthyStream {
+			backoff = 0
+		} else {
+			backoff = nextBackoff(backoff)
+		}
 	}
 	return ctx.Err()
 }
 
-// consume reads a chunked stream of JSON values.
+// healthyStream is how long a connection must last to count as working.
+const healthyStream = 30 * time.Second
+
+// maxStreamBackoff caps the wait. Longer than this and a recovering stream
+// would stay silent well after YouTube came back.
+const maxStreamBackoff = 30 * time.Second
+
+func nextBackoff(previous time.Duration) time.Duration {
+	if previous <= 0 {
+		return time.Second
+	}
+	return min(previous*2, maxStreamBackoff)
+}
+
+// connect opens one streaming response and reads it to its end.
+func (s *streamTransport) connect(
+	ctx context.Context,
+	client *http.Client,
+	query url.Values,
+	deliver func([]Message),
+	ready func(),
+) (string, error) {
+	request, err := http.NewRequestWithContext(
+		ctx, http.MethodGet, streamURL+"?"+query.Encode(), nil)
+	if err != nil {
+		return "", err
+	}
+	// Authorized per connection rather than once per stream: an access token
+	// lasts about an hour, and a stream can run far longer than that. Doing it
+	// once was a bug that would drop chat mid-broadcast.
+	if err := s.youtube.AuthorizeStream(request); err != nil {
+		return "", err
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+
+	// Counted on connect, not per message. Streaming is charged by the
+	// connection, which is exactly why it is preferred over polling.
+	s.youtube.Quota.Spend("liveChatMessages.stream")
+
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+		return "", s.youtube.ClassifyHTTP(response.StatusCode, body,
+			fmt.Errorf("streamList returned %s: %s",
+				response.Status, clip(string(body), 200)))
+	}
+
+	// Announced here, not before the request: a 200 is the first moment chat
+	// is genuinely working. Saying so on the attempt instead meant announcing
+	// a connection that was about to fail, then announcing the failure, over
+	// and over.
+	ready()
+	return s.consume(ctx, response.Body, deliver)
+}
+
+// consume reads the streaming response.
 //
-// The response is a sequence of JSON documents rather than one document, split
-// at arbitrary byte offsets, so it is decoded incrementally.
+// The endpoint answers with a JSON *array* written a piece at a time -- "["
+// and then one document per batch of messages, the closing "]" arriving only
+// when the server ends the response. Decoding that as a single value would
+// wait for an array that has not finished, which is to say forever; decoding
+// the elements one at a time is what makes it a stream rather than a very
+// slow download.
+//
+// A bare sequence of objects is accepted too, so a change in framing degrades
+// into the older behaviour rather than into silence.
 func (s *streamTransport) consume(ctx context.Context, body io.Reader, deliver func([]Message)) (string, error) {
-	decoder := json.NewDecoder(body)
+	reader := bufio.NewReader(body)
+	framed, err := peekArrayOpening(reader)
+	if err != nil {
+		return "", err
+	}
+
+	decoder := json.NewDecoder(reader)
+	if framed {
+		// The decoder has to read the "[" itself. It then tracks that it is
+		// inside an array, which is what makes More() work and what lets
+		// Decode skip the commas between elements -- swallowing the bracket
+		// beforehand leaves it choking on the first comma instead.
+		if _, err := decoder.Token(); err != nil {
+			return "", err
+		}
+	}
 	nextPage := ""
 
 	for {
 		if ctx.Err() != nil {
 			return nextPage, ctx.Err()
+		}
+		if framed && !decoder.More() {
+			return nextPage, nil // the array closed; reconnect and carry on
 		}
 
 		var payload struct {
@@ -107,6 +187,31 @@ func (s *streamTransport) consume(ctx context.Context, body io.Reader, deliver f
 	}
 }
 
+// peekArrayOpening reports whether the body starts an array, without
+// consuming the bracket.
+//
+// Looking rather than reading matters: a json.Decoder cannot put a token
+// back, so taking the "[" only to discover it was a "{" would corrupt
+// everything after it. Leading whitespace is consumed, which JSON ignores.
+func peekArrayOpening(reader *bufio.Reader) (bool, error) {
+	for {
+		next, err := reader.Peek(1)
+		if err != nil {
+			return false, err
+		}
+		switch next[0] {
+		case ' ', '\t', '\r', '\n':
+			if _, err := reader.ReadByte(); err != nil {
+				return false, err
+			}
+		case '[':
+			return true, nil
+		default:
+			return false, nil
+		}
+	}
+}
+
 // pollingTransport is the fallback: repeated list calls, paced by the API's own
 // hint about how often to ask.
 type pollingTransport struct {
@@ -121,7 +226,9 @@ const MinPollInterval = 5 * time.Second
 
 func (p *pollingTransport) Name() string { return "poll" }
 
-func (p *pollingTransport) Run(ctx context.Context, liveChatID string, deliver func([]Message)) error {
+func (p *pollingTransport) Run(
+	ctx context.Context, liveChatID string, deliver func([]Message), ready func(),
+) error {
 	pageToken := ""
 
 	for ctx.Err() == nil {
@@ -129,6 +236,8 @@ func (p *pollingTransport) Run(ctx context.Context, liveChatID string, deliver f
 		if err != nil {
 			return err
 		}
+		// The first answer that comes back is the proof chat works.
+		ready()
 
 		messages := make([]Message, 0, len(response.Items))
 		for _, item := range response.Items {

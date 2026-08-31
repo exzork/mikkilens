@@ -128,6 +128,12 @@
             Listen now
           </button>
           <span class="hint" data-i18n="status.listenNowHint"></span>
+          <button type="button" id="go-live" data-i18n="status.goLive">
+            Start streaming
+          </button>
+          <button type="button" id="stop-stream" data-i18n="status.stopStream">
+            Stop streaming
+          </button>
           <button type="button" id="restart-engine" data-i18n="status.restartEngine">
             Restart the engine
           </button>
@@ -241,6 +247,26 @@
             </button>
           </p>
           <p class="result" id="youtube-result" role="status"></p>
+
+          <p class="hint" data-i18n="youtube.keyHint"></p>
+          <p>
+            <label for="youtube-key" data-i18n="youtube.apiKey">API key</label>
+            <input type="password" id="youtube-key" size="40" />
+          </p>
+          <p>
+            <label for="youtube-channel" data-i18n="youtube.channel">Channel link</label>
+            <input type="text" id="youtube-channel" size="40" />
+          </p>
+          <p>
+            <label for="youtube-video" data-i18n="youtube.video">Stream link</label>
+            <input type="text" id="youtube-video" size="40" />
+          </p>
+          <p>
+            <button type="button" id="save-youtube-key" class="primary" data-i18n="common.save">
+              Save
+            </button>
+          </p>
+          <p class="result" id="youtube-key-result" role="status"></p>
         </fieldset>
 
         <fieldset>
@@ -249,6 +275,28 @@
             <input type="checkbox" id="startup" />
             <label for="startup" data-i18n="startup.label">Start MikkiLens when Windows starts</label>
           </p>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="matcher.legend">Understanding commands</legend>
+          <p class="hint" data-i18n="matcher.hint"></p>
+          <p id="matcher-state" role="status" data-i18n="matcher.checking">Checking…</p>
+          <p>
+            <label for="matcher-model" data-i18n="matcher.model">Model</label>
+            <select id="matcher-model"></select>
+          </p>
+          <p>
+            <button type="button" id="download-matcher" class="primary" data-i18n="matcher.download">
+              Download
+            </button>
+            <button type="button" id="cancel-matcher" data-i18n="matcher.cancel">
+              Stop downloading
+            </button>
+          </p>
+          <p>
+            <progress id="matcher-progress" max="100" value="0" hidden></progress>
+          </p>
+          <p class="result" id="matcher-result" role="status" aria-live="polite"></p>
         </fieldset>
 
         <fieldset>

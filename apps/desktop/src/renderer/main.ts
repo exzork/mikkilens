@@ -10,6 +10,7 @@ import type {
   LogPayload,
   Snapshot,
   VoiceInfo,
+  MatcherStatus,
   YouTubeStatus,
 } from './types.js'
 
@@ -219,6 +220,51 @@ element('listen-now').addEventListener('click', async () => {
   try {
     await api('/listen', { method: 'POST' })
     announce(t('status.listening'))
+  } catch (error) {
+    alarm(reason(error))
+  }
+})
+
+// Stopping a live stream is not undoable, so it asks once. The confirmation
+// lives in the button itself rather than a dialog: a dialog moves focus, and
+// where focus went is the hardest thing to work out without seeing it.
+let stopArmed = false
+
+element('go-live').addEventListener('click', async () => {
+  try {
+    const result = await api<{ streaming: boolean; unchanged: boolean }>('/obs/stream', {
+      method: 'POST',
+      body: JSON.stringify({ active: true }),
+    })
+    announce(result.unchanged ? t('status.alreadyLive') : t('status.wentLive'))
+  } catch (error) {
+    alarm(reason(error))
+  }
+})
+
+element('stop-stream').addEventListener('click', async () => {
+  const button = element<HTMLButtonElement>('stop-stream')
+
+  if (!stopArmed) {
+    stopArmed = true
+    button.textContent = t('status.stopStreamConfirm')
+    announce(t('status.stopStreamConfirm'))
+    // Disarms itself, so a press left forgotten cannot end a stream later.
+    window.setTimeout(() => {
+      stopArmed = false
+      button.textContent = t('status.stopStream')
+    }, 8000)
+    return
+  }
+
+  stopArmed = false
+  button.textContent = t('status.stopStream')
+  try {
+    const result = await api<{ streaming: boolean; unchanged: boolean }>('/obs/stream', {
+      method: 'POST',
+      body: JSON.stringify({ active: false }),
+    })
+    announce(result.unchanged ? t('status.notLive') : t('status.stoppedStream'))
   } catch (error) {
     alarm(reason(error))
   }
@@ -635,6 +681,98 @@ function fillSpokenLanguageChoices(): void {
   select.value = chosen
 }
 
+// -- understanding commands ---------------------------------------------------
+
+// Polled only while something is downloading. A three gigabyte file takes long
+// enough that the page must keep saying so, but polling a finished download
+// forever would be waste.
+let matcherPoll: number | undefined
+
+function gigabytes(bytes: number): string {
+  return (bytes / 1e9).toFixed(2)
+}
+
+async function refreshMatcher(): Promise<void> {
+  const status = await api<MatcherStatus>('/matcher/status')
+
+  const select = element<HTMLSelectElement>('matcher-model')
+  if (select.options.length === 0) {
+    for (const model of status.models ?? []) {
+      const option = document.createElement('option')
+      option.value = model.name
+      option.textContent = t('matcher.modelOption', {
+        name: model.name,
+        size: gigabytes(model.bytes),
+        summary: model.summary,
+      })
+      select.append(option)
+    }
+  }
+
+  const progress = element<HTMLProgressElement>('matcher-progress')
+  const result = element('matcher-result')
+
+  let text: string
+  if (status.external_base_url) {
+    text = t('matcher.external', { model: status.external_model ?? '' })
+  } else if (status.downloading) {
+    const done = status.progress?.percent ?? 0
+    text = t('matcher.downloading', {
+      percent: done,
+      speed: ((status.progress?.bytes_per_second ?? 0) / 1e6).toFixed(1),
+    })
+    progress.hidden = false
+    progress.value = done
+  } else if (status.ready) {
+    text = status.vision_is_local
+      ? t('matcher.readyWithVision', { model: status.installed_model })
+      : t('matcher.ready', { model: status.installed_model })
+    progress.hidden = true
+  } else if (status.loading) {
+    text = t('matcher.loading')
+    progress.hidden = true
+  } else if (status.installed_model) {
+    text = t('matcher.installedNotRunning', { model: status.installed_model })
+    progress.hidden = true
+  } else {
+    text = t('matcher.notInstalled')
+    progress.hidden = true
+  }
+
+  element('matcher-state').textContent = text
+  if (status.progress?.stage === 'error') {
+    result.textContent = t('matcher.failed', { reason: status.progress.detail })
+  }
+
+  // Keep polling only while there is something to watch.
+  if (status.downloading && matcherPoll === undefined) {
+    matcherPoll = window.setInterval(() => void refreshMatcher(), 1000)
+  } else if (!status.downloading && matcherPoll !== undefined) {
+    window.clearInterval(matcherPoll)
+    matcherPoll = undefined
+  }
+}
+
+element('download-matcher').addEventListener('click', async () => {
+  const model = element<HTMLSelectElement>('matcher-model').value
+  try {
+    await api('/matcher/download', {
+      method: 'POST',
+      body: JSON.stringify({ model }),
+    })
+    announce(t('matcher.started'))
+  } catch (error) {
+    alarm(reason(error))
+  }
+  await refreshMatcher()
+})
+
+element('cancel-matcher').addEventListener('click', async () => {
+  await api('/matcher/cancel', { method: 'POST' })
+  announce(t('matcher.cancelled'))
+  await refreshMatcher()
+})
+
 // -- youtube ------------------------------------------------------------------
 
 async function refreshYouTube(): Promise<YouTubeStatus> {
@@ -651,6 +789,12 @@ async function refreshYouTube(): Promise<YouTubeStatus> {
         ? t('youtube.viaTransport', { transport: status.chat_transport })
         : '',
     })
+  } else if (status.access === 'public') {
+    // Reading works and writing does not, which is worth saying plainly
+    // rather than showing the same "not connected" as having nothing at all.
+    text = t('youtube.connectedWithKey', { percent: status.quota_percent ?? 0 })
+  } else if (status.has_api_key) {
+    text = t('youtube.keyNeedsChannel')
   } else if (!status.has_client_secret) {
     text = t('youtube.noClientSecret')
   } else {
@@ -658,8 +802,47 @@ async function refreshYouTube(): Promise<YouTubeStatus> {
   }
 
   element('youtube-state').textContent = text
+  element<HTMLInputElement>('youtube-channel').value = status.channel_id ?? ''
+  element<HTMLInputElement>('youtube-video').value = status.video_id ?? ''
   return status
 }
+
+// Saving the key is separate from connecting the account: it is the cheaper
+// half of YouTube, and the one most people will actually get working.
+element('save-youtube-key').addEventListener('click', async () => {
+  const result = element('youtube-key-result')
+
+  await saveConfig(
+    {
+      youtube: {
+        channel_id: element<HTMLInputElement>('youtube-channel').value.trim(),
+        video_id: element<HTMLInputElement>('youtube-video').value.trim(),
+      },
+    },
+    t('youtube.keySaved'),
+  )
+
+  const keyField = element<HTMLInputElement>('youtube-key')
+  if (keyField.value) {
+    try {
+      await api('/secret', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: settings?.youtube.api_key_env || 'MIKKILENS_YOUTUBE_KEY',
+          value: keyField.value,
+        }),
+      })
+      keyField.value = ''
+    } catch (error) {
+      result.textContent = reason(error)
+      alarm(reason(error))
+      return
+    }
+  }
+
+  result.textContent = t('youtube.keySaved')
+  await refreshYouTube()
+})
 
 element('connect-youtube').addEventListener('click', async () => {
   element('youtube-result').textContent = t('youtube.opening')
@@ -808,6 +991,7 @@ async function boot(): Promise<void> {
   ).enabled
 
   await refreshYouTube()
+  await refreshMatcher()
   await loadCommands()
   await loadLog()
 

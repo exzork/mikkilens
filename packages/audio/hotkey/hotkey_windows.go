@@ -204,8 +204,15 @@ func (w *windowsWatcher) pump() {
 }
 
 func (w *windowsWatcher) onPressed() {
-	if !w.options.PushToTalk {
-		// Toggle mode: odd presses start listening, even presses stop.
+	switch w.options.Mode {
+	case Press:
+		// Nothing to wait for and nothing to release: the key said to do one
+		// thing, and it is already being done.
+		safely(w.options.OnActivate)
+		return
+
+	case Toggle:
+		// Odd presses start listening, even presses stop.
 		if w.toggled.CompareAndSwap(false, true) {
 			safely(w.options.OnActivate)
 			return

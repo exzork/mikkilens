@@ -9,7 +9,9 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "start": "npm run build && electron .",
     "dev": "npm run build && electron . --dev",
-    "package": "npm run build && electron-builder --win --dir"
+    "package": "npm run build && node scripts/package.mjs",
+    "package:dir": "npm run build && node scripts/package.mjs --dir",
+    "release": "npm run build && node scripts/package.mjs --publish always"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -20,6 +22,19 @@
   "build": {
     "appId": "id.mikkilens.desktop",
     "productName": "MikkiLens",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "exzork",
+        "repo": "mikkilens"
+      }
+    ],
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false,
+    "directories": {
+      "output": "../../dist/app",
+      "buildResources": "build"
+    },
     "files": [
       "out/**/*",
       "package.json"
@@ -28,10 +43,53 @@
       {
         "from": "../../dist/mikkilensd.exe",
         "to": "mikkilensd.exe"
+      },
+      {
+        "from": "../../commands.en.toml",
+        "to": "commands.en.toml"
+      },
+      {
+        "from": "../../commands.id.toml",
+        "to": "commands.id.toml"
+      },
+      {
+        "from": "../../config.example.toml",
+        "to": "config.example.toml"
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "MikkiLens.exe"
+    },
+    "nsis": {
+      "artifactName": "MikkiLens-Setup-${version}.exe",
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MikkiLens",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     }
+  },
+  "author": "exzork",
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

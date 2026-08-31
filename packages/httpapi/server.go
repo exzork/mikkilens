@@ -29,6 +29,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/stt"
 	"github.com/exzork/mikkilens/packages/audio/wake"
 	"github.com/exzork/mikkilens/packages/chat"
+	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/controllers/obs"
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -61,8 +62,11 @@ type Engine interface {
 	ChatIngest() *chat.Ingest
 	ChatReader() *chat.Reader
 	BeginListening()
+	RunCommand(id string, confirm bool)
 	OnYouTubeConnected(context.Context)
 	OnYouTubeDisconnected()
+	RefreshYouTube(context.Context)
+	OnMatcherProgress(llm.Progress)
 }
 
 // Server runs the API alongside the voice engine.

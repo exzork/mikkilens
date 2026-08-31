@@ -9,6 +9,7 @@ import (
 	"github.com/exzork/mikkilens/packages/chat"
 	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/controllers/vision"
+	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/i18n"
 	"github.com/exzork/mikkilens/packages/core/intent"
 	"github.com/exzork/mikkilens/packages/core/state"
@@ -272,9 +273,13 @@ func youTubeHandlers(e *Engine) map[string]intent.Handler {
 // requireYouTube says "YouTube is not connected" rather than reporting the
 // command as missing, which is the difference between a fixable problem and a
 // mysterious one.
+//
+// Reading only needs an API key, so this asks whether anything is available
+// rather than whether she is signed in. Refusing to say the viewer count while
+// holding a working key would be the wrong answer to the right question.
 func (e *Engine) requireYouTube() bool {
 	controller := e.YouTube()
-	if controller == nil || !controller.Authenticated() {
+	if controller == nil || !controller.Available() {
 		e.bus.SayKey("youtube.not_connected", feedback.Error)
 		return false
 	}
@@ -312,6 +317,13 @@ func (e *Engine) setTitle(slots map[string]string) error {
 	defer cancel()
 
 	if err := e.YouTube().SetTitle(ctx, text); err != nil {
+		// Writing is the one thing a key cannot do. Saying "there is no
+		// broadcast" here would send her looking for a stream that is running
+		// perfectly well.
+		if _, needsAccount := err.(*youtube.NotAuthenticatedError); needsAccount {
+			e.bus.SayKey("youtube.needs_sign_in", feedback.Error)
+			return nil
+		}
 		e.bus.SayKey("youtube.no_broadcast", feedback.Error)
 		return nil
 	}

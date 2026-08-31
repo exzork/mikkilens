@@ -46,9 +46,27 @@ func New(settings config.Config, locale *i18n.Locale) *Controller {
 	return &Controller{settings: settings, locale: locale, llm: llm.New(settings, locale)}
 }
 
-// Endpoint is the configured vision provider.
+// Endpoint is the vision provider: whatever she configured, or the model
+// MikkiLens is already running if it can see.
+//
+// Falling back matters more here than anywhere else in the application.
+// Describing the screen is the feature that otherwise needs an account, a
+// payment card and an API key pasted into a settings page -- three things that
+// are hard to do without sight, for the one feature that exists purely because
+// she cannot see. If a downloaded model can do it, it should, without being
+// asked and without anything leaving the machine.
+//
+// Anything she configured explicitly still wins: a cloud model is better at
+// this, and choosing one is a choice worth respecting.
 func (c *Controller) Endpoint() llm.Endpoint {
 	vision := c.settings.Vision
+	if !vision.Configured() && llm.Bundled().Vision() {
+		return llm.Endpoint{
+			BaseURL: llm.Bundled().BaseURL(),
+			Model:   "local",
+			Timeout: time.Duration(vision.TimeoutS * float64(time.Second)),
+		}
+	}
 	return llm.Endpoint{
 		BaseURL: vision.Base,
 		Model:   vision.Model,

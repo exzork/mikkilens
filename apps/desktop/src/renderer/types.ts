@@ -125,14 +125,60 @@ export interface AppConfig {
   hotkey: { enabled: boolean; combination: string; push_to_talk: boolean }
   obs: { host: string; port: number; password: string; mic_source: string; [key: string]: unknown }
   vision: { base_url: string; model: string; api_key_env: string; [key: string]: unknown }
+  youtube: {
+    api_key_env: string
+    channel_id: string
+    video_id: string
+    [key: string]: unknown
+  }
   _languages?: string[]
   [key: string]: unknown
+}
+
+export interface MatcherModel {
+  name: string
+  file: string
+  bytes: number
+  vision: boolean
+  summary: string
+}
+
+export interface MatcherProgress {
+  stage: string
+  downloaded: number
+  total: number
+  percent: number
+  detail: string
+  bytes_per_second: number
+}
+
+export interface MatcherStatus {
+  enabled: boolean
+  models: MatcherModel[]
+  installed_model: string
+  runtime_installed: boolean
+  loading: boolean
+  ready: boolean
+  vision: boolean
+  vision_is_local: boolean
+  downloading: boolean
+  progress: MatcherProgress
+  external_base_url?: string
+  external_model?: string
 }
 
 export interface YouTubeStatus {
   enabled: boolean
   connected: boolean
+  /** "none" | "public" | "account" -- how much MikkiLens can currently do. */
+  access?: string
+  has_api_key?: boolean
+  channel_id?: string
+  video_id?: string
+  api_key_env?: string
   has_client_secret?: boolean
+  /** "file" | "none" -- whether data/client_secret.json holds an OAuth client. */
+  client_source?: string
   channel?: string
   quota_used?: number
   quota_percent?: number

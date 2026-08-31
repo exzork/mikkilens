@@ -70,6 +70,8 @@ func run(arguments []string) int {
 		return commandWarmup(*language)
 	case "enable-obs":
 		return commandEnableOBS(*language)
+	case "do":
+		return commandDo(rest.arguments)
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 		return 0
@@ -127,6 +129,9 @@ Commands:
   earcons             play every tone in turn
   warmup              load the models ahead of time
   enable-obs          turn on the OBS WebSocket server and copy its password
+  do <command>        run a command in the running MikkiLens, as if she had
+                      said it -- this is what a Stream Deck button runs
+  do --list           list the commands a button or a key can run
 
 Flags:
   -v                  log everything

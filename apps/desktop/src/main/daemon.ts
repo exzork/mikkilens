@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join } from 'node:path'
 import { app } from 'electron'
 
 /**
@@ -30,7 +30,15 @@ export class Daemon {
   private owned = false
   private detail = ''
 
-  constructor(readonly url: string) {}
+  /**
+   * @param url  where the engine's local API answers
+   * @param home the directory holding config.toml and data/, handed to the
+   *   engine so a packaged app and a hand-run engine cannot disagree about it
+   */
+  constructor(
+    readonly url: string,
+    readonly home: string,
+  ) {}
 
   /** Where the engine binary lives, packaged or in the repository. */
   static executablePath(): string | null {
@@ -78,7 +86,12 @@ export class Daemon {
 
     try {
       this.child = spawn(executable, ['run'], {
-        cwd: dirname(executable),
+        // The engine is started in her home directory, not next to the
+        // binary: packaged, that binary sits in an installation folder it
+        // cannot write to, and MIKKILENS_HOME is what stops it looking for
+        // config.toml there.
+        cwd: this.home,
+        env: { ...process.env, MIKKILENS_HOME: this.home },
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       })

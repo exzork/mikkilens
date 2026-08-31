@@ -28,6 +28,12 @@ output_device = ""    # Part of the device name, e.g. "Headphones". Empty uses
                       # the Windows default -- but see the warning below.
 earcon_volume = 0.25  # Volume of the short tones (listening, ok, error).
 confirm_timeout_s = 8.0
+lead_in_ms = 300      # Silence played before a sound when the speaker has been
+                      # quiet for a while. Bluetooth headphones switch the audio
+                      # link off when idle and take a moment to bring it back,
+                      # swallowing whatever was sent meanwhile -- which is how
+                      # you lose the first word of a sentence. Raise it if the
+                      # start still gets clipped; set 0 for wired speakers.
 
 # Note: if output_device is a device OBS captures (usually the Windows
 # default), your viewers will hear MikkiLens too. That is fine and expected.
@@ -55,6 +61,38 @@ cooldown_s = 2.0
 enabled = true
 combination = "<ctrl>+<alt>+<space>"  # A foot pedal or Stream Deck key works too.
 push_to_talk = true                   # false = press once to start, once to stop.
+
+# Keys that run one command, without a word being said.
+#
+# The hotkey above opens the microphone. These do not: each one runs its
+# command straight away, and says what happened. That is what a Stream Deck
+# key is for -- "go live" should be one press mid-sentence, not a sentence.
+#
+# Every device does this the same way, whatever the brand, because they all
+# send an ordinary key combination: an Elgato or Loupedeck key set to Hotkey,
+# a Logitech or Razer mouse macro, a foot pedal, a second keyboard, an
+# AutoHotkey script. Pick combinations nothing else uses -- <ctrl>+<alt> with
+# F13 to F24 is the safest, since those keys exist for exactly this and no
+# keyboard has them physically.
+#
+# A deck that cannot send keys can run a program instead:
+#     mikkilensd.exe do go_live
+# Run `mikkilensd do --list` for the names.
+#
+#   [[bindings]]
+#   combination = "<ctrl>+<alt>+<f13>"
+#   command = "go_live"
+#
+#   [[bindings]]
+#   combination = "<ctrl>+<alt>+<f14>"
+#   command = "stop_stream"
+#   # Ending the stream asks first, and the microphone opens by itself so you
+#   # can answer "ya" or "tidak" out loud. Add confirm = false to make the key
+#   # a single press -- reasonable on a key that cannot be hit by accident.
+#
+#   [[bindings]]
+#   combination = "<ctrl>+<alt>+<f15>"
+#   command = "chat_pause"
 
 [stt]
 backend = "auto"       # "auto" prefers a local whisper.cpp server, then its
@@ -104,6 +142,29 @@ transport = "auto"     # "auto" prefers the streaming endpoint, "poll" forces
 quota_budget = 10000
 quota_warn_percent = 80
 
+# There are two ways to reach YouTube, and you only need one.
+#
+# Signing in does everything, including changing the title by voice, but it
+# costs one browser consent screen that someone has to read to you, plus a
+# data/client_secret.json file.
+#
+# An API key does the readable half -- how many people are watching, what the
+# stream is called -- and is a single string you copy once from
+# console.cloud.google.com after enabling "YouTube Data API v3". No consent
+# screen, no JSON file. Paste it in the settings app, or set the environment
+# variable named below.
+api_key_env = "MIKKILENS_YOUTUBE_KEY"
+
+# With a key, MikkiLens needs to know which stream to look at. Paste either
+# your channel link or the link to the stream itself; both accept a full URL.
+#
+# The channel is searched for whatever is live, which costs a hundred quota
+# units a time, so the answer is reused for five minutes. Pinning video_id
+# skips the search entirely and costs one unit per check -- worth doing if you
+# stream from the same scheduled video.
+channel_id = ""        # e.g. "https://www.youtube.com/channel/UC..." or the UC... id
+video_id = ""          # e.g. "https://www.youtube.com/watch?v=..." or the id
+
 [chat]
 enabled = true
 autostart_reading = true
@@ -125,6 +186,31 @@ max_edge = 1568              # Screenshots are downscaled to this before sending
 timeout_s = 30.0
 monitors = "all"             # "all", "primary", or a monitor number.
 max_answer_chars = 700       # Keeps spoken answers from running on forever.
+
+[matcher]
+# A small local model that MikkiLens asks when your words do not match any
+# written phrase -- where it would otherwise just say "saya tidak tahu perintah
+# itu". Everything that already matches keeps working exactly as before and
+# stays instant; only the failures cost about a second.
+#
+# It is off until you point it at something. Unlike [llm] it never borrows the
+# [vision] provider, so switching it on can never start sending your speech to
+# a paid cloud API by accident.
+#
+# The easiest way is Ollama:
+#     ollama pull gemma3n:e2b
+# then set base_url = "http://localhost:11434/v1" and model = "gemma3n:e2b".
+# The bigger gemma3n:e4b understands more but takes longer -- worth trying if
+# e2b keeps missing, on a machine with room for it while OBS is encoding.
+enabled = true
+base_url = ""          # e.g. "http://localhost:11434/v1"
+model = ""             # e.g. "gemma3n:e2b"
+api_key_env = "MIKKILENS_MATCHER_KEY"   # not needed for a local model
+
+# The model is only ever allowed to pick a command that exists, and a command
+# marked confirm still asks before it acts -- so a wrong guess costs a question,
+# not a stopped stream. When it is unsure it is told to say so, and MikkiLens
+# then answers exactly as it did before.
 
 [llm]
 # Text model for "summarize my chat". Leave empty to reuse [vision].

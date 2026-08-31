@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, Menu, shell, Tray, nativeImage } from 'ele
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { Daemon } from './daemon.js'
+import { homeDirectory, logFile, seedHome } from './home.js'
+import { Updates } from './updates.js'
 import { availableLanguages, catalog, fallbackLanguage, translate, type Catalog } from './i18n.js'
 
 /**
@@ -14,7 +16,29 @@ import { availableLanguages, catalog, fallbackLanguage, translate, type Catalog 
  */
 
 const engineURL = process.env.MIKKILENS_API ?? 'http://127.0.0.1:8760'
-const daemon = new Daemon(engineURL)
+
+// A real name rather than the package one, so the settings and cache land in
+// a folder a person can find: %APPDATA%/MikkiLens. This has to happen before
+// anything asks for a path, which is why it is up here rather than with the
+// rest of the startup.
+app.setName('MikkiLens')
+
+const home = homeDirectory()
+seedHome(home)
+
+// Electron's own caches go under data/, with everything else MikkiLens
+// writes, rather than beside config.toml. The home directory is somewhere she
+// opens to edit her commands, and half a browser's worth of cache folders in
+// there makes the two files she actually wants much harder to find.
+app.setPath('userData', join(home, 'data', 'window'))
+
+const daemon = new Daemon(engineURL, home)
+const updates = new Updates(engineURL, daemon, (key, values) => t(key, values), () => {
+  // A waiting update changes both menus, so it can be reached from the tray
+  // without opening the window.
+  Menu.setApplicationMenu(buildMenu())
+  applyTrayMenu()
+})
 
 let window: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -26,10 +50,6 @@ let strings: Catalog = catalog(fallbackLanguage)
 
 const t = (key: string, values?: Record<string, string | number>): string =>
   translate(strings, key, values)
-
-// A real name rather than the package one, so the settings and cache land in
-// a folder a person can find: %APPDATA%/MikkiLens.
-app.setName('MikkiLens')
 
 /**
  * One window at a time, but never at the cost of no window at all.
@@ -83,6 +103,8 @@ async function main(): Promise<void> {
   createWindow()
   createTray()
   Menu.setApplicationMenu(buildMenu())
+
+  updates.start()
 
   const status = await daemon.ensureRunning()
   if (status.reachable) {
@@ -217,6 +239,12 @@ function applyTrayMenu(): void {
       { label: t('menu.listenNow'), click: listenNow },
       { type: 'separator' },
       {
+        label: updates.status().ready ? t('menu.installUpdate') : t('menu.noUpdate'),
+        enabled: updates.status().ready,
+        click: () => void updates.install(),
+      },
+      { type: 'separator' },
+      {
         label: t('menu.quit'),
         click: () => {
           quitting = true
@@ -264,9 +292,19 @@ function buildMenu(): Menu {
       label: t('menu.help'),
       submenu: [
         {
+          // Shown either way. "Up to date" is information; a menu that only
+          // grows an item when something is wrong makes her hunt for it.
+          label: updates.status().ready
+            ? t('menu.installUpdate')
+            : t('menu.noUpdate'),
+          enabled: updates.status().ready,
+          click: () => void updates.install(),
+        },
+        { type: 'separator' },
+        {
           label: t('menu.openLog'),
           click: () => {
-            void shell.openPath(join(process.cwd(), 'data', 'mikkilens.log'))
+            void shell.openPath(logFile())
           },
         },
       ],
@@ -282,6 +320,13 @@ ipcMain.handle('engine:status', async () => ({
   reachable: await daemon.reachable(),
   url: engineURL,
 }))
+
+ipcMain.handle('update:status', () => updates.status())
+
+ipcMain.handle('update:install', async () => {
+  await updates.install()
+  return updates.status()
+})
 
 ipcMain.handle('engine:restart', async () => {
   daemon.stop()
@@ -327,7 +372,7 @@ ipcMain.handle('open-external', async (_event, url: unknown) => {
 ipcMain.handle('read-log-tail', (_event, lines: unknown) => {
   const wanted = typeof lines === 'number' && lines > 0 ? Math.min(lines, 2000) : 200
   try {
-    const contents = readFileSync(join(process.cwd(), 'data', 'mikkilens.log'), 'utf8')
+    const contents = readFileSync(logFile(), 'utf8')
     return contents.split(/\r?\n/).slice(-wanted).join('\n')
   } catch (error) {
     return `Could not read the log: ${String(error)}`
@@ -346,6 +391,7 @@ ipcMain.handle('login-item', (_event, enabled: unknown) => {
 
 app.on('before-quit', () => {
   quitting = true
+  updates.stop()
   daemon.stop()
 })
 

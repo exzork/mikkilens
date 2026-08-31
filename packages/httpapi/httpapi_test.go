@@ -22,6 +22,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/tts"
 	"github.com/exzork/mikkilens/packages/audio/wake"
 	"github.com/exzork/mikkilens/packages/chat"
+	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/controllers/obs"
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -50,6 +51,13 @@ type stubEngine struct {
 	adopted []*intent.Set
 	reloads int
 	listens int
+	ran     []ranCommand
+}
+
+// ranCommand records a command a button or a key asked for.
+type ranCommand struct {
+	id      string
+	confirm bool
 }
 
 type silentPlayer struct{}
@@ -118,19 +126,24 @@ func (e *stubEngine) AdoptCommands(set *intent.Set) {
 	e.commands = set
 	e.adopted = append(e.adopted, set)
 }
-func (e *stubEngine) ReloadCommands()                    { e.reloads++ }
-func (e *stubEngine) Router() *intent.Router             { return e.router }
-func (e *stubEngine) Transcriber() *stt.Transcriber      { return stt.New(e.settings.STT, "id") }
-func (e *stubEngine) Wake() *wake.Detector               { return nil }
-func (e *stubEngine) Hotkey() hotkey.Watcher             { return nil }
-func (e *stubEngine) Microphone() *capture.Stream        { return nil }
-func (e *stubEngine) OBS() *obs.Controller               { return nil }
-func (e *stubEngine) YouTube() *youtube.Controller       { return nil }
-func (e *stubEngine) ChatIngest() *chat.Ingest           { return nil }
-func (e *stubEngine) ChatReader() *chat.Reader           { return nil }
-func (e *stubEngine) BeginListening()                    { e.listens++ }
+func (e *stubEngine) ReloadCommands()               { e.reloads++ }
+func (e *stubEngine) Router() *intent.Router        { return e.router }
+func (e *stubEngine) Transcriber() *stt.Transcriber { return stt.New(e.settings.STT, "id") }
+func (e *stubEngine) Wake() *wake.Detector          { return nil }
+func (e *stubEngine) Hotkey() hotkey.Watcher        { return nil }
+func (e *stubEngine) Microphone() *capture.Stream   { return nil }
+func (e *stubEngine) OBS() *obs.Controller          { return nil }
+func (e *stubEngine) YouTube() *youtube.Controller  { return nil }
+func (e *stubEngine) ChatIngest() *chat.Ingest      { return nil }
+func (e *stubEngine) ChatReader() *chat.Reader      { return nil }
+func (e *stubEngine) BeginListening()               { e.listens++ }
+func (e *stubEngine) RunCommand(id string, confirm bool) {
+	e.ran = append(e.ran, ranCommand{id: id, confirm: confirm})
+}
 func (e *stubEngine) OnYouTubeConnected(context.Context) {}
 func (e *stubEngine) OnYouTubeDisconnected()             {}
+func (e *stubEngine) RefreshYouTube(context.Context)     {}
+func (e *stubEngine) OnMatcherProgress(llm.Progress)     {}
 
 // client wires a stub engine to a running test server, with every write
 // contained in a temporary directory.
@@ -368,6 +381,65 @@ func TestListenTriggersTheEngine(t *testing.T) {
 	}
 }
 
+// -- running a command from a button ------------------------------------------
+
+// A Stream Deck key, a mouse macro and a phone on the desk all arrive at this
+// endpoint. It has to reach the same command the voice would, keep the
+// confirmation gate unless the caller waives it, and refuse a name that does
+// not exist rather than quietly doing nothing.
+
+func TestACommandCanBeRunWithoutSpeaking(t *testing.T) {
+	server, engine, _ := client(t)
+
+	status, _ := send(t, server, http.MethodPost, "/api/command",
+		map[string]any{"command": "go_live"})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if len(engine.ran) != 1 {
+		t.Fatalf("ran = %v, want one command", engine.ran)
+	}
+	if engine.ran[0].id != "go_live" {
+		t.Errorf("ran %q, want go_live", engine.ran[0].id)
+	}
+	if !engine.ran[0].confirm {
+		t.Error("a command must keep its own confirmation unless the caller waives it")
+	}
+}
+
+func TestAButtonCanWaiveTheConfirmation(t *testing.T) {
+	server, engine, _ := client(t)
+
+	send(t, server, http.MethodPost, "/api/command",
+		map[string]any{"command": "stop_stream", "confirm": false})
+	if len(engine.ran) != 1 || engine.ran[0].confirm {
+		t.Fatalf("ran = %v, want stop_stream without confirmation", engine.ran)
+	}
+}
+
+func TestAnUnknownCommandIsRefused(t *testing.T) {
+	server, engine, _ := client(t)
+
+	status, _ := send(t, server, http.MethodPost, "/api/command",
+		map[string]any{"command": "make_coffee"})
+	if status != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", status)
+	}
+	if len(engine.ran) != 0 {
+		t.Errorf("ran = %v, want nothing", engine.ran)
+	}
+}
+
+func TestACommandNeedsAName(t *testing.T) {
+	server, _, _ := client(t)
+
+	status, _ := send(t, server, http.MethodPost, "/api/command",
+		map[string]any{"command": "   "})
+	if status != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", status)
+	}
+}
+
 // -- validation ---------------------------------------------------------------
 
 func TestACommandsFileWithNothingUsableIsRejected(t *testing.T) {
@@ -549,5 +621,51 @@ func TestStartupReportsItsState(t *testing.T) {
 	server, _, _ := client(t)
 	if _, ok := get(t, server, "/api/startup")["enabled"].(bool); !ok {
 		t.Error("startup should report a boolean")
+	}
+}
+
+// -- stream control -----------------------------------------------------------
+
+// Ending a stream is not undoable, so the endpoint says which state it wants
+// rather than toggling. A toggle acts on state the caller cannot see, which is
+// how a live stream gets ended by accident.
+func TestStoppingAStreamWithNoOBSSaysSoRatherThanSucceeding(t *testing.T) {
+	server, _, _ := client(t)
+
+	status, payload := send(t, server, http.MethodPost, "/api/obs/stream",
+		map[string]any{"active": false})
+
+	if status == http.StatusOK {
+		t.Fatal("a stream cannot be stopped while OBS is disconnected; " +
+			"reporting success would leave her believing it stopped")
+	}
+	if status != http.StatusServiceUnavailable {
+		t.Errorf("status is %d, want %d", status, http.StatusServiceUnavailable)
+	}
+	if payload["detail"] == nil {
+		t.Error("the refusal must say why")
+	}
+}
+
+func TestStartingAStreamWithNoOBSSaysSoRatherThanSucceeding(t *testing.T) {
+	server, _, _ := client(t)
+
+	status, _ := send(t, server, http.MethodPost, "/api/obs/stream",
+		map[string]any{"active": true})
+
+	if status != http.StatusServiceUnavailable {
+		t.Errorf("status is %d, want %d", status, http.StatusServiceUnavailable)
+	}
+}
+
+// Starting or stopping a broadcast must not be reachable by anything that
+// merely follows a link.
+func TestStreamControlRejectsAGetRequest(t *testing.T) {
+	server, _, _ := client(t)
+
+	status, _ := send(t, server, http.MethodGet, "/api/obs/stream", nil)
+
+	if status != http.StatusMethodNotAllowed {
+		t.Errorf("status is %d, want %d", status, http.StatusMethodNotAllowed)
 	}
 }

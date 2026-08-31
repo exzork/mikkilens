@@ -14,6 +14,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/devices"
 	"github.com/exzork/mikkilens/packages/audio/feedback"
 	"github.com/exzork/mikkilens/packages/audio/tts"
+	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/controllers/vision"
 	"github.com/exzork/mikkilens/packages/core/config"
 	"github.com/exzork/mikkilens/packages/core/i18n"
@@ -57,14 +58,134 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/commands/reload", only(http.MethodPost, s.reloadCommands))
 
 	mux.HandleFunc("/api/test/obs", only(http.MethodPost, s.testOBS))
+	mux.HandleFunc("/api/obs/stream", only(http.MethodPost, s.setStreaming))
 	mux.HandleFunc("/api/test/vision", only(http.MethodPost, s.testVision))
 
 	mux.HandleFunc("/api/youtube/status", only(http.MethodGet, s.youtubeStatus))
 	mux.HandleFunc("/api/youtube/connect", only(http.MethodPost, s.youtubeConnect))
 	mux.HandleFunc("/api/youtube/disconnect", only(http.MethodPost, s.youtubeDisconnect))
 
+	mux.HandleFunc("/api/matcher/status", only(http.MethodGet, s.matcherStatus))
+	mux.HandleFunc("/api/matcher/download", only(http.MethodPost, s.matcherDownload))
+	mux.HandleFunc("/api/matcher/cancel", only(http.MethodPost, s.matcherCancel))
+
 	mux.HandleFunc("/api/startup", s.handleStartup)
 	mux.HandleFunc("/api/listen", only(http.MethodPost, s.triggerListen))
+	mux.HandleFunc("/api/command", only(http.MethodPost, s.runCommand))
+}
+
+// setStreaming starts or stops the broadcast in OBS.
+//
+// The same thing is voice-operable ("mulai siaran", "hentikan siaran"), and
+// voice is the point of this application -- but the settings page is where
+// someone helping her works, and asking them to speak a command into her
+// microphone to end a stream is worse than a button.
+//
+// Stopping is deliberately not a toggle. A single "streaming" switch that
+// means start or stop depending on state it cannot see is exactly how a stream
+// gets ended by accident, so the caller says which one it wants.
+func (s *Server) setStreaming(writer http.ResponseWriter, request *http.Request) {
+	var body struct {
+		Active bool `json:"active"`
+	}
+	if !decode(writer, request, &body) {
+		return
+	}
+
+	controller := s.engine.OBS()
+	if controller == nil || !controller.Connected() {
+		fail(writer, http.StatusServiceUnavailable, "OBS is not connected")
+		return
+	}
+
+	live, err := controller.IsStreaming()
+	if err != nil {
+		fail(writer, http.StatusBadGateway, err.Error())
+		return
+	}
+	if live == body.Active {
+		// Already in the asked-for state. Reported as success with a note
+		// rather than an error: nothing is wrong, there is just nothing to do.
+		respond(writer, http.StatusOK, map[string]any{
+			"ok": true, "streaming": live, "unchanged": true,
+		})
+		return
+	}
+
+	if body.Active {
+		err = controller.StartStream()
+	} else {
+		err = controller.StopStream()
+	}
+	if err != nil {
+		fail(writer, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	respond(writer, http.StatusOK, map[string]any{
+		"ok": true, "streaming": body.Active, "unchanged": false,
+	})
+}
+
+// -- the command matcher ------------------------------------------------------
+
+// installer is shared, so a download survives the settings page being closed
+// and reopened, and two pages cannot start the same one twice.
+var installer = llm.NewInstaller()
+
+func (s *Server) matcherStatus(writer http.ResponseWriter, _ *http.Request) {
+	settings := s.engine.Config()
+	progress := installer.Progress()
+
+	base, model, _ := settings.MatcherEndpoint()
+	respond(writer, http.StatusOK, map[string]any{
+		"enabled":           settings.Matcher.Enabled,
+		"models":            llm.MarshalModels(),
+		"installed_model":   llm.InstalledModel(),
+		"runtime_installed": llm.RuntimeInstalled(),
+		"loading":           llm.Bundled().Loading(),
+		"ready":             llm.Bundled().BaseURL() != "",
+		// Whether the running model can also describe the screen, and whether
+		// vision is currently falling back to it.
+		"vision":          llm.Bundled().Vision(),
+		"vision_is_local": !settings.Vision.Configured() && llm.Bundled().Vision(),
+		"downloading":     installer.Running(),
+		"progress":        progress,
+		// A base URL she set herself takes precedence over the bundled model,
+		// and the page should say so rather than showing both as active.
+		"external_base_url": base,
+		"external_model":    model,
+	})
+}
+
+// matcherDownload starts fetching a model. It answers at once: the download is
+// gigabytes and nothing should be waiting on it.
+func (s *Server) matcherDownload(writer http.ResponseWriter, request *http.Request) {
+	var body struct {
+		Model string `json:"model"`
+	}
+	if !decode(writer, request, &body) {
+		return
+	}
+
+	model, ok := llm.ModelByName(body.Model)
+	if !ok {
+		fail(writer, http.StatusBadRequest, "no such model: "+body.Model)
+		return
+	}
+
+	if err := installer.Install(model, s.engine.OnMatcherProgress); err != nil {
+		fail(writer, http.StatusConflict, err.Error())
+		return
+	}
+	respond(writer, http.StatusOK, map[string]any{
+		"ok": true, "model": model.Name, "bytes": model.Bytes,
+	})
+}
+
+func (s *Server) matcherCancel(writer http.ResponseWriter, _ *http.Request) {
+	installer.Cancel()
+	respond(writer, http.StatusOK, map[string]any{"ok": true})
 }
 
 // -- state --------------------------------------------------------------------
@@ -308,6 +429,12 @@ func (s *Server) putSecret(writer http.ResponseWriter, request *http.Request) {
 		fail(writer, http.StatusBadRequest, "a secret needs a name")
 		return
 	}
+	// The YouTube key is the one secret that changes what MikkiLens can do the
+	// moment it is saved, so it takes effect now rather than at the next start.
+	if body.Name != "" && body.Name == s.engine.Config().YouTube.APIKeyEnv {
+		defer func() { go s.engine.RefreshYouTube(context.Background()) }()
+	}
+
 	if err := config.StoreSecret(body.Name, body.Value); err != nil {
 		fail(writer, http.StatusInternalServerError, err.Error())
 		return
@@ -473,15 +600,28 @@ func (s *Server) youtubeStatus(writer http.ResponseWriter, _ *http.Request) {
 	if ingest := s.engine.ChatIngest(); ingest != nil {
 		transport = ingest.TransportInUse()
 	}
+	settings := s.engine.Config().YouTube
 	respond(writer, http.StatusOK, map[string]any{
-		"enabled":           true,
+		"enabled": true,
+		// "connected" keeps meaning what it always meant -- signed in -- so
+		// nothing that already reads it starts reporting a key as a full
+		// account. "access" is the finer answer.
 		"connected":         controller.Authenticated(),
+		"access":            string(controller.Access()),
+		"has_api_key":       s.engine.Config().YouTubeAPIKey() != "",
+		"channel_id":        settings.ChannelID,
+		"video_id":          settings.VideoID,
+		"api_key_env":       settings.APIKeyEnv,
 		"has_client_secret": youtubeHasClientSecret(),
-		"channel":           controller.ChannelTitle(),
-		"quota_used":        controller.Quota.Used(),
-		"quota_budget":      controller.Quota.Budget(),
-		"quota_percent":     controller.Quota.Percent(),
-		"chat_transport":    transport,
+		// "file" means data/client_secret.json holds an OAuth client and the
+		// sign-in button will work; "none" means signing in is not on offer,
+		// and an API key is the way in.
+		"client_source":  youtubeClientSource(),
+		"channel":        controller.ChannelTitle(),
+		"quota_used":     controller.Quota.Used(),
+		"quota_budget":   controller.Quota.Budget(),
+		"quota_percent":  controller.Quota.Percent(),
+		"chat_transport": transport,
 	})
 }
 
@@ -548,6 +688,48 @@ func (s *Server) handleStartup(writer http.ResponseWriter, request *http.Request
 }
 
 // -- actions ------------------------------------------------------------------
+
+// runCommand runs one command by id, exactly as speaking it would.
+//
+// This is the endpoint for everything that is not a voice and not a key: a
+// Stream Deck action that opens a URL, a companion app, a phone on the same
+// network with `[ui] lan_access` on, or `mikkilensd do` from a shortcut.
+//
+// It answers as soon as the command has been started, not when it has
+// finished. What happened is reported the way everything else is -- out loud --
+// because the caller is a button on a desk, and nobody is watching for an HTTP
+// status code.
+func (s *Server) runCommand(writer http.ResponseWriter, request *http.Request) {
+	var body struct {
+		Command string `json:"command"`
+		// Confirm is optional: absent leaves the command's own gate alone, so
+		// a stop-the-stream button still asks unless it says not to.
+		Confirm *bool `json:"confirm"`
+	}
+	if !decode(writer, request, &body) {
+		return
+	}
+
+	id := strings.TrimSpace(body.Command)
+	if id == "" {
+		fail(writer, http.StatusBadRequest, "a command needs a name")
+		return
+	}
+	// Checked here rather than left to the engine so a mistyped binding fails
+	// where whoever is setting it up can see it, instead of only being spoken
+	// into an empty room.
+	if _, known := s.engine.Commands().Commands[id]; !known {
+		fail(writer, http.StatusNotFound, "there is no command called "+id)
+		return
+	}
+
+	confirm := true
+	if body.Confirm != nil {
+		confirm = *body.Confirm
+	}
+	s.engine.RunCommand(id, confirm)
+	respond(writer, http.StatusOK, map[string]any{"ok": true, "command": id, "confirm": confirm})
+}
 
 func (s *Server) triggerListen(writer http.ResponseWriter, _ *http.Request) {
 	s.engine.BeginListening()

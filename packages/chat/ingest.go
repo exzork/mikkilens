@@ -15,6 +15,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -24,6 +25,15 @@ import (
 
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
 )
+
+// chatRecheckInterval is how long to wait before looking again at a broadcast
+// that has no chat. Long enough that nothing is hammered, short enough that
+// turning chat on is noticed within a few minutes.
+const chatRecheckInterval = 2 * time.Minute
+
+// rateLimitBackoff is how long to wait when Google says we are asking too
+// fast. Long enough to actually clear the burst that caused it.
+const rateLimitBackoff = 30 * time.Second
 
 // maxBuffer caps the backlog. A stream busy enough to overflow it has bigger
 // problems than a lost message from two thousand messages ago.
@@ -129,7 +139,11 @@ func ParseMessage(item *yt.LiveChatMessage) (Message, bool) {
 // Transport is one way of getting messages out of YouTube.
 type Transport interface {
 	Name() string
-	Run(ctx context.Context, liveChatID string, deliver func([]Message)) error
+	// Run delivers messages until it fails or the context ends. It calls
+	// ready the first time it is genuinely receiving -- not when it starts
+	// trying -- so that "chat is connected" is never announced about a
+	// connection that is one moment away from failing.
+	Run(ctx context.Context, liveChatID string, deliver func([]Message), ready func()) error
 }
 
 // IngestOptions configure ingestion.
@@ -139,6 +153,11 @@ type IngestOptions struct {
 	OnMessage      func(Message)
 	OnStatus       func(state, detail string)
 	OnQuotaWarning func(percent int)
+
+	// ReadCursor remembers what has already been read aloud, across restarts.
+	// Nil means no memory, which is what a test wants: persistence is a
+	// property of the running application, not of ingestion itself.
+	ReadCursor *ReadCursor
 }
 
 // Ingest holds the connection and the backlog. It never stops on its own.
@@ -152,9 +171,24 @@ type Ingest struct {
 	transportInUse string
 	lastError      string
 
+	// What was already read aloud, remembered across restarts. Filtering here
+	// rather than in the reader means an already-heard message never counts
+	// towards the backlog either -- "you are 40 messages behind" has to mean
+	// forty she has not heard.
+	//
+	// Set once at construction and never reassigned, so it is read without the
+	// mutex; the cursor does its own locking.
+	read *ReadCursor
+
 	running bool
 	cancel  context.CancelFunc
 	done    chan struct{}
+
+	// recheck wakes the loop out of a wait. Clearing a cache is not enough on
+	// its own: after being told this broadcast has no chat, the loop is asleep
+	// for minutes, and going live again should be noticed at once rather than
+	// whenever it happens to look next.
+	recheck chan struct{}
 }
 
 // NewIngest prepares ingestion. Nothing connects until Start.
@@ -163,6 +197,10 @@ func NewIngest(controller *youtube.Controller, options IngestOptions) *Ingest {
 		youtube: controller,
 		options: options,
 		seen:    map[string]bool{},
+		read:    options.ReadCursor,
+		// Buffered by one: a nudge that arrives while the loop is working is
+		// remembered rather than dropped, and a nudge never blocks its caller.
+		recheck: make(chan struct{}, 1),
 	}
 }
 
@@ -196,6 +234,44 @@ func (i *Ingest) Stop() {
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
+	}
+}
+
+// Recheck asks the loop to look again now, instead of finishing its wait.
+//
+// Called when something has happened that plausibly changes the answer --
+// going live, ending a stream -- so that "she started a stream with chat
+// switched on" is noticed in seconds rather than minutes.
+func (i *Ingest) Recheck() {
+	i.mu.RLock()
+	wake := i.recheck
+	i.mu.RUnlock()
+	if wake == nil {
+		return
+	}
+	select {
+	case wake <- struct{}{}:
+	default: // already pending, and one is enough
+	}
+}
+
+// waitOrRecheck sleeps, unless it is woken or the context ends. It reports
+// whether the caller should stop.
+func (i *Ingest) waitOrRecheck(ctx context.Context, delay time.Duration) bool {
+	i.mu.RLock()
+	wake := i.recheck
+	i.mu.RUnlock()
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return true
+	case <-wake:
+		return false
+	case <-timer.C:
+		return false
 	}
 }
 
@@ -245,11 +321,17 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 		if err != nil {
 			i.note(err.Error())
 			i.status("waiting", err.Error())
-			if sleep(ctx, 15*time.Second) {
+			// Waiting for a broadcast to exist at all: going live is exactly
+			// the event that ends this wait.
+			if i.waitOrRecheck(ctx, 15*time.Second) {
 				return
 			}
 			continue
 		}
+
+		i.read.Adopt(liveChatID)
+
+		unavailable := false
 
 		for index, transport := range candidates {
 			if ctx.Err() != nil {
@@ -259,9 +341,11 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 			i.mu.Lock()
 			i.transportInUse = transport.Name()
 			i.mu.Unlock()
-			i.status("connected", transport.Name())
 
-			err := transport.Run(ctx, liveChatID, i.accept)
+			name := transport.Name()
+			err := transport.Run(ctx, liveChatID, i.accept, func() {
+				i.status("connected", name)
+			})
 			if ctx.Err() != nil {
 				return
 			}
@@ -279,6 +363,36 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 				break
 			}
 
+			// Being asked to slow down is answered by slowing down, not by
+			// giving up and not by carrying straight on to the next transport
+			// -- which would be asking the same server faster.
+			var limited *youtube.RateLimitedError
+			if errors.As(err, &limited) {
+				slog.Info("YouTube asked us to slow down", "reason", err)
+				if sleep(ctx, rateLimitBackoff) {
+					return
+				}
+				break
+			}
+
+			// Chat being switched off, or the stream having ended, will not
+			// start working by asking again. Falling through to the poller
+			// only asks the same question a second way and gets the same
+			// answer, so stop here and wait for a different broadcast.
+			var missing *youtube.ChatUnavailableError
+			if errors.As(err, &missing) {
+				slog.Info("this broadcast has no live chat to read", "reason", err)
+				// Forget the broadcast before waiting. Otherwise the re-check
+				// asks about the same cached broadcast, gets the same answer,
+				// and switching chat on is never noticed -- nor is ending the
+				// stream and starting a new one, which is what actually gives
+				// a broadcast a live chat.
+				i.youtube.InvalidateBroadcast()
+				i.status("unavailable", err.Error())
+				unavailable = true
+				break
+			}
+
 			slog.Warn("chat transport failed", "transport", transport.Name(), "error", err)
 			if index+1 < len(candidates) {
 				slog.Info("falling back", "transport", candidates[index+1].Name())
@@ -290,8 +404,19 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 			}
 			delay = min(60*time.Second, delay*2)
 		}
+
+		// Re-checked slowly rather than abandoned: she may enable chat, or
+		// start a stream that has it, and MikkiLens should pick that up
+		// without being restarted.
+		if unavailable && i.waitOrRecheck(ctx, chatRecheckInterval) {
+			return
+		}
 	}
 }
+
+// ReadCursorFor exposes the saved position, so the reader can record what it
+// has spoken. It is fixed at construction, so it needs no lock.
+func (i *Ingest) ReadCursorFor() *ReadCursor { return i.read }
 
 // Accept adds messages, dropping the ones already seen. It is exported so
 // tests can deliver messages without a network.
@@ -307,6 +432,11 @@ func (i *Ingest) accept(messages []Message) {
 				continue
 			}
 			i.seen[message.ID] = true
+		}
+		// Reconnecting hands back recent history, so this is the ordinary
+		// path after a restart, not an unusual one.
+		if i.read.AlreadyRead(message) {
+			continue
 		}
 		i.messages = append(i.messages, message)
 		fresh = append(fresh, message)

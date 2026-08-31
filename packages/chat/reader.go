@@ -367,7 +367,13 @@ func (r *Reader) run(stop <-chan struct{}, done chan struct{}) {
 
 		spoken := make(chan struct{})
 		var once sync.Once
-		r.bus.SayChat(r.Render(message), message.IsSuperchat, func(bool) {
+		r.bus.SayChat(r.Render(message), message.IsSuperchat, func(completed bool) {
+			// Recorded only once it has actually been heard. An interrupted
+			// message is re-read rather than lost, so marking it read when it
+			// was merely queued would drop it if MikkiLens closed in between.
+			if completed {
+				r.ingest.ReadCursorFor().Record(message)
+			}
 			once.Do(func() { close(spoken) })
 		})
 

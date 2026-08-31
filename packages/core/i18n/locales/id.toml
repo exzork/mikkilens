@@ -72,6 +72,7 @@ superchat = "Super chat dari {author}, {amount}. {text}"
 member = "{author} baru saja menjadi member."
 connected = "Chat YouTube tersambung."
 disconnected = "Chat YouTube terputus. Mencoba menyambung lagi."
+unavailable = "Siaran ini tidak mengaktifkan live chat, jadi tidak ada yang bisa dibacakan. Saya akan terus memeriksa."
 summarizing = "Sedang merangkum chat."
 summary = "Ringkasan chat: {text}"
 quota_warning = "Kuota YouTube sudah terpakai {percent} persen. Pembacaan chat diperlambat."
@@ -83,10 +84,18 @@ no_provider = "Model penglihatan belum diatur. Buka halaman pengaturan dulu."
 
 [youtube]
 connected = "YouTube tersambung sebagai {channel}."
+connected_public = "YouTube tersambung pakai kunci API. Saya bisa membaca jumlah penonton dan judulnya, tapi mengganti judul harus masuk ke akun dulu."
+needs_sign_in = "Itu harus masuk ke akun YouTube dulu. Jumlah penonton dan judul tetap bisa dengan kuncinya saja."
 not_connected = "YouTube belum tersambung. Buka halaman pengaturan dulu."
+sign_in_expired = "Izin YouTube-nya sudah kedaluwarsa. Buka aplikasi pengaturan, lalu hubungkan YouTube lagi."
 no_broadcast = "Tidak ada siaran yang sedang aktif."
 title_changed = "Judul diganti menjadi {text}."
 title_is = "Judul sekarang: {text}"
+
+[matcher]
+downloading = "Mengunduh model bahasa, {percent} persen."
+downloaded = "Model bahasanya sudah siap. Sekarang saya lebih mengerti perintahmu."
+download_failed = "Model bahasanya gagal diunduh: {reason}"
 
 [commands]
 reloaded = "Perintah dimuat ulang. Ada {count} perintah."

@@ -19,7 +19,7 @@ ENGINE  := $(DIST)/mikkilensd.exe
 # traces stay readable.
 LDFLAGS := -ldflags "-extldflags=-Wl,--strip-debug"
 
-.PHONY: all engine desktop install test test-go test-desktop lint fmt run setup devices selftest clean
+.PHONY: all engine desktop app install test test-go test-desktop lint fmt run setup devices selftest clean
 
 all: engine desktop
 
@@ -30,6 +30,10 @@ engine:
 ## desktop: build the settings app
 desktop:
 	$(NPM) run build:desktop
+
+## app: the one-click executable, engine and window in one file
+app: engine
+	$(NPM) run package
 
 ## install: fetch every dependency
 install:
