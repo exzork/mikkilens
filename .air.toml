@@ -1,0 +1,54 @@
+# Hot reload for the engine, used by `npm run dev`.
+#
+# The engine is rebuilt to dist/mikkilensd-dev.exe rather than to the real
+# mikkilensd.exe, and that name is load-bearing in two places. The desktop app
+# looks for mikkilensd.exe when it starts an engine of its own, so a dev build
+# can never be picked up by a packaged window by accident; and the dev script
+# cleans up after itself by image name, so it kills the engine air was running
+# without touching one you started yourself in another terminal.
+
+root = "."
+tmp_dir = "dist/.air"
+
+[build]
+# The link flags are not an optimisation and cannot be dropped for a dev
+# build. Without them the external linker leaves a binary Windows refuses to
+# load at all -- "not a valid application for this OS platform" -- which looks
+# like air being broken rather than like a missing flag. They match the release
+# build in the Makefile for exactly this reason.
+cmd = 'go build -ldflags "-extldflags=-Wl,--strip-debug" -o ./dist/mikkilensd-dev.exe ./apps/daemon'
+entrypoint = "dist/mikkilensd-dev.exe"
+args_bin = ["run"]
+
+# Only the Go side. The window has its own watcher, and pointing both at the
+# same tree would rebuild the engine every time a stylesheet changed.
+include_dir = ["apps/daemon", "packages"]
+
+# The spoken sentences are compiled in with go:embed, so editing a locale is a
+# rebuild like any other source change. Without "toml" here, a reworded prompt
+# would appear to do nothing at all.
+include_ext = ["go", "toml"]
+
+exclude_dir = ["dist", "data", "node_modules", ".git", ".codegraph"]
+exclude_regex = ["_test\\.go$"]
+
+# Long enough that saving several files at once is one rebuild rather than
+# four, short enough not to feel like waiting.
+delay = 400
+
+# The engine holds the microphone, a global hotkey and port 8760. Giving it a
+# moment to let go of all three is what stops the next build starting against
+# a port that is still bound.
+kill_delay = "3s"
+
+# A build that failed leaves the last working engine running, rather than
+# taking the voice control away over a typo.
+stop_on_error = true
+
+[log]
+# Air's own lines as well as the engine's. Which file triggered a rebuild, and
+# what a failed build said, are the two things you are actually watching for.
+main_only = false
+
+[misc]
+clean_on_exit = false

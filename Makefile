@@ -19,7 +19,13 @@ ENGINE  := $(DIST)/mikkilensd.exe
 # traces stay readable.
 LDFLAGS := -ldflags "-extldflags=-Wl,--strip-debug"
 
-.PHONY: all engine desktop app install test test-go test-desktop lint fmt run setup devices selftest clean
+# The wake word is trained in Python, and only in Python. Nothing in apps/ or
+# packages/ imports any of it; what crosses back over is one 850 KB .onnx file,
+# already committed. uv builds the environment on demand rather than there being
+# one to keep in sync -- this runs perhaps twice a year.
+WAKEWORD := uv run --python 3.11 --with-requirements $(CURDIR)/tools/wakeword/requirements.txt python
+
+.PHONY: all engine desktop app install stt wake dev test test-go test-desktop lint fmt run setup devices selftest wakeword clean
 
 all: engine desktop
 
@@ -32,13 +38,28 @@ desktop:
 	$(NPM) run build:desktop
 
 ## app: the one-click executable, engine and window in one file
-app: engine
+app: engine wake
 	$(NPM) run package
 
 ## install: fetch every dependency
 install:
 	$(GO) mod download
 	$(NPM) install
+
+## stt: fetch the GPU whisper.cpp build and the speech model
+stt:
+	node scripts/fetch-whisper.mjs $(ARGS)
+
+## wake: fetch the ONNX runtime and shared models the installer carries
+#
+# Unlike the speech models, these are small and go inside the installer, so a
+# fresh machine has a working wake word before it has ever been online.
+wake:
+	node scripts/fetch-wake.mjs $(ARGS)
+
+## dev: watch both halves -- air rebuilds the engine, the window reloads itself
+dev:
+	$(NPM) run dev
 
 ## test: everything
 test: test-go test-desktop
@@ -72,6 +93,19 @@ devices: engine
 ## selftest: check every part and read the result aloud
 selftest: engine
 	./$(ENGINE) selftest
+
+## wakeword: retrain the wake word -- about two hours, most of it downloading
+#
+# You do not need this to build MikkiLens. The trained model is committed and
+# ships inside the executable; this rebuilds it, and is what you run to change
+# the wake word to something else. tools/wakeword/README.md says how.
+wakeword:
+	cd tools/wakeword && $(WAKEWORD) fetch.py
+	cd tools/wakeword && $(WAKEWORD) speak.py
+	cd tools/wakeword && $(WAKEWORD) alignment_test.py
+	cd tools/wakeword && $(WAKEWORD) features.py
+	cd tools/wakeword && $(WAKEWORD) train.py --install
+	cd tools/wakeword && $(WAKEWORD) verify.py
 
 clean:
 	rm -rf $(DIST) apps/desktop/out

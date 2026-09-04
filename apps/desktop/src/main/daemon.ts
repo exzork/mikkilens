@@ -34,10 +34,16 @@ export class Daemon {
    * @param url  where the engine's local API answers
    * @param home the directory holding config.toml and data/, handed to the
    *   engine so a packaged app and a hand-run engine cannot disagree about it
+   * @param attachOnly never start an engine, only attach to one. This is what
+   *   dev mode is: air owns the engine there and rebuilds it on every Go
+   *   change, and a second one spawned from here would fight it for the
+   *   microphone, the global hotkey and the port -- while looking, from the
+   *   window, exactly like everything working.
    */
   constructor(
     readonly url: string,
     readonly home: string,
+    readonly attachOnly = false,
   ) {}
 
   /** Where the engine binary lives, packaged or in the repository. */
@@ -75,6 +81,13 @@ export class Daemon {
     if (await this.reachable()) {
       this.detail = 'attached to the engine already running'
       return this.status(true)
+    }
+
+    if (this.attachOnly) {
+      this.detail =
+        'the engine is not answering. In dev it is run by air: check the [go] ' +
+        'output, or save a Go file to build it again.'
+      return this.status(false)
     }
 
     const executable = Daemon.executablePath()

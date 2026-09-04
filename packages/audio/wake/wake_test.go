@@ -47,8 +47,11 @@ func shared(t *testing.T) *wake.Detector {
 			}
 		}
 
+		// The wake word that ships, at the threshold that ships. Testing
+		// against a downloaded model would leave the one she actually gets
+		// unexercised.
 		built := wake.New(wake.Options{
-			Model: "hey_jarvis", Threshold: 0.6,
+			Model: wake.Builtin, Threshold: 0.8,
 			OnDetected: func(string, float64) {
 				firedMu.Lock()
 				fired++

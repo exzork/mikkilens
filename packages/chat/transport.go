@@ -27,10 +27,15 @@ type streamTransport struct {
 func (s *streamTransport) Name() string { return "stream" }
 
 func (s *streamTransport) Run(
-	ctx context.Context, liveChatID string, deliver func([]Message), ready func(),
+	ctx context.Context, target Target, deliver func([]Message), ready func(),
 ) error {
+	if target.LiveChatID == "" {
+		return &youtube.NotAuthenticatedError{Reason: "streaming chat needs a live chat id, " +
+			"which needs an API key or a sign-in"}
+	}
+
 	query := url.Values{}
-	query.Set("liveChatId", liveChatID)
+	query.Set("liveChatId", target.LiveChatID)
 	query.Set("part", "id,snippet,authorDetails")
 
 	client := &http.Client{Timeout: 0} // a streaming response has no deadline
@@ -227,12 +232,17 @@ const MinPollInterval = 5 * time.Second
 func (p *pollingTransport) Name() string { return "poll" }
 
 func (p *pollingTransport) Run(
-	ctx context.Context, liveChatID string, deliver func([]Message), ready func(),
+	ctx context.Context, target Target, deliver func([]Message), ready func(),
 ) error {
+	if target.LiveChatID == "" {
+		return &youtube.NotAuthenticatedError{Reason: "polling chat needs a live chat id, " +
+			"which needs an API key or a sign-in"}
+	}
+
 	pageToken := ""
 
 	for ctx.Err() == nil {
-		response, err := p.youtube.ListChatMessages(ctx, liveChatID, pageToken)
+		response, err := p.youtube.ListChatMessages(ctx, target.LiveChatID, pageToken)
 		if err != nil {
 			return err
 		}

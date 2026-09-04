@@ -69,12 +69,12 @@ func (s *stubProvider) messages(t *testing.T) []any {
 	return raw
 }
 
-func configured(baseURL string, adjust ...func(*config.Vision)) config.Config {
+func configured(baseURL string, adjust ...func(*config.Config)) config.Config {
 	settings := config.Default()
-	settings.Vision.Base = baseURL
-	settings.Vision.Model = "test-model"
+	settings.Model.Base = baseURL
+	settings.Model.Model = "test-model"
 	for _, change := range adjust {
-		change(&settings.Vision)
+		change(&settings)
 	}
 	return settings
 }
@@ -84,8 +84,8 @@ func indonesian() *i18n.Locale { return i18n.Load("id") }
 // -- provider independence ----------------------------------------------------
 
 func TestTheEndpointComesEntirelyFromConfiguration(t *testing.T) {
-	settings := configured("http://localhost:11434/v1", func(v *config.Vision) {
-		v.Model = "llava"
+	settings := configured("http://localhost:11434/v1", func(c *config.Config) {
+		c.Model.Model = "llava"
 	})
 	endpoint := vision.New(settings, indonesian()).Endpoint()
 	if endpoint.BaseURL != "http://localhost:11434/v1" || endpoint.Model != "llava" {
@@ -93,21 +93,18 @@ func TestTheEndpointComesEntirelyFromConfiguration(t *testing.T) {
 	}
 }
 
-func TestTextFallsBackToTheVisionProvider(t *testing.T) {
-	endpoint := llm.New(configured("https://example.test/v1"), indonesian()).Endpoint()
-	if endpoint.BaseURL != "https://example.test/v1" {
-		t.Errorf("base = %q", endpoint.BaseURL)
+// One endpoint means exactly that: the screen and the chat summary go to the
+// same place, and there is no second one to fall out of step with.
+func TestTextAndImagesGoToTheSameEndpoint(t *testing.T) {
+	settings := configured("https://example.test/v1")
+	text := llm.New(settings, indonesian()).Endpoint()
+	image := vision.New(settings, indonesian()).Endpoint()
+
+	if text != image {
+		t.Errorf("text endpoint %+v differs from the image one %+v", text, image)
 	}
-}
-
-func TestTextCanUseADifferentProvider(t *testing.T) {
-	settings := configured("https://vision.test/v1")
-	settings.LLM.Base = "https://text.test/v1"
-	settings.LLM.Model = "t"
-
-	endpoint := llm.New(settings, indonesian()).Endpoint()
-	if endpoint.BaseURL != "https://text.test/v1" || endpoint.Model != "t" {
-		t.Errorf("endpoint = %+v", endpoint)
+	if text.BaseURL != "https://example.test/v1" {
+		t.Errorf("base = %q", text.BaseURL)
 	}
 }
 
@@ -124,7 +121,7 @@ func TestAnUnconfiguredEndpointIsRefused(t *testing.T) {
 func TestALocalServerWithoutAKeyStillWorks(t *testing.T) {
 	stub := newStub(t, "OK")
 	settings := configured(stub.server.URL)
-	settings.Vision.APIKeyEnv = "" // no key anywhere
+	settings.Model.APIKeyEnv = "" // no key anywhere
 
 	answer, err := vision.New(settings, indonesian()).
 		DescribeImage(context.Background(), "hello", []byte("fake-jpeg"))
@@ -193,7 +190,7 @@ func TestTheVisionPromptCarriesTheLanguageAndTheImage(t *testing.T) {
 // -- capture ------------------------------------------------------------------
 
 func TestCaptureDownscalesToTheConfiguredEdge(t *testing.T) {
-	settings := configured("https://x/v1", func(v *config.Vision) { v.MaxEdge = 640 })
+	settings := configured("https://x/v1", func(c *config.Config) { c.Vision.MaxEdge = 640 })
 	data, err := vision.New(settings, indonesian()).Capture()
 	if err != nil {
 		t.Skipf("no screen to capture in this environment: %v", err)
@@ -225,7 +222,7 @@ func TestCaptureReportsTheMonitorsItCanSee(t *testing.T) {
 
 func TestALongAnswerIsShortenedForSpeaking(t *testing.T) {
 	stub := newStub(t, strings.Repeat("x", 5000))
-	settings := configured(stub.server.URL, func(v *config.Vision) { v.MaxAnswerChars = 100 })
+	settings := configured(stub.server.URL, func(c *config.Config) { c.Vision.MaxAnswerChars = 100 })
 
 	answer, err := vision.New(settings, indonesian()).
 		DescribeImage(context.Background(), "", []byte("x"))

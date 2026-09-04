@@ -3,7 +3,13 @@
 // Provider-agnostic by configuration: this speaks the OpenAI protocol, and
 // base_url decides who actually answers. OpenAI, z.ai, OpenRouter, Groq, or a
 // local Ollama or LM Studio server are a config change rather than a code
-// change.
+// change -- and running a model on her own machine stays available that way,
+// as one line of config, rather than as a downloader and a child process
+// MikkiLens has to keep alive.
+//
+// There is one endpoint and one model behind it, asked everything: what a
+// misheard command meant, what chat has been talking about, and what is on
+// screen. So the model has to be one that can see.
 //
 // Answers are asked for in her language explicitly. Without that instruction
 // the models reply in English regardless of the voice reading them out, which
@@ -87,12 +93,12 @@ func New(settings config.Config, locale *i18n.Locale) *Controller {
 	}
 }
 
-// Endpoint is the text provider, falling back to the vision one.
+// Endpoint is the configured provider.
 func (c *Controller) Endpoint() Endpoint {
-	base, model, key := c.settings.LLMEndpoint()
+	base, model, key := c.settings.ModelEndpoint()
 	return Endpoint{
 		BaseURL: base, Model: model, APIKey: key,
-		Timeout: time.Duration(c.settings.Vision.TimeoutS * float64(time.Second)),
+		Timeout: time.Duration(c.settings.Model.TimeoutS * float64(time.Second)),
 	}
 }
 

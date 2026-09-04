@@ -39,6 +39,24 @@ phrases = ["scene apa sekarang", "sekarang scene apa", "scene sekarang apa"]
 [commands.list_scenes]
 phrases = ["sebutkan scene", "daftar scene", "ada scene apa saja"]
 
+# --------------------------------------------------------------- channel ----
+
+# Channel di sini artinya profil OBS ditambah login YouTube sekaligus: sekali
+# ganti, stream key dan chat ikut pindah, jadi siaran musik tidak nyasar ke
+# channel utama.
+#
+# Semua kalimat di bawah menyebut kata "channel", dan itu disengaja. "Ganti ke
+# musik" dan "ganti ke just chatting" terdengar sama bagi pengenalan suara,
+# padahal yang satu mengganti tampilan dan yang satu memindahkan siaran.
+[commands.switch_channel]
+phrases = ["ganti channel ke {channel}", "pindah channel ke {channel}", "pakai channel {channel}", "siaran ke channel {channel}"]
+
+[commands.current_channel]
+phrases = ["sekarang di channel apa", "channel apa sekarang", "ini channel mana"]
+
+[commands.list_channels]
+phrases = ["sebutkan channel", "daftar channel", "ada channel apa saja"]
+
 # ---------------------------------------------------------------- audio ----
 
 [commands.mute_mic]

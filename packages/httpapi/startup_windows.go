@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-
-	"github.com/exzork/mikkilens/packages/controllers/youtube"
 )
 
 // Running at login is a shortcut in the Startup folder rather than a registry
@@ -79,13 +77,10 @@ func escapePowerShell(value string) string {
 	return strings.ReplaceAll(value, "'", "''")
 }
 
-// openBrowser opens a URL in whatever browser Windows is set to use. It is how
+// OpenBrowser opens a URL in whatever browser Windows is set to use. It is how
 // the OAuth consent screen reaches her.
-func openBrowser(url string) {
+func OpenBrowser(url string) {
 	command := exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	_ = command.Start()
 }
-
-func youtubeHasClientSecret() bool { return youtube.HasClientSecret() }
-func youtubeClientSource() string  { return youtube.ClientSource() }

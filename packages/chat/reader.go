@@ -24,7 +24,7 @@ const minGap = 50 * time.Millisecond
 
 // Bus is the part of the speech bus the reader needs.
 type Bus interface {
-	SayChat(text string, superchat bool, onSpoken func(bool))
+	SayChat(text string, paid bool, onSpoken func(bool))
 	Say(text string, priority intent.Priority)
 	SayKey(key string, priority intent.Priority, args ...i18n.Args)
 	Clear(priority intent.Priority) int
@@ -174,6 +174,7 @@ func (r *Reader) Pause() bool {
 	// Cut off the sentence in progress rather than finishing it.
 	r.bus.InterruptCurrent()
 	r.bus.Clear(intent.PriorityChat)
+	r.bus.Clear(intent.PriorityDonation)
 	r.bus.SayKey("chat.paused", intent.PriorityResult)
 	return true
 }
@@ -205,6 +206,7 @@ func (r *Reader) SkipToNow() int {
 	r.mu.Unlock()
 
 	r.bus.Clear(intent.PriorityChat)
+	r.bus.Clear(intent.PriorityDonation)
 	r.bus.InterruptCurrent()
 
 	if skipped > 0 {
@@ -261,19 +263,49 @@ func (r *Reader) shouldRead(message Message) bool {
 	lastSpoken := r.lastSpoken
 	r.mu.Unlock()
 
+	// Past the message that says "and the others", the rest of a bulk gift is
+	// dropped: the count has been given once already.
+	if message.IsGiftReceived && settings.MaxGiftRecipients > 0 &&
+		message.GiftIndex > settings.MaxGiftRecipients+1 &&
+		message.GiftTotal > settings.MaxGiftRecipients {
+		return false
+	}
 	for _, muted := range settings.MutedUsers {
 		if strings.EqualFold(muted, message.Author) {
 			return false
 		}
 	}
-	if settings.SkipEmoteOnly && message.IsEmoteOnly() && !message.IsSuperchat {
+	// Exempting every event, not just super chats: a membership carries no
+	// words of its own, so the emote-only filter silenced all of them.
+	if settings.SkipEmoteOnly && message.IsEmoteOnly() && !message.IsEvent() {
 		return false
 	}
 	if settings.CollapseDuplicates && message.Text != "" &&
-		strings.TrimSpace(message.Text) == lastSpoken && !message.IsSuperchat {
+		strings.TrimSpace(message.Text) == lastSpoken && !message.IsEvent() {
 		return false
 	}
 	return true
+}
+
+// giftOverflow decides what to do with one recipient of a bulk gift.
+//
+// It reports how many are being folded away, and whether this message is the
+// one that says so. Everything past that is dropped by shouldRead: the count
+// has already been given, and repeating it fifty times would be worse than
+// reading the names.
+//
+// A batch whose giving message was never seen has no index and no total, so
+// nothing is folded and every recipient is read -- the same as before the cap
+// existed, which is the safe way to be wrong.
+func giftOverflow(message Message, settings config.Chat) (remaining int, folded bool) {
+	cap := settings.MaxGiftRecipients
+	if cap <= 0 || message.GiftIndex <= cap {
+		return 0, false
+	}
+	if message.GiftTotal <= cap {
+		return 0, false
+	}
+	return message.GiftTotal - cap, message.GiftIndex == cap+1
 }
 
 // Render turns a message into the sentence that gets spoken.
@@ -288,7 +320,59 @@ func (r *Reader) Render(message Message) string {
 		return locale.T("chat.superchat", i18n.Args{
 			"author": message.Author, "amount": message.Amount, "text": text,
 		})
+
+	case message.IsGift:
+		// How many is the whole point: one is a kindness and fifty is an
+		// event. The level is named when YouTube says which one it was.
+		count := max(1, message.GiftCount)
+		if message.GiftLevel != "" {
+			return locale.T("chat.gift_level", i18n.Args{
+				"author": message.Author, "count": count, "level": message.GiftLevel,
+			})
+		}
+		return locale.T("chat.gift", i18n.Args{"author": message.Author, "count": count})
+
+	case message.IsGiftReceived:
+		// One past the cap stands in for the whole rest of the batch, so a
+		// fifty-gift drop is a few names and a number rather than four minutes
+		// of names.
+		if remaining, folded := giftOverflow(message, settings); folded {
+			return locale.T("chat.gift_others", i18n.Args{"count": remaining})
+		}
+		// Naming the giver is the point of reading these at all. When the
+		// giving message was never seen -- connecting halfway through a batch
+		// -- it says the rest rather than thanking nobody.
+		if message.GifterName == "" {
+			return locale.T("chat.gift_received_unknown", i18n.Args{"author": message.Author})
+		}
+		return locale.T("chat.gift_received", i18n.Args{
+			"author": message.Author, "gifter": message.GifterName,
+		})
+
 	case message.IsMember:
+		// A milestone says how long they have kept it, which is the thing
+		// worth acknowledging; a new membership says which tier they chose.
+		// Both fall back to the plain sentence when YouTube omits the detail,
+		// which it does on some channels.
+		switch {
+		case message.MemberMonths > 0 && message.MemberLevel != "":
+			return locale.T("chat.member_months_level", i18n.Args{
+				"author": message.Author, "months": message.MemberMonths,
+				"level": message.MemberLevel, "text": text,
+			})
+		case message.MemberMonths > 0:
+			return locale.T("chat.member_months", i18n.Args{
+				"author": message.Author, "months": message.MemberMonths, "text": text,
+			})
+		case message.MemberLevel != "" && message.IsMemberUpped:
+			return locale.T("chat.member_upgraded", i18n.Args{
+				"author": message.Author, "level": message.MemberLevel,
+			})
+		case message.MemberLevel != "":
+			return locale.T("chat.member_level", i18n.Args{
+				"author": message.Author, "level": message.MemberLevel,
+			})
+		}
 		return locale.T("chat.member", i18n.Args{"author": message.Author})
 	default:
 		return locale.T("chat.message", i18n.Args{"author": message.Author, "text": text})
@@ -367,7 +451,7 @@ func (r *Reader) run(stop <-chan struct{}, done chan struct{}) {
 
 		spoken := make(chan struct{})
 		var once sync.Once
-		r.bus.SayChat(r.Render(message), message.IsSuperchat, func(completed bool) {
+		r.bus.SayChat(r.Render(message), message.IsPaid(), func(completed bool) {
 			// Recorded only once it has actually been heard. An interrupted
 			// message is re-read rather than lost, so marking it read when it
 			// was merely queued would drop it if MikkiLens closed in between.

@@ -4,8 +4,11 @@
 // Every subsystem speaks through here, which is what makes audible
 // confirmation structural rather than something each feature has to remember.
 // The priority ordering encodes one rule -- an error must never wait behind
-// forty queued chat messages -- and interrupted chat is put back on the queue
-// rather than dropped, so preemption never silently loses a message.
+// forty queued chat messages -- and interrupted speech is put back on the
+// queue rather than dropped, so preemption never silently loses a message.
+//
+// The tiers, in the order they are heard: the app's own voice (errors, open
+// questions, command results), then donations, then the chat backlog.
 package feedback
 
 import (
@@ -28,10 +31,11 @@ import (
 type Priority = intent.Priority
 
 const (
-	Error   = intent.PriorityError
-	Confirm = intent.PriorityConfirm
-	Result  = intent.PriorityResult
-	Chat    = intent.PriorityChat
+	Error    = intent.PriorityError
+	Confirm  = intent.PriorityConfirm
+	Result   = intent.PriorityResult
+	Donation = intent.PriorityDonation
+	Chat     = intent.PriorityChat
 )
 
 // Utterance is one thing waiting to be said.
@@ -41,11 +45,20 @@ type Utterance struct {
 	Earcon   string
 	Voice    string // empty means chosen from the priority and config
 	Rate     string
+	Volume   string // empty means the configured speech volume
 
 	// RequeueIfInterrupted puts the utterance back at its original place in the
 	// queue when something preempts it. Chat sets it, so being cut off by an
 	// error means the message is re-read rather than lost.
 	RequeueIfInterrupted bool
+
+	// ThroughHold lets this be spoken while the donation hold is on.
+	//
+	// The donation being announced sets it, and only it. The hold exists so
+	// that nothing talks over an alert; the voice reading that alert out is
+	// not something to protect the alert from, and holding it would leave the
+	// donation announced after it had left the screen.
+	ThroughHold bool
 
 	// OnSpoken reports whether the utterance finished. The chat reader waits on
 	// it so messages cannot pile up faster than they can be heard.
@@ -82,6 +95,7 @@ type Bus struct {
 	queue      utteranceHeap
 	counter    int
 	current    *Utterance
+	chatHeld   time.Time
 	running    bool
 	idle       chan struct{}
 	history    []Spoken
@@ -211,6 +225,30 @@ func (b *Bus) Error(key string, args ...i18n.Args) {
 	})
 }
 
+// SayDonation queues something someone paid to have read.
+//
+// It sits above chat and below the app's own voice: a donation preempts the
+// chat backlog, so it is heard while it is still current rather than twenty
+// messages later, but it never talks over an error or an open question.
+//
+// Like chat, it is re-read rather than lost when something preempts it --
+// more so, since dropping a message someone paid for is the one failure here
+// that costs the streamer something.
+func (b *Bus) SayDonation(text string, onSpoken func(bool)) {
+	settings, locale := b.Config(), b.Locale()
+	b.Enqueue(Utterance{
+		Text:                 text,
+		Priority:             Donation,
+		Earcon:               "donation",
+		ThroughHold:          true,
+		Voice:                settings.VoiceForDonation(locale.DefaultVoice()),
+		Rate:                 settings.Speech.DonationRate,
+		Volume:               settings.Speech.DonationVolume,
+		RequeueIfInterrupted: true,
+		OnSpoken:             onSpoken,
+	})
+}
+
 // SayChat queues a chat message. Interrupted messages are re-read, not lost.
 //
 // Ordinary messages get no tone. One beep is an acknowledgement; a beep before
@@ -220,18 +258,27 @@ func (b *Bus) Error(key string, args ...i18n.Args) {
 //
 // Super chats keep theirs. They are rare, and someone paying to be heard is
 // worth distinguishing from the stream of ordinary messages.
-func (b *Bus) SayChat(text string, superchat bool, onSpoken func(bool)) {
+func (b *Bus) SayChat(text string, paid bool, onSpoken func(bool)) {
 	settings, locale := b.Config(), b.Locale()
-	earcon := ""
-	if superchat {
-		earcon = "superchat"
+
+	priority, earcon := Chat, ""
+	if paid {
+		// The same tier a Tako or Trakteer alert holds chat for, because it is
+		// the same thing: somebody paid, and it is worth hearing while it is
+		// still current rather than twenty messages later.
+		//
+		// The voice stays the chat voice. It is still chat, still her audience
+		// talking, and the tone is what marks it out.
+		priority, earcon = Donation, "superchat"
 	}
+
 	b.Enqueue(Utterance{
 		Text:                 text,
-		Priority:             Chat,
+		Priority:             priority,
 		Earcon:               earcon,
 		Voice:                settings.VoiceForChat(locale.DefaultVoice()),
 		Rate:                 settings.Speech.ChatRate,
+		Volume:               settings.Speech.ChatVolume,
 		RequeueIfInterrupted: true,
 		OnSpoken:             onSpoken,
 	})
@@ -339,6 +386,102 @@ func (b *Bus) ClearAll() int {
 // InterruptCurrent cuts off whatever is being said right now.
 func (b *Bus) InterruptCurrent() { b.player.Stop() }
 
+// -- the donation hold --------------------------------------------------------
+
+// HoldChat keeps chat messages queued but unspoken until the deadline passes,
+// and cuts off a chat message already being read.
+//
+// A donation alert comes up on screen with its own voice over it, and two
+// voices at once is the one thing worse than chat being read late. Holding
+// rather than dropping is what makes it safe to cut a message off mid-word:
+// the interrupted message goes back on the queue at its original place and is
+// read from the start once the alert is over, so nothing anyone said is lost
+// to a donation landing on top of it.
+//
+// Only chat is held. A microphone failure, or an answer she asked for, still
+// speaks straight through an alert -- those are about her, not about the
+// stream, and silencing them would leave her waiting on a reply that never
+// comes.
+func (b *Bus) HoldChat(until time.Time) {
+	b.mu.Lock()
+	if !until.After(b.chatHeld) {
+		// Already held at least this long. Nothing to extend, and no second
+		// waker to start.
+		held := b.chatHeld
+		b.mu.Unlock()
+		slog.Debug("chat already held", "until", held)
+		return
+	}
+	b.chatHeld = until
+	// Requeued by the worker, and then kept there by the gate above, so this
+	// interruption postpones the message rather than restarting it under the
+	// alert.
+	interrupt := b.current != nil && heldByHold(*b.current)
+	b.mu.Unlock()
+
+	if interrupt {
+		b.player.Stop()
+	}
+	go b.wakeAfterHold(until)
+}
+
+// ReleaseChat lifts the hold early.
+func (b *Bus) ReleaseChat() {
+	b.mu.Lock()
+	b.chatHeld = time.Time{}
+	b.cond.Broadcast()
+	b.mu.Unlock()
+}
+
+// ChatHeld reports whether chat is being held back, and until when.
+func (b *Bus) ChatHeld() (bool, time.Time) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return time.Now().Before(b.chatHeld), b.chatHeld
+}
+
+// wakeAfterHold nudges the worker once the hold has expired. Without it a held
+// queue would sit there until the next thing was enqueued, which on a quiet
+// chat could be minutes after the alert finished.
+func (b *Bus) wakeAfterHold(until time.Time) {
+	timer := time.NewTimer(time.Until(until))
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+	case <-b.stopping:
+	}
+	b.mu.Lock()
+	b.cond.Broadcast()
+	b.mu.Unlock()
+}
+
+// chatBlockedLocked reports whether the next thing to say is a chat message
+// that the hold is keeping back.
+//
+// Testing only the front of the queue is what keeps the hold from blocking
+// anything else: chat is the lowest priority, so if a chat message is at the
+// front then there is nothing more important waiting behind it.
+
+// heldByHold reports whether the donation hold covers this utterance.
+//
+// What the audience is owed, as against what she is owed. Super chats sit in
+// the donation tier now, and a super chat read over a Tako or Trakteer alert
+// would be two paid messages at once -- the exact thing the hold exists to
+// prevent.
+func heldByHold(utterance Utterance) bool {
+	if utterance.ThroughHold {
+		return false
+	}
+	return utterance.Priority == Chat || utterance.Priority == Donation
+}
+func (b *Bus) chatBlockedLocked() bool {
+	if len(b.queue) == 0 || !time.Now().Before(b.chatHeld) {
+		return false
+	}
+	return heldByHold(b.queue[0].what)
+}
+
 // Pending is how many utterances are waiting.
 func (b *Bus) Pending() int {
 	b.mu.Lock()
@@ -381,7 +524,7 @@ func (b *Bus) run() {
 
 	for {
 		b.mu.Lock()
-		for b.running && len(b.queue) == 0 {
+		for b.running && (len(b.queue) == 0 || b.chatBlockedLocked()) {
 			b.markIdleLocked()
 			b.cond.Wait()
 		}
@@ -425,13 +568,17 @@ func (b *Bus) speak(utterance Utterance) bool {
 	if rate == "" {
 		rate = settings.Speech.Rate
 	}
+	volume := utterance.Volume
+	if volume == "" {
+		volume = settings.Speech.Volume
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	audio, err := b.synthesize(ctx, utterance.Text, tts.Options{
-		Voice: voice, Rate: rate, Volume: settings.Speech.Volume,
-		NoCache: utterance.Priority == Chat,
+		Voice: voice, Rate: rate, Volume: volume,
+		NoCache: utterance.Priority == Chat || utterance.Priority == Donation,
 	})
 	if err != nil {
 		slog.Error("could not synthesize speech", "text", clip(utterance.Text, 60), "error", err)
@@ -439,6 +586,22 @@ func (b *Bus) speak(utterance Utterance) bool {
 		// Not requeued: retrying would fail in exactly the same way, and a
 		// message that never stops being retried blocks everything behind it.
 		return true
+	}
+
+	// A hold that arrived while this was being synthesized has to be caught
+	// here, because interrupting cannot catch it: the player is told to stop
+	// before it has started, and starting clears that. Chat is always
+	// synthesized fresh, so there is about a second of this window on every
+	// message, and a donation landing in it would otherwise be talked over --
+	// which is the whole thing the hold exists to prevent.
+	//
+	// Reported as not completed, so it goes back on the queue at its original
+	// place and is read from the start once the alert is over, exactly as an
+	// interrupted one is.
+	if heldByHold(utterance) {
+		if held, _ := b.ChatHeld(); held {
+			return false
+		}
 	}
 
 	completed, err := b.player.Play(audio)
@@ -494,6 +657,8 @@ func defaultEarcon(priority Priority) string {
 		return "error"
 	case Confirm:
 		return "confirm"
+	case Donation:
+		return "donation"
 	case Chat:
 		return "chat"
 	default:

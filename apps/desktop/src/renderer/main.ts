@@ -1,6 +1,8 @@
 import { applyTranslations, setCatalog, t } from './i18n.js'
 import type {
   AppConfig,
+  ChannelInfo,
+  ChannelsPayload,
   CommandsPayload,
   CommandSpec,
   DeviceInfo,
@@ -8,9 +10,10 @@ import type {
   EngineStatus,
   Health,
   LogPayload,
+  OBSProfiles,
   Snapshot,
   VoiceInfo,
-  MatcherStatus,
+  WakeStatus,
   YouTubeStatus,
 } from './types.js'
 
@@ -87,6 +90,68 @@ function numberFrom(id: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+/**
+ * Sliders.
+ *
+ * Everything the engine calls a rate or a volume is a percentage, and typing
+ * "+15%" into a box is both a spelling test and something she cannot check by
+ * looking. A slider with the number beside it is one gesture, and it cannot be
+ * saved as nonsense.
+ *
+ * Two kinds share the treatment: a signed percentage the engine wants as a
+ * string ("+15%"), and a plain fraction it wants as a number (0.25), shown as
+ * a percentage because that is what it means.
+ */
+function showSliderValue(slider: HTMLInputElement): void {
+  const output = document.getElementById(`${slider.id}-out`)
+  if (!output) {
+    return
+  }
+  const value = Number(slider.value)
+  output.textContent =
+    slider.dataset.unit === 'fraction'
+      ? `${Math.round(value * 100)}%`
+      : `${value > 0 ? '+' : ''}${value}%`
+}
+
+for (const slider of document.querySelectorAll<HTMLInputElement>('input[type="range"]')) {
+  slider.addEventListener('input', () => showSliderValue(slider))
+}
+
+/**
+ * Put a configured percentage on its slider.
+ *
+ * A value from the config file outside the slider's range widens the slider
+ * rather than being clamped: opening the page and pressing Save must never
+ * quietly change a setting she never touched.
+ */
+function showPercent(id: string, configured: string): void {
+  const slider = element<HTMLInputElement>(id)
+  const parsed = Number.parseFloat(configured)
+  const value = Number.isFinite(parsed) ? parsed : 0
+
+  if (value < Number(slider.min)) {
+    slider.min = String(value)
+  }
+  if (value > Number(slider.max)) {
+    slider.max = String(value)
+  }
+  slider.value = String(value)
+  showSliderValue(slider)
+}
+
+/** A slider's position, in the form the engine reads: "+15%", "-20%", "+0%". */
+function percentFrom(id: string): string {
+  const value = Number(element<HTMLInputElement>(id).value)
+  return `${value >= 0 ? '+' : ''}${value}%`
+}
+
+function showFraction(id: string, value: number): void {
+  const slider = element<HTMLInputElement>(id)
+  slider.value = String(value)
+  showSliderValue(slider)
+}
+
 // -- tabs ---------------------------------------------------------------------
 
 const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
@@ -103,6 +168,9 @@ function selectTab(tab: HTMLButtonElement): void {
     }
   }
   tab.focus()
+
+  // The live meters belong to one panel, so they run only while it is open.
+  updateLivePolling()
 }
 
 for (const tab of tabs) {
@@ -155,6 +223,7 @@ const statusLabels: Array<[keyof Snapshot & string, string]> = [
   ['chat_backlog', 'label.chatBacklog'],
   ['last_transcript', 'label.lastTranscript'],
   ['last_command', 'label.lastCommand'],
+  ['installing', 'label.installing'],
   ['stt_backend', 'label.sttBackend'],
   ['wake_model', 'label.wakeModel'],
   ['hotkey', 'label.hotkey'],
@@ -162,6 +231,9 @@ const statusLabels: Array<[keyof Snapshot & string, string]> = [
 ]
 
 function displayValue(key: string, value: unknown): string {
+  if (key === 'installing') {
+    return describeDownload(value as Snapshot['installing'])
+  }
   if (typeof value === 'boolean') {
     return value ? t('value.yes') : t('value.no')
   }
@@ -169,6 +241,38 @@ function displayValue(key: string, value: unknown): string {
     return key === 'wake_model' || key === 'hotkey' ? t('value.disabled') : t('value.none')
   }
   return String(value)
+}
+
+/**
+ * The first-run download, as one line.
+ *
+ * The engine says all of this aloud as it happens, which is the channel that
+ * matters. This row is for the person helping her set the machine up, who is
+ * looking at the screen and wants to know whether half a gigabyte is actually
+ * moving or has quietly stalled -- so it carries the speed, not just a
+ * percentage that could sit still for a minute and look identical either way.
+ */
+function describeDownload(progress: Snapshot['installing']): string {
+  if (!progress || progress.done) {
+    return t('value.none')
+  }
+  if (progress.failed) {
+    return t('install.failed', { reason: progress.failed })
+  }
+
+  const what = t(`install.stage.${progress.stage}`)
+  if (progress.total <= 0) {
+    return what
+  }
+  return t('install.progress', {
+    what,
+    percent: String(progress.percent),
+    speed: megabytesPerSecond(progress.bytes_per_second),
+  })
+}
+
+function megabytesPerSecond(speed: number): string {
+  return speed > 0 ? `${(speed / (1024 * 1024)).toFixed(1)} MB/s` : '—'
 }
 
 function renderStatus(): void {
@@ -191,6 +295,8 @@ function renderStatus(): void {
     pair.append(term, value)
     grid.append(pair)
   }
+
+  showRecognitionBackend()
 
   const health = element('health-list')
   health.replaceChildren()
@@ -498,11 +604,17 @@ element('save-audio').addEventListener('click', () => {
       speech: {
         output_device: output ? output.value : '',
         voice: element<HTMLSelectElement>('voice').value,
-        rate: element<HTMLInputElement>('rate').value,
-        chat_rate: element<HTMLInputElement>('chat-rate').value,
+        rate: percentFrom('rate'),
+        volume: percentFrom('volume'),
+        chat_rate: percentFrom('chat-rate'),
+        chat_volume: percentFrom('chat-volume'),
         earcon_volume: numberFrom('earcon-volume', settings?.speech.earcon_volume ?? 0.25),
       },
       audio: { input_device: input ? input.value : '' },
+      stt: {
+        model_size: element<HTMLSelectElement>('stt-model-size').value,
+        device: element<HTMLSelectElement>('stt-device').value,
+      },
     },
     t('audio.saved'),
   )
@@ -523,14 +635,6 @@ element('preview-voice').addEventListener('click', async () => {
   }
 })
 
-element<HTMLInputElement>('earcon-volume').addEventListener('input', (event) => {
-  element('earcon-volume-out').textContent = (event.target as HTMLInputElement).value
-})
-
-element<HTMLInputElement>('wake-threshold').addEventListener('input', (event) => {
-  element('wake-threshold-out').textContent = (event.target as HTMLInputElement).value
-})
-
 element('save-obs').addEventListener('click', () => {
   void saveConfig(
     {
@@ -542,6 +646,31 @@ element('save-obs').addEventListener('click', () => {
       },
     },
     t('obs.saved'),
+  )
+})
+
+
+element('save-donations').addEventListener('click', () => {
+  void saveConfig(
+    {
+      tako: {
+        enabled: element<HTMLInputElement>('tako-enabled').checked,
+        link: element<HTMLInputElement>('tako-link').value.trim(),
+        read_aloud: element<HTMLInputElement>('tako-read').checked,
+      },
+      trakteer: {
+        enabled: element<HTMLInputElement>('trakteer-enabled').checked,
+        link: element<HTMLInputElement>('trakteer-link').value.trim(),
+        read_aloud: element<HTMLInputElement>('trakteer-read').checked,
+      },
+      chat: {
+        max_gift_recipients: numberFrom(
+          'max-gift-recipients',
+          settings?.chat.max_gift_recipients ?? 5,
+        ),
+      },
+    },
+    t('donations.saved'),
   )
 })
 
@@ -572,48 +701,52 @@ element('test-obs').addEventListener('click', async () => {
   }
 })
 
-element('save-vision').addEventListener('click', async () => {
+// One endpoint, saved in one place. The matcher switch lives here rather than
+// in a section of its own, because what it decides is about this endpoint: it
+// is the only thing that sends her speech to it.
+element('save-model').addEventListener('click', async () => {
   await saveConfig(
     {
-      vision: {
-        base_url: element<HTMLInputElement>('vision-url').value,
-        model: element<HTMLInputElement>('vision-model').value,
+      model: {
+        base_url: element<HTMLInputElement>('model-url').value.trim(),
+        model: element<HTMLInputElement>('model-name').value.trim(),
       },
+      matcher: { enabled: element<HTMLInputElement>('matcher-enabled').checked },
     },
-    t('vision.saved'),
+    t('model.saved'),
   )
 
-  const keyField = element<HTMLInputElement>('vision-key')
+  const keyField = element<HTMLInputElement>('model-key')
   if (keyField.value && settings) {
     try {
       await api('/secret', {
         method: 'PUT',
-        body: JSON.stringify({ name: settings.vision.api_key_env, value: keyField.value }),
+        body: JSON.stringify({ name: settings.model.api_key_env, value: keyField.value }),
       })
       keyField.value = ''
-      announce(t('vision.keySaved'))
+      announce(t('model.keySaved'))
     } catch (error) {
       alarm(reason(error))
     }
   }
 })
 
-element('test-vision').addEventListener('click', async () => {
-  const result = element('vision-result')
-  result.textContent = t('vision.testing')
+element('test-model').addEventListener('click', async () => {
+  const result = element('model-result')
+  result.textContent = t('model.testing')
 
   try {
     const answer = await api<{ ok: boolean; model?: string; answer?: string; error?: string }>(
-      '/test/vision',
+      '/test/model',
       { method: 'POST' },
     )
     const text = answer.ok
-      ? t('vision.connected', { model: answer.model ?? '', answer: answer.answer ?? '-' })
-      : t('vision.failed', { reason: answer.error ?? '' })
+      ? t('model.connected', { model: answer.model ?? '', answer: answer.answer ?? '-' })
+      : t('model.failed', { reason: answer.error ?? '' })
     result.textContent = text
     announce(text)
   } catch (error) {
-    const text = t('vision.failed', { reason: reason(error) })
+    const text = t('model.failed', { reason: reason(error) })
     result.textContent = text
     alarm(text)
   }
@@ -626,13 +759,20 @@ element('save-language').addEventListener('click', async () => {
     {
       language: { output: wanted, stt: element<HTMLSelectElement>('lang-stt').value },
       wake: {
-        model: element<HTMLInputElement>('wake-model').value,
+        enabled: element<HTMLInputElement>('wake-enabled').checked,
+        model: element<HTMLSelectElement>('wake-model').value,
         threshold: numberFrom('wake-threshold', settings?.wake.threshold ?? 0.6),
       },
       hotkey: { combination: element<HTMLInputElement>('hotkey').value },
     },
     t('language.saved'),
   )
+
+  // The engine takes both of these up immediately, so whether they actually
+  // took is knowable now -- and a hotkey another application already owns is
+  // the one failure she cannot see from the field she just typed into.
+  await refreshWake()
+  await showHotkeyProblem()
 
   // The window follows the language MikkiLens speaks, menus and tray included.
   await applyLanguage(wanted)
@@ -651,6 +791,11 @@ async function applyLanguage(wanted: string): Promise<void> {
   // to be rebuilt rather than just re-labelled.
   renderStatus()
   fillSpokenLanguageChoices()
+  fillRecognitionChoices()
+  if (wakeStatus) {
+    fillWakeWords(wakeStatus)
+    explainWake(wakeStatus)
+  }
   if (Object.keys(commands).length > 0) {
     renderCommands({
       language: loaded.language,
@@ -681,107 +826,477 @@ function fillSpokenLanguageChoices(): void {
   select.value = chosen
 }
 
-// -- understanding commands ---------------------------------------------------
+// -- speech recognition -------------------------------------------------------
 
-// Polled only while something is downloading. A three gigabyte file takes long
-// enough that the page must keep saying so, but polling a finished download
-// forever would be waste.
-let matcherPoll: number | undefined
+/**
+ * Which model hears her, and what runs it.
+ *
+ * These two live in the config file and nowhere else until now, which made
+ * them unchangeable for the person this application is for. They matter more
+ * than anything else on this page: the model decides whether a command is
+ * heard correctly, and the device decides whether the answer arrives in a
+ * fifth of a second or in three -- and three seconds of silence is long
+ * enough that she says it again.
+ */
 
-function gigabytes(bytes: number): string {
-  return (bytes / 1e9).toFixed(2)
+/** The models MikkiLens knows to look for in data/models, smallest first. */
+const recognitionModels = ['tiny', 'base', 'small', 'medium', 'large-v3-turbo', 'large-v3']
+
+/** Where recognition can run. "auto" is the one that survives a new machine. */
+const recognitionDevices: Array<[string, string]> = [
+  ['auto', 'audio.sttAuto'],
+  ['cuda', 'audio.sttCard'],
+  ['cpu', 'audio.sttProcessor'],
+]
+
+function fillRecognitionChoices(): void {
+  const sizes = element<HTMLSelectElement>('stt-model-size')
+  const chosen = settings?.stt?.model_size ?? 'small'
+  const names = [...recognitionModels]
+  if (chosen && !names.includes(chosen)) {
+    names.push(chosen) // a size set by hand is still hers to keep
+  }
+
+  sizes.replaceChildren()
+  for (const name of names) {
+    const option = document.createElement('option')
+    option.value = name
+    option.textContent = name
+    sizes.append(option)
+  }
+  sizes.value = chosen
+
+  const devices = element<HTMLSelectElement>('stt-device')
+  const device = settings?.stt?.device ?? 'auto'
+  devices.replaceChildren()
+  for (const [value, labelKey] of recognitionDevices) {
+    const option = document.createElement('option')
+    option.value = value
+    option.textContent = t(labelKey)
+    devices.append(option)
+  }
+  devices.value = recognitionDevices.some(([value]) => value === device) ? device : 'auto'
 }
 
-async function refreshMatcher(): Promise<void> {
-  const status = await api<MatcherStatus>('/matcher/status')
-
-  const select = element<HTMLSelectElement>('matcher-model')
-  if (select.options.length === 0) {
-    for (const model of status.models ?? []) {
-      const option = document.createElement('option')
-      option.value = model.name
-      option.textContent = t('matcher.modelOption', {
-        name: model.name,
-        size: gigabytes(model.bytes),
-        summary: model.summary,
-      })
-      select.append(option)
-    }
-  }
-
-  const progress = element<HTMLProgressElement>('matcher-progress')
-  const result = element('matcher-result')
-
-  let text: string
-  if (status.external_base_url) {
-    text = t('matcher.external', { model: status.external_model ?? '' })
-  } else if (status.downloading) {
-    const done = status.progress?.percent ?? 0
-    text = t('matcher.downloading', {
-      percent: done,
-      speed: ((status.progress?.bytes_per_second ?? 0) / 1e6).toFixed(1),
-    })
-    progress.hidden = false
-    progress.value = done
-  } else if (status.ready) {
-    text = status.vision_is_local
-      ? t('matcher.readyWithVision', { model: status.installed_model })
-      : t('matcher.ready', { model: status.installed_model })
-    progress.hidden = true
-  } else if (status.loading) {
-    text = t('matcher.loading')
-    progress.hidden = true
-  } else if (status.installed_model) {
-    text = t('matcher.installedNotRunning', { model: status.installed_model })
-    progress.hidden = true
-  } else {
-    text = t('matcher.notInstalled')
-    progress.hidden = true
-  }
-
-  element('matcher-state').textContent = text
-  if (status.progress?.stage === 'error') {
-    result.textContent = t('matcher.failed', { reason: status.progress.detail })
-  }
-
-  // Keep polling only while there is something to watch.
-  if (status.downloading && matcherPoll === undefined) {
-    matcherPoll = window.setInterval(() => void refreshMatcher(), 1000)
-  } else if (!status.downloading && matcherPoll !== undefined) {
-    window.clearInterval(matcherPoll)
-    matcherPoll = undefined
-  }
+/**
+ * What is actually running, in the engine's own words.
+ *
+ * "whisper.cpp small on the processor" answers the two questions this panel
+ * asks -- did the model change take, and is it on the card -- without her
+ * having to time a command to find out.
+ */
+function showRecognitionBackend(): void {
+  const backend = snapshot.stt_backend
+  element('stt-running').textContent = backend
+    ? t('audio.sttRunning', { backend: String(backend) })
+    : ''
 }
 
-element('download-matcher').addEventListener('click', async () => {
-  const model = element<HTMLSelectElement>('matcher-model').value
+// -- getting her attention ----------------------------------------------------
+
+/**
+ * The wake word and the hotkey.
+ *
+ * Both fail the same way when they fail: nothing happens. A wake word whose
+ * model is not installed, a threshold set so high that nothing reaches it, a
+ * hotkey another application already owns -- from where she is sitting these
+ * are all "it stopped listening to me". So this panel refuses to be a pair of
+ * text boxes: the wake word is chosen from what is actually installed, the key
+ * is captured by pressing it, and two live bars show what the microphone and
+ * the detector are hearing right now.
+ */
+
+let wakeStatus: WakeStatus | null = null
+let liveTimer: number | undefined
+let liveNote = ''
+
+async function refreshWake(): Promise<void> {
   try {
-    await api('/matcher/download', {
-      method: 'POST',
-      body: JSON.stringify({ model }),
-    })
-    announce(t('matcher.started'))
+    const status = await api<WakeStatus>('/wake')
+    wakeStatus = status
+    fillWakeWords(status)
+    explainWake(status)
   } catch (error) {
-    alarm(reason(error))
+    element('wake-model-note').textContent = reason(error)
   }
-  await refreshMatcher()
+}
+
+/**
+ * Offer the wake words that are installed, and nothing else.
+ *
+ * A name that is configured but missing is still listed, marked as missing:
+ * opening this page and pressing Save must never quietly swap her wake word
+ * for a different one.
+ */
+function fillWakeWords(status: WakeStatus): void {
+  const select = element<HTMLSelectElement>('wake-model')
+  const chosen = settings?.wake.model ?? status.model
+  const names = [...status.installed]
+  if (chosen && !names.includes(chosen)) {
+    names.unshift(chosen)
+  }
+
+  select.replaceChildren()
+  for (const name of names) {
+    const option = document.createElement('option')
+    option.value = name
+    option.textContent = status.installed.includes(name)
+      ? name
+      : t('language.wakeMissingOption', { model: name })
+    select.append(option)
+  }
+  if (names.length === 0) {
+    const option = document.createElement('option')
+    option.value = ''
+    option.textContent = t('language.wakeNoneInstalled')
+    select.append(option)
+  }
+  select.value = chosen
+  select.disabled = names.length === 0
+}
+
+/** Say why the wake word is not running, when it is not. */
+function explainWake(status: WakeStatus): void {
+  const chosen = element<HTMLSelectElement>('wake-model').value
+  let note = ''
+
+  if (status.runtime_error) {
+    note = t('language.wakeRuntimeMissing', { reason: status.runtime_error })
+  } else if (status.installed.length === 0) {
+    note = t('language.wakeNoModels')
+  } else if (chosen && !status.installed.includes(chosen)) {
+    note = t('language.wakeNotInstalled', { model: chosen })
+  } else if (status.error) {
+    note = t('language.wakeFailed', { reason: status.error })
+  }
+  element('wake-model-note').textContent = note
+}
+
+/** A microphone level, on the decibel scale a meter is readable on. */
+function meterFraction(rms: number): number {
+  if (rms <= 0) {
+    return 0
+  }
+  const decibels = 20 * Math.log10(rms)
+  return Math.max(0, Math.min(1, (decibels + 60) / 60))
+}
+
+function showLevel(fill: string, out: string, fraction: number): void {
+  const percent = Math.round(Math.max(0, Math.min(1, fraction)) * 100)
+  element(fill).style.width = `${percent}%`
+  element(out).textContent = `${percent}%`
+}
+
+/**
+ * One sentence for what the two bars are doing, changed only when it changes.
+ *
+ * The bars are hidden from a screen reader because a number that moves four
+ * times a second is noise, not information. This is the same reading in words,
+ * and it only speaks when the situation is genuinely different.
+ */
+function describeLive(status: WakeStatus, level: number): string {
+  if (status.mic_error) {
+    return t('language.micFailed', { reason: status.mic_error })
+  }
+  if (status.mic_running === false) {
+    return t('language.micClosed')
+  }
+  if (level < 0.05) {
+    return t('language.micSilent')
+  }
+  if (!status.enabled) {
+    return t('language.wakeSwitchedOff')
+  }
+  if (status.error || !status.loaded) {
+    return t('language.wakeNotRunning')
+  }
+  if (status.paused) {
+    return t('language.wakeBusy')
+  }
+  if ((status.score ?? 0) >= status.threshold) {
+    return t('language.wakeHeardIt')
+  }
+  return t('language.micHearing')
+}
+
+async function pollLive(): Promise<void> {
+  let status: WakeStatus
+  try {
+    status = await api<WakeStatus>('/wake')
+  } catch {
+    return // the engine banner already says when it cannot be reached
+  }
+  wakeStatus = status
+
+  const level = meterFraction(status.mic_level ?? 0)
+  showLevel('mic-level-fill', 'mic-level-out', level)
+  showLevel('wake-score-fill', 'wake-score-out', status.score ?? 0)
+
+  // The mark is where the threshold sits, so "it nearly triggered" is
+  // something she can see rather than work out from two numbers.
+  const threshold = numberFrom('wake-threshold', status.threshold)
+  element('wake-threshold-mark').style.left = `${Math.round(threshold * 100)}%`
+
+  const note = describeLive(status, level)
+  if (note !== liveNote) {
+    liveNote = note
+    element('wake-live-note').textContent = note
+  }
+}
+
+/**
+ * The meters run only while that panel is open.
+ *
+ * They are a diagnosis tool, not a display: polling the engine four times a
+ * second from a window sitting on the Status tab would be work nobody asked
+ * for, on the machine that is also encoding video.
+ */
+function updateLivePolling(): void {
+  const wanted = !element('panel-language').hidden && !document.hidden
+
+  if (wanted && liveTimer === undefined) {
+    void pollLive()
+    liveTimer = window.setInterval(() => void pollLive(), 250)
+  } else if (!wanted && liveTimer !== undefined) {
+    window.clearInterval(liveTimer)
+    liveTimer = undefined
+    liveNote = ''
+  }
+}
+
+document.addEventListener('visibilitychange', updateLivePolling)
+
+element<HTMLSelectElement>('wake-model').addEventListener('change', () => {
+  if (wakeStatus) {
+    explainWake(wakeStatus)
+  }
 })
 
-element('cancel-matcher').addEventListener('click', async () => {
-  await api('/matcher/cancel', { method: 'POST' })
-  announce(t('matcher.cancelled'))
-  await refreshMatcher()
+// -- the hotkey, captured by pressing it --------------------------------------
+
+/**
+ * The names the engine's key table uses, keyed by the browser's code for the
+ * physical key.
+ *
+ * The code rather than the character on purpose: the engine registers a
+ * position with Windows, not a letter, so a keyboard laid out differently
+ * still records the key she actually pressed.
+ */
+const namedKeys: Record<string, string> = {
+  Space: 'space',
+  Enter: 'enter',
+  NumpadEnter: 'enter',
+  Tab: 'tab',
+  Backspace: 'backspace',
+  Delete: 'delete',
+  Insert: 'insert',
+  Home: 'home',
+  End: 'end',
+  PageUp: 'page_up',
+  PageDown: 'page_down',
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  CapsLock: 'caps_lock',
+  NumLock: 'num_lock',
+  ScrollLock: 'scroll_lock',
+  PrintScreen: 'print_screen',
+  Pause: 'pause',
+  ContextMenu: 'menu',
+  NumpadAdd: 'num_add',
+  NumpadSubtract: 'num_subtract',
+  NumpadMultiply: 'num_multiply',
+  NumpadDivide: 'num_divide',
+  NumpadDecimal: 'num_decimal',
+}
+
+const modifierCodes = new Set([
+  'ControlLeft',
+  'ControlRight',
+  'AltLeft',
+  'AltRight',
+  'ShiftLeft',
+  'ShiftRight',
+  'MetaLeft',
+  'MetaRight',
+])
+
+/** The engine's name for one physical key, or null if it has no name there. */
+function keyName(code: string): string | null {
+  if (/^Key[A-Z]$/.test(code)) {
+    return code.slice(3).toLowerCase()
+  }
+  if (/^Digit[0-9]$/.test(code)) {
+    return code.slice(5)
+  }
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(code)) {
+    return code.toLowerCase()
+  }
+  if (/^Numpad[0-9]$/.test(code)) {
+    return `num_${code.slice(6)}`
+  }
+  return namedKeys[code] ?? null
+}
+
+/** Letters and digits are written bare; everything else in angle brackets. */
+function written(name: string): string {
+  return /^[a-z0-9]$/.test(name) ? name : `<${name}>`
+}
+
+function modifiersHeld(event: KeyboardEvent): string[] {
+  const held: string[] = []
+  if (event.ctrlKey) held.push('<ctrl>')
+  if (event.altKey) held.push('<alt>')
+  if (event.shiftKey) held.push('<shift>')
+  if (event.metaKey) held.push('<win>')
+  return held
+}
+
+const hotkeyField = element<HTMLInputElement>('hotkey')
+const hotkeyButton = element<HTMLButtonElement>('hotkey-record')
+
+/** What the field held before capture started; null when not capturing. */
+let hotkeyBefore: string | null = null
+
+function hotkeyNote(text: string): void {
+  element('hotkey-note').textContent = text
+}
+
+function startHotkeyCapture(): void {
+  if (hotkeyBefore !== null) {
+    cancelHotkeyCapture()
+    return
+  }
+
+  hotkeyBefore = hotkeyField.value
+  hotkeyField.value = ''
+  hotkeyField.placeholder = t('language.hotkeyPrompt')
+  hotkeyField.classList.add('capturing')
+  hotkeyButton.textContent = t('common.cancel')
+  hotkeyNote(t('language.hotkeyPrompt'))
+  announce(t('language.hotkeyPrompt'))
+  hotkeyField.focus()
+
+  // Capture phase, so the keys land here rather than in the page: a
+  // combination the window itself would act on has to be recordable too.
+  window.addEventListener('keydown', onHotkeyDown, true)
+  window.addEventListener('keyup', onHotkeyUp, true)
+  hotkeyField.addEventListener('blur', cancelHotkeyCapture)
+}
+
+function endHotkeyCapture(): void {
+  window.removeEventListener('keydown', onHotkeyDown, true)
+  window.removeEventListener('keyup', onHotkeyUp, true)
+  hotkeyField.removeEventListener('blur', cancelHotkeyCapture)
+  hotkeyField.classList.remove('capturing')
+  hotkeyField.placeholder = ''
+  hotkeyButton.textContent = t('language.hotkeyRecord')
+  hotkeyBefore = null
+}
+
+function cancelHotkeyCapture(): void {
+  if (hotkeyBefore === null) {
+    return
+  }
+  hotkeyField.value = hotkeyBefore
+  endHotkeyCapture()
+  hotkeyNote(t('language.hotkeyUnchanged'))
+  announce(t('language.hotkeyUnchanged'))
+}
+
+function finishHotkeyCapture(combination: string): void {
+  hotkeyField.value = combination
+  endHotkeyCapture()
+
+  const said = t('language.hotkeyCaptured', { combination })
+  hotkeyNote(said)
+  announce(said)
+}
+
+function onHotkeyDown(event: KeyboardEvent): void {
+  event.preventDefault()
+  event.stopPropagation()
+
+  if (event.code === 'Escape') {
+    cancelHotkeyCapture()
+    return
+  }
+  if (modifierCodes.has(event.code)) {
+    // Show what is held, so a combination still on its way down looks like
+    // progress rather than a field that has stopped responding.
+    hotkeyField.value = modifiersHeld(event).join('+')
+    return
+  }
+
+  const name = keyName(event.code)
+  if (name === null) {
+    hotkeyNote(t('language.hotkeyUnusableKey', { key: event.key }))
+    return
+  }
+
+  const modifiers = modifiersHeld(event)
+  // A bare key is registered globally, which would take it away from every
+  // other application on the machine. Function keys are the exception: that
+  // is what a Stream Deck or a foot pedal usually sends.
+  if (modifiers.length === 0 && !/^f\d+$/.test(name)) {
+    hotkeyField.value = ''
+    hotkeyNote(t('language.hotkeyNeedsModifier'))
+    return
+  }
+
+  finishHotkeyCapture([...modifiers, written(name)].join('+'))
+}
+
+function onHotkeyUp(event: KeyboardEvent): void {
+  event.preventDefault()
+  if (hotkeyBefore !== null && modifiersHeld(event).length === 0) {
+    hotkeyField.value = '' // nothing is held any more; start the guess again
+  }
+}
+
+hotkeyButton.addEventListener('click', startHotkeyCapture)
+hotkeyField.addEventListener('click', () => {
+  if (hotkeyBefore === null) {
+    startHotkeyCapture()
+  }
 })
+
+/**
+ * Report a hotkey the engine could not take.
+ *
+ * RegisterHotKey refuses a combination another application already holds, and
+ * that refusal is invisible from the field she typed it into: the setting
+ * saves, and the key simply does nothing.
+ */
+async function showHotkeyProblem(): Promise<void> {
+  try {
+    const state = await api<Snapshot>('/state')
+    snapshot = state
+    renderStatus()
+
+    const problem = typeof state.hotkey_error === 'string' ? state.hotkey_error : ''
+    hotkeyNote(problem ? t('language.hotkeyRefused', { reason: problem }) : '')
+    if (problem) {
+      alarm(t('language.hotkeyRefused', { reason: problem }))
+    }
+  } catch {
+    // The banner covers an unreachable engine; nothing useful to add here.
+  }
+}
+
+// -- understanding commands ---------------------------------------------------
 
 // -- youtube ------------------------------------------------------------------
 
+// Two buttons and a sentence. Everything the sentence has to distinguish is
+// something she can act on: connected, never connected, or connected being
+// impossible because there is no OAuth client on the machine to do it with.
 async function refreshYouTube(): Promise<YouTubeStatus> {
   const status = await api<YouTubeStatus>('/youtube/status')
 
   let text: string
-  if (!status.enabled) {
-    text = t('youtube.disabled')
-  } else if (status.connected) {
+  if (status.connected) {
     text = t('youtube.connectedAs', {
       channel: status.channel ? t('youtube.asChannel', { channel: status.channel }) : '',
       percent: status.quota_percent ?? 0,
@@ -789,101 +1304,317 @@ async function refreshYouTube(): Promise<YouTubeStatus> {
         ? t('youtube.viaTransport', { transport: status.chat_transport })
         : '',
     })
-  } else if (status.access === 'public') {
-    // Reading works and writing does not, which is worth saying plainly
-    // rather than showing the same "not connected" as having nothing at all.
-    text = t('youtube.connectedWithKey', { percent: status.quota_percent ?? 0 })
-  } else if (status.has_api_key) {
-    text = t('youtube.keyNeedsChannel')
-  } else if (!status.has_client_secret) {
-    text = t('youtube.noClientSecret')
+  } else if (status.has_client === false) {
+    text = t('youtube.noClient')
+  } else if (!status.enabled) {
+    text = t('youtube.disconnected')
   } else {
     text = t('youtube.notConnected')
   }
 
   element('youtube-state').textContent = text
-  element<HTMLInputElement>('youtube-channel').value = status.channel_id ?? ''
-  element<HTMLInputElement>('youtube-video').value = status.video_id ?? ''
+
+  // Offering a button that cannot work is worse than offering none: she cannot
+  // see it fail, only hear nothing happen.
+  element<HTMLButtonElement>('connect-youtube').disabled =
+    status.connected || status.has_client === false
+  element<HTMLButtonElement>('disconnect-youtube').disabled = !status.connected
   return status
 }
 
-// Saving the key is separate from connecting the account: it is the cheaper
-// half of YouTube, and the one most people will actually get working.
-element('save-youtube-key').addEventListener('click', async () => {
-  const result = element('youtube-key-result')
-
-  await saveConfig(
-    {
-      youtube: {
-        channel_id: element<HTMLInputElement>('youtube-channel').value.trim(),
-        video_id: element<HTMLInputElement>('youtube-video').value.trim(),
-      },
-    },
-    t('youtube.keySaved'),
-  )
-
-  const keyField = element<HTMLInputElement>('youtube-key')
-  if (keyField.value) {
-    try {
-      await api('/secret', {
-        method: 'PUT',
-        body: JSON.stringify({
-          name: settings?.youtube.api_key_env || 'MIKKILENS_YOUTUBE_KEY',
-          value: keyField.value,
-        }),
-      })
-      keyField.value = ''
-    } catch (error) {
-      result.textContent = reason(error)
-      alarm(reason(error))
-      return
-    }
-  }
-
-  result.textContent = t('youtube.keySaved')
-  await refreshYouTube()
-})
-
+// Connecting waits on a browser page she has to read and agree to, so it can
+// take minutes. The button says so and stays disabled meanwhile, because a
+// second press would start a second consent flow behind the first.
 element('connect-youtube').addEventListener('click', async () => {
-  element('youtube-result').textContent = t('youtube.opening')
-  announce(t('youtube.openingAnnounce'))
+  const button = element<HTMLButtonElement>('connect-youtube')
+  const result = element('youtube-result')
+
+  button.disabled = true
+  result.textContent = t('youtube.connecting')
+  announce(t('youtube.connecting'))
 
   try {
-    const result = await api<{ ok: boolean; channel?: string; error?: string }>(
-      '/youtube/connect',
-      { method: 'POST' },
-    )
-    const text = result.ok
-      ? t('youtube.done', {
-          channel: result.channel ? t('youtube.asChannel', { channel: result.channel }) : '',
-        })
-      : t('obs.failed', { reason: result.error ?? '' })
-    element('youtube-result').textContent = text
-    announce(text)
+    await api('/youtube/connect', { method: 'POST' })
+    result.textContent = t('youtube.connected')
+    announce(t('youtube.connected'))
   } catch (error) {
-    element('youtube-result').textContent = reason(error)
-    alarm(reason(error))
+    const text = t('youtube.connectFailed', { reason: reason(error) })
+    result.textContent = text
+    alarm(text)
+  } finally {
+    button.disabled = false
+    await refreshYouTube()
   }
-  await refreshYouTube()
 })
 
 element('disconnect-youtube').addEventListener('click', async () => {
-  await api('/youtube/disconnect', { method: 'POST' })
-  announce(t('youtube.disconnected'))
+  const result = element('youtube-result')
+  try {
+    await api('/youtube/disconnect', { method: 'POST' })
+    result.textContent = t('youtube.disconnected')
+    announce(t('youtube.disconnected'))
+  } catch (error) {
+    result.textContent = reason(error)
+    alarm(reason(error))
+  }
   await refreshYouTube()
 })
 
-element<HTMLInputElement>('startup').addEventListener('change', async (event) => {
-  const enabled = (event.target as HTMLInputElement).checked
+
+// -- channels -----------------------------------------------------------------
+
+/**
+ * One row per channel: what she calls it, which OBS profile streams to it, and
+ * a button to switch.
+ *
+ * The pairing is the part that cannot be done by voice, which is why it is on
+ * this page at all. "Call this one music" is a fine thing to say out loud;
+ * "the YouTube channel whose id is UC-then-twenty-two-characters belongs to the
+ * OBS profile called Music" is not. Made once here by whoever is helping, and
+ * after that switching is a sentence she says.
+ *
+ * The profile is a dropdown of what OBS actually has rather than a text box,
+ * because a profile name typed with the wrong capitalisation is a switch that
+ * appears to work and silently changes nothing.
+ */
+let channels: ChannelInfo[] = []
+let obsProfiles: OBSProfiles = { connected: false }
+
+async function refreshChannels(): Promise<void> {
+  const state = element('channels-state')
   try {
-    const result = await api<{ enabled: boolean }>('/startup', {
-      method: 'PUT',
-      body: JSON.stringify({ enabled }),
-    })
-    await bridge.loginItem(result.enabled)
-    announce(result.enabled ? t('startup.on') : t('startup.off'))
+    const [payload, profiles] = await Promise.all([
+      api<ChannelsPayload>('/youtube/channels'),
+      api<OBSProfiles>('/obs/profiles'),
+    ])
+    channels = payload.channels ?? []
+    obsProfiles = profiles
   } catch (error) {
-    alarm(reason(error))
+    state.textContent = t('common.loadFailed', { reason: reason(error) })
+    return
+  }
+
+  if (channels.length === 0) {
+    state.textContent = t('channels.none')
+  } else {
+    const active = channels.find((channel) => channel.active)
+    state.textContent = active
+      ? t('channels.onChannel', { channel: channelName(active) })
+      : t('channels.countOnly', { count: channels.length })
+  }
+  if (!obsProfiles.connected) {
+    state.textContent += ` ${t('channels.obsOffline')}`
+  }
+
+  renderChannels()
+}
+
+function channelName(channel: ChannelInfo): string {
+  return channel.name || channel.channel_title || channel.obs_profile || channel.channel_id
+}
+
+function renderChannels(): void {
+  const list = element('channel-list')
+  list.replaceChildren()
+
+  channels.forEach((channel, index) => {
+    const group = document.createElement('fieldset')
+    group.className = 'channel'
+
+    const caption = document.createElement('legend')
+    // The legend names the row for a screen reader, and every control inside
+    // is labelled with it, so tabbing into the middle of the list still says
+    // which channel is being changed.
+    caption.textContent = channel.active
+      ? t('channels.activeRow', { channel: channelName(channel) })
+      : channelName(channel)
+    group.append(caption)
+
+    group.append(
+      textRow(`channel-name-${index}`, t('channels.name'), channel.name, (value) => {
+        channel.name = value
+      }),
+    )
+    group.append(
+      selectRow(
+        `channel-profile-${index}`,
+        t('channels.profile'),
+        obsProfiles.profiles ?? [],
+        channel.obs_profile,
+        (value) => {
+          channel.obs_profile = value
+        },
+      ),
+    )
+    group.append(
+      selectRow(
+        `channel-scenes-${index}`,
+        t('channels.sceneCollection'),
+        obsProfiles.scene_collections ?? [],
+        channel.obs_scene_collection,
+        (value) => {
+          channel.obs_scene_collection = value
+        },
+      ),
+    )
+
+    const status = document.createElement('p')
+    status.className = 'hint'
+    status.textContent = channel.connected
+      ? t('channels.signedIn', { channel: channel.channel_title || channel.channel_id })
+      : t('channels.needsSignIn')
+    group.append(status)
+
+    const buttons = document.createElement('p')
+    buttons.className = 'buttons'
+
+    const switchTo = document.createElement('button')
+    switchTo.type = 'button'
+    switchTo.textContent = t('channels.switchTo')
+    switchTo.setAttribute('aria-label', t('channels.switchToNamed', {
+      channel: channelName(channel),
+    }))
+    // Already there, or no sign-in to switch to: a button that cannot do
+    // anything is worse than none, because she cannot see it fail.
+    switchTo.disabled = channel.active || !channel.connected
+    switchTo.addEventListener('click', () => switchToChannel(channel))
+    buttons.append(switchTo)
+
+    group.append(buttons)
+    list.append(group)
+  })
+}
+
+function textRow(
+  id: string,
+  labelText: string,
+  value: string,
+  onChange: (value: string) => void,
+): HTMLElement {
+  const row = document.createElement('p')
+
+  const label = document.createElement('label')
+  label.setAttribute('for', id)
+  label.textContent = labelText
+
+  const input = document.createElement('input')
+  input.type = 'text'
+  input.id = id
+  input.value = value ?? ''
+  input.addEventListener('input', () => onChange(input.value))
+
+  row.append(label, input)
+  return row
+}
+
+/**
+ * A dropdown of what OBS has, with a blank first entry.
+ *
+ * Blank matters: leaving the scene collection unset is the right answer when
+ * both channels share one set of scenes and only the stream key differs, and
+ * there has to be a way to say so. A saved value OBS no longer has is kept as
+ * its own option rather than silently dropped -- OBS may simply be closed, and
+ * quietly unbinding a channel because OBS was not running would be a settings
+ * page that loses her work.
+ */
+function selectRow(
+  id: string,
+  labelText: string,
+  options: string[],
+  value: string,
+  onChange: (value: string) => void,
+): HTMLElement {
+  const row = document.createElement('p')
+
+  const label = document.createElement('label')
+  label.setAttribute('for', id)
+  label.textContent = labelText
+
+  const select = document.createElement('select')
+  select.id = id
+
+  const blank = document.createElement('option')
+  blank.value = ''
+  blank.textContent = t('value.none')
+  select.append(blank)
+
+  const all = value && !options.includes(value) ? [...options, value] : options
+  for (const name of all) {
+    const option = document.createElement('option')
+    option.value = name
+    option.textContent = name
+    select.append(option)
+  }
+  select.value = value ?? ''
+  select.addEventListener('change', () => onChange(select.value))
+
+  row.append(label, select)
+  return row
+}
+
+async function switchToChannel(channel: ChannelInfo): Promise<void> {
+  const result = element('channels-result')
+  const name = channelName(channel)
+
+  result.textContent = t('channels.switching', { channel: name })
+  announce(t('channels.switching', { channel: name }))
+
+  try {
+    // The engine says what happened out loud -- including "you are live, stop
+    // the stream first" -- so this waits for it to finish and then re-reads
+    // the state rather than claiming a result of its own.
+    await api('/youtube/switch', {
+      method: 'POST',
+      body: JSON.stringify({ channel: channel.channel_id || name }),
+    })
+  } catch (error) {
+    result.textContent = t('channels.switchFailed', { reason: reason(error) })
+    alarm(t('channels.switchFailed', { reason: reason(error) }))
+  }
+  await refreshChannels()
+  await refreshYouTube()
+}
+
+element('save-channels').addEventListener('click', async () => {
+  const result = element('channels-result')
+  try {
+    await api('/youtube/channels', {
+      method: 'PUT',
+      body: JSON.stringify({ channels }),
+    })
+    result.textContent = t('channels.saved')
+    announce(t('channels.saved'))
+  } catch (error) {
+    result.textContent = t('common.saveFailed', { reason: reason(error) })
+    alarm(t('common.saveFailed', { reason: reason(error) }))
+  }
+  await refreshChannels()
+})
+
+// Connecting another channel is the same browser consent as the first, and
+// takes just as long, so the button behaves the same way: disabled while it is
+// waiting, because a second press would start a second consent behind the
+// first.
+element('connect-channel').addEventListener('click', async () => {
+  const button = element<HTMLButtonElement>('connect-channel')
+  const result = element('channels-result')
+
+  button.disabled = true
+  result.textContent = t('channels.connecting')
+  announce(t('channels.connecting'))
+
+  try {
+    await api('/youtube/connect-channel', { method: 'POST' })
+    result.textContent = t('channels.connected')
+    announce(t('channels.connected'))
+  } catch (error) {
+    const text = t('youtube.connectFailed', { reason: reason(error) })
+    result.textContent = text
+    alarm(text)
+  } finally {
+    button.disabled = false
+    await refreshChannels()
+    await refreshYouTube()
   }
 })
 
@@ -957,18 +1688,32 @@ async function boot(): Promise<void> {
     voiceSelect.value = settings.speech.voice
   }
 
-  element<HTMLInputElement>('rate').value = settings.speech.rate
-  element<HTMLInputElement>('chat-rate').value = settings.speech.chat_rate
-  element<HTMLInputElement>('earcon-volume').value = String(settings.speech.earcon_volume)
-  element('earcon-volume-out').textContent = String(settings.speech.earcon_volume)
+  showPercent('rate', settings.speech.rate)
+  showPercent('volume', settings.speech.volume)
+  showPercent('chat-rate', settings.speech.chat_rate)
+  showPercent('chat-volume', settings.speech.chat_volume)
+  showFraction('earcon-volume', settings.speech.earcon_volume)
+
+  fillRecognitionChoices()
 
   element<HTMLInputElement>('obs-host').value = settings.obs.host
   element<HTMLInputElement>('obs-port').value = String(settings.obs.port)
   element<HTMLInputElement>('obs-password').value = settings.obs.password
   element<HTMLInputElement>('obs-mic').value = settings.obs.mic_source
 
-  element<HTMLInputElement>('vision-url').value = settings.vision.base_url
-  element<HTMLInputElement>('vision-model').value = settings.vision.model
+  element<HTMLInputElement>('tako-enabled').checked = settings.tako?.enabled ?? false
+  element<HTMLInputElement>('tako-link').value = settings.tako?.link ?? ''
+  element<HTMLInputElement>('tako-read').checked = settings.tako?.read_aloud ?? false
+  element<HTMLInputElement>('trakteer-enabled').checked = settings.trakteer?.enabled ?? false
+  element<HTMLInputElement>('trakteer-link').value = settings.trakteer?.link ?? ''
+  element<HTMLInputElement>('trakteer-read').checked = settings.trakteer?.read_aloud ?? false
+  element<HTMLInputElement>('max-gift-recipients').value = String(
+    settings.chat?.max_gift_recipients ?? 5,
+  )
+
+  element<HTMLInputElement>('model-url').value = settings.model.base_url
+  element<HTMLInputElement>('model-name').value = settings.model.model
+  element<HTMLInputElement>('matcher-enabled').checked = settings.matcher.enabled
 
   const languageSelect = element<HTMLSelectElement>('lang-output')
   languageSelect.replaceChildren()
@@ -981,17 +1726,13 @@ async function boot(): Promise<void> {
   languageSelect.value = settings.language.output
   fillSpokenLanguageChoices()
 
-  element<HTMLInputElement>('wake-model').value = settings.wake.model
-  element<HTMLInputElement>('wake-threshold').value = String(settings.wake.threshold)
-  element('wake-threshold-out').textContent = String(settings.wake.threshold)
+  element<HTMLInputElement>('wake-enabled').checked = settings.wake.enabled
+  showFraction('wake-threshold', settings.wake.threshold)
   element<HTMLInputElement>('hotkey').value = settings.hotkey.combination
-
-  element<HTMLInputElement>('startup').checked = (
-    await api<{ enabled: boolean }>('/startup')
-  ).enabled
+  await refreshWake()
 
   await refreshYouTube()
-  await refreshMatcher()
+  await refreshChannels()
   await loadCommands()
   await loadLog()
 

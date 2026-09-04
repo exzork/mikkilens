@@ -2,10 +2,6 @@ package engine
 
 import (
 	"context"
-	"log/slog"
-
-	"github.com/exzork/mikkilens/packages/audio/feedback"
-	"github.com/exzork/mikkilens/packages/core/i18n"
 
 	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -73,43 +69,10 @@ func commandOptions(commands *intent.Set) []llm.CommandOption {
 	return options
 }
 
-// matcherConfigured reports whether a fallback is available at all: either the
-// model MikkiLens runs itself, or an endpoint she pointed it at.
+// matcherConfigured reports whether the fallback can be asked at all: the
+// switch is on, and there is a model to ask.
 func matcherConfigured(settings config.Config) bool {
-	if !settings.Matcher.Enabled {
-		return false
-	}
-	base, model, _ := settings.MatcherEndpoint()
-	if base != "" && model != "" {
-		return true
-	}
-	// The bundled server counts as soon as there is something to run: the
-	// router asks it only on a miss, and by then it will have finished
-	// loading or be reported as unavailable.
-	return llm.RuntimeInstalled() && llm.InstalledModel() != ""
-}
-
-// startBundledModel loads the local model in the background.
-//
-// At startup rather than on the first miss: loading gigabytes from disk takes
-// long enough that a command would appear to be ignored, and being ignored is
-// the failure she cannot tell apart from a broken microphone.
-func (e *Engine) startBundledModel(settings config.Config) {
-	if !settings.Matcher.Enabled {
-		return
-	}
-	if base, _, _ := settings.MatcherEndpoint(); base != "" {
-		return // she pointed it somewhere else
-	}
-	if !llm.RuntimeInstalled() || llm.InstalledModel() == "" {
-		return // nothing downloaded yet, which is the state it ships in
-	}
-
-	go func() {
-		if err := llm.Bundled().Start(context.Background()); err != nil {
-			slog.Info("the local language model is not available", "reason", err)
-		}
-	}()
+	return settings.Matcher.Enabled && settings.Model.Configured()
 }
 
 // applyUnderstander installs or removes the fallback to match the settings.
@@ -119,41 +82,4 @@ func (e *Engine) applyUnderstander(settings config.Config) {
 		return
 	}
 	e.router.SetUnderstander(nil)
-}
-
-// OnMatcherProgress reports a model download aloud.
-//
-// A three gigabyte download with no feedback is indistinguishable from one
-// that has died, and she cannot glance at a progress bar to check. So it is
-// spoken -- but only at quarters, because a number read out every half second
-// would make the machine unusable for the hour it takes.
-func (e *Engine) OnMatcherProgress(progress llm.Progress) {
-	switch progress.Stage {
-	case "done":
-		e.bus.SayKey("matcher.downloaded", feedback.Result)
-		// Load it now rather than at the next start: she asked for this and
-		// should be able to use it in the same session.
-		e.startBundledModel(e.Config())
-		return
-	case "error":
-		slog.Warn("the model download failed", "error", progress.Detail)
-		e.bus.SayKey("matcher.download_failed", feedback.Error,
-			i18n.Args{"reason": llm.Readable(progress.Detail)})
-		return
-	case "runtime":
-		return // small and quick; not worth narrating
-	}
-
-	quarter := progress.Percent / 25
-	e.mu.Lock()
-	announce := quarter > e.matcherQuarter && quarter > 0
-	if announce {
-		e.matcherQuarter = quarter
-	}
-	e.mu.Unlock()
-
-	if announce {
-		e.bus.SayKey("matcher.downloading", feedback.Result,
-			i18n.Args{"percent": quarter * 25})
-	}
 }

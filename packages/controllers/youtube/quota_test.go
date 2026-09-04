@@ -132,7 +132,7 @@ func TestMarkExhaustedSpendsTheWholeBudget(t *testing.T) {
 
 func TestCallingWithoutCredentialsIsAClearError(t *testing.T) {
 	isolated(t)
-	controller := youtube.New(config.YouTube{QuotaBudget: 10000, QuotaWarnPercent: 80}, "")
+	controller := youtube.New(config.YouTube{QuotaBudget: 10000, QuotaWarnPercent: 80})
 	if controller.Authenticated() {
 		t.Error("a fresh controller is not authenticated")
 	}
@@ -149,7 +149,7 @@ func TestCallingWithoutCredentialsIsAClearError(t *testing.T) {
 // alternative is a request that fails slowly and reports the wrong reason.
 func TestAnExhaustedQuotaRefusesBeforeReachingTheNetwork(t *testing.T) {
 	isolated(t)
-	controller := youtube.New(config.YouTube{QuotaBudget: 1, QuotaWarnPercent: 80}, "")
+	controller := youtube.New(config.YouTube{QuotaBudget: 1, QuotaWarnPercent: 80})
 	controller.Quota.MarkExhausted()
 
 	_, err := controller.ListChatMessages(context.Background(), "chat-1", "")
@@ -165,19 +165,42 @@ func TestAnExhaustedQuotaRefusesBeforeReachingTheNetwork(t *testing.T) {
 	}
 }
 
-func TestSignOutRemovesTheStoredToken(t *testing.T) {
+// Signing out has to remove the token from disk, not merely from memory.
+// Otherwise Disconnect undoes itself at the next start, and a button that
+// silently reverses itself overnight is worse than no button at all.
+func TestSigningOutRemovesTheStoredToken(t *testing.T) {
 	directory := isolated(t)
-	tokenPath := filepath.Join(directory, "data", "youtube_token.json")
-	if err := os.WriteFile(tokenPath, []byte(`{"access_token":"x"}`), 0o600); err != nil {
+
+	token := filepath.Join(directory, "data", "youtube_token.json")
+	if err := os.WriteFile(token, []byte(`{"refresh_token":"r"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if !youtube.HasToken() {
-		t.Fatal("the token should be there to start with")
-	}
 
-	youtube.New(config.YouTube{QuotaBudget: 10000, QuotaWarnPercent: 80}, "").SignOut()
+	controller := youtube.New(config.YouTube{QuotaBudget: 10000, QuotaWarnPercent: 80})
+	controller.SignOut()
+
+	if _, err := os.Stat(token); err == nil {
+		t.Error("the token file must be gone after signing out")
+	}
+	if controller.Authenticated() {
+		t.Error("signing out must leave the controller unauthenticated")
+	}
+}
+
+// Nothing is built in, so a fresh install writes no credential of its own and
+// carries none: the OAuth client is hers, in data/client_secret.json.
+func TestAFreshControllerCarriesNoCredential(t *testing.T) {
+	directory := isolated(t)
+
+	youtube.New(config.YouTube{QuotaBudget: 10000, QuotaWarnPercent: 80})
+
+	for _, name := range []string{"youtube_token.json", "client_secret.json"} {
+		if _, err := os.Stat(filepath.Join(directory, "data", name)); err == nil {
+			t.Errorf("data/%s must not be created by building a controller", name)
+		}
+	}
 	if youtube.HasToken() {
-		t.Error("signing out must remove the stored token")
+		t.Error("a fresh install has no cached sign-in")
 	}
 }
 

@@ -14,8 +14,9 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/devices"
 	"github.com/exzork/mikkilens/packages/audio/feedback"
 	"github.com/exzork/mikkilens/packages/audio/tts"
-	"github.com/exzork/mikkilens/packages/controllers/llm"
+	"github.com/exzork/mikkilens/packages/audio/wake"
 	"github.com/exzork/mikkilens/packages/controllers/vision"
+	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/config"
 	"github.com/exzork/mikkilens/packages/core/i18n"
 	"github.com/exzork/mikkilens/packages/core/intent"
@@ -46,6 +47,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/state", only(http.MethodGet, s.getState))
 	mux.HandleFunc("/api/log", only(http.MethodGet, s.getLog))
 
+	mux.HandleFunc("/api/wake", only(http.MethodGet, s.getWake))
+
 	mux.HandleFunc("/api/devices", only(http.MethodGet, s.getDevices))
 	mux.HandleFunc("/api/devices/test", only(http.MethodPost, s.testDevice))
 	mux.HandleFunc("/api/voices", only(http.MethodGet, s.getVoices))
@@ -59,15 +62,12 @@ func (s *Server) routes(mux *http.ServeMux) {
 
 	mux.HandleFunc("/api/test/obs", only(http.MethodPost, s.testOBS))
 	mux.HandleFunc("/api/obs/stream", only(http.MethodPost, s.setStreaming))
-	mux.HandleFunc("/api/test/vision", only(http.MethodPost, s.testVision))
+	mux.HandleFunc("/api/test/model", only(http.MethodPost, s.testModel))
 
 	mux.HandleFunc("/api/youtube/status", only(http.MethodGet, s.youtubeStatus))
 	mux.HandleFunc("/api/youtube/connect", only(http.MethodPost, s.youtubeConnect))
 	mux.HandleFunc("/api/youtube/disconnect", only(http.MethodPost, s.youtubeDisconnect))
-
-	mux.HandleFunc("/api/matcher/status", only(http.MethodGet, s.matcherStatus))
-	mux.HandleFunc("/api/matcher/download", only(http.MethodPost, s.matcherDownload))
-	mux.HandleFunc("/api/matcher/cancel", only(http.MethodPost, s.matcherCancel))
+	s.channelRoutes(mux)
 
 	mux.HandleFunc("/api/startup", s.handleStartup)
 	mux.HandleFunc("/api/listen", only(http.MethodPost, s.triggerListen))
@@ -127,67 +127,6 @@ func (s *Server) setStreaming(writer http.ResponseWriter, request *http.Request)
 	})
 }
 
-// -- the command matcher ------------------------------------------------------
-
-// installer is shared, so a download survives the settings page being closed
-// and reopened, and two pages cannot start the same one twice.
-var installer = llm.NewInstaller()
-
-func (s *Server) matcherStatus(writer http.ResponseWriter, _ *http.Request) {
-	settings := s.engine.Config()
-	progress := installer.Progress()
-
-	base, model, _ := settings.MatcherEndpoint()
-	respond(writer, http.StatusOK, map[string]any{
-		"enabled":           settings.Matcher.Enabled,
-		"models":            llm.MarshalModels(),
-		"installed_model":   llm.InstalledModel(),
-		"runtime_installed": llm.RuntimeInstalled(),
-		"loading":           llm.Bundled().Loading(),
-		"ready":             llm.Bundled().BaseURL() != "",
-		// Whether the running model can also describe the screen, and whether
-		// vision is currently falling back to it.
-		"vision":          llm.Bundled().Vision(),
-		"vision_is_local": !settings.Vision.Configured() && llm.Bundled().Vision(),
-		"downloading":     installer.Running(),
-		"progress":        progress,
-		// A base URL she set herself takes precedence over the bundled model,
-		// and the page should say so rather than showing both as active.
-		"external_base_url": base,
-		"external_model":    model,
-	})
-}
-
-// matcherDownload starts fetching a model. It answers at once: the download is
-// gigabytes and nothing should be waiting on it.
-func (s *Server) matcherDownload(writer http.ResponseWriter, request *http.Request) {
-	var body struct {
-		Model string `json:"model"`
-	}
-	if !decode(writer, request, &body) {
-		return
-	}
-
-	model, ok := llm.ModelByName(body.Model)
-	if !ok {
-		fail(writer, http.StatusBadRequest, "no such model: "+body.Model)
-		return
-	}
-
-	if err := installer.Install(model, s.engine.OnMatcherProgress); err != nil {
-		fail(writer, http.StatusConflict, err.Error())
-		return
-	}
-	respond(writer, http.StatusOK, map[string]any{
-		"ok": true, "model": model.Name, "bytes": model.Bytes,
-	})
-}
-
-func (s *Server) matcherCancel(writer http.ResponseWriter, _ *http.Request) {
-	installer.Cancel()
-	respond(writer, http.StatusOK, map[string]any{"ok": true})
-}
-
 // -- state --------------------------------------------------------------------
 
 func (s *Server) getHealth(writer http.ResponseWriter, _ *http.Request) {
@@ -213,6 +152,15 @@ func (s *Server) fullSnapshot() map[string]any {
 
 	snapshot["stt_backend"] = s.engine.Transcriber().Describe()
 	snapshot["stt_loaded"] = s.engine.Transcriber().Loaded()
+
+	// The first-run download, so the status page can show how far along it is.
+	// It is announced aloud as well -- this is for the person helping her, who
+	// is looking at the screen and wants to know whether it is moving.
+	if progress := s.engine.Installing(); progress.Stage != "" {
+		snapshot["installing"] = progress
+	} else {
+		snapshot["installing"] = nil
+	}
 	snapshot["command_count"] = s.engine.Commands().Len()
 	snapshot["unhandled"] = orEmpty(s.engine.Router().UnhandledCommands())
 
@@ -222,16 +170,64 @@ func (s *Server) fullSnapshot() map[string]any {
 	} else {
 		snapshot["wake_model"] = nil
 	}
+	// Why it is off travels with the fact that it is off. "Wake word:
+	// disabled" on its own is the reading she is trying to explain.
+	snapshot["wake_error"] = s.engine.WakeError()
+
 	if watcher := s.engine.Hotkey(); watcher != nil {
 		snapshot["hotkey"] = watcher.Combination()
 	} else {
 		snapshot["hotkey"] = nil
 	}
+	snapshot["hotkey_error"] = s.engine.HotkeyError()
+
 	if microphone := s.engine.Microphone(); microphone != nil {
 		snapshot["mic_frames"] = microphone.FramesSeen()
 		snapshot["mic_error"] = microphone.LastError()
 	}
 	return snapshot
+}
+
+// getWake is everything the settings page needs to make a wake word work:
+// which ones are installed, which one is running, and what the microphone and
+// the detector are hearing right now.
+//
+// The live numbers are polled rather than pushed over the socket. They are
+// only interesting while she is looking at that one panel with her voice in
+// the room, and a score that updates twelve times a second is not state worth
+// waking every client for.
+func (s *Server) getWake(writer http.ResponseWriter, _ *http.Request) {
+	settings := s.engine.Config().Wake
+
+	payload := map[string]any{
+		"enabled":    settings.Enabled,
+		"model":      settings.Model,
+		"threshold":  settings.Threshold,
+		"cooldown_s": settings.CooldownS,
+		"installed":  orEmpty(wake.Installed()),
+		"error":      s.engine.WakeError(),
+		"loaded":     false,
+		"score":      0.0,
+		"mic_level":  0.0,
+		"mic_frames": 0,
+		"mic_error":  "",
+	}
+	if err := wake.RuntimeReady(); err != nil {
+		payload["runtime_error"] = err.Error()
+	}
+	if detector := s.engine.Wake(); detector != nil {
+		payload["loaded"] = detector.Loaded()
+		payload["running_model"] = detector.ModelName()
+		payload["score"] = detector.LastScore()
+		payload["paused"] = !detector.Enabled()
+	}
+	if microphone := s.engine.Microphone(); microphone != nil {
+		payload["mic_level"] = microphone.Level()
+		payload["mic_frames"] = microphone.FramesSeen()
+		payload["mic_error"] = microphone.LastError()
+		payload["mic_running"] = microphone.Running()
+	}
+	respond(writer, http.StatusOK, payload)
 }
 
 // getLog is the diagnosis page: what MikkiLens heard, and what it said back.
@@ -341,10 +337,15 @@ func (s *Server) getVoices(writer http.ResponseWriter, request *http.Request) {
 	respond(writer, http.StatusOK, matching)
 }
 
+// speak reads a line out through the queue. The optional priority is what a
+// donation alert will post through: "donation" queues above the chat backlog
+// and takes the donation voice, while anything else keeps the old behaviour of
+// speaking at result priority in the main voice.
 func (s *Server) speak(writer http.ResponseWriter, request *http.Request) {
 	var body struct {
-		Text  string `json:"text"`
-		Voice string `json:"voice"`
+		Text     string `json:"text"`
+		Voice    string `json:"voice"`
+		Priority string `json:"priority"`
 	}
 	if !decode(writer, request, &body) {
 		return
@@ -355,13 +356,23 @@ func (s *Server) speak(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	settings := s.engine.Config()
-	voice := body.Voice
-	if voice == "" {
-		voice = settings.Voice(s.engine.Locale().DefaultVoice())
+	utterance := feedback.Utterance{Text: body.Text, Priority: feedback.Result, Voice: body.Voice}
+
+	if strings.EqualFold(strings.TrimSpace(body.Priority), "donation") {
+		utterance.Priority = feedback.Donation
+		utterance.Earcon = "donation"
+		utterance.Rate = settings.Speech.DonationRate
+		utterance.Volume = settings.Speech.DonationVolume
+		utterance.RequeueIfInterrupted = true
+		if utterance.Voice == "" {
+			utterance.Voice = settings.VoiceForDonation(s.engine.Locale().DefaultVoice())
+		}
 	}
-	s.engine.Bus().Enqueue(feedback.Utterance{
-		Text: body.Text, Priority: feedback.Result, Voice: voice,
-	})
+	if utterance.Voice == "" {
+		utterance.Voice = settings.Voice(s.engine.Locale().DefaultVoice())
+	}
+
+	s.engine.Bus().Enqueue(utterance)
 	respond(writer, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -429,12 +440,6 @@ func (s *Server) putSecret(writer http.ResponseWriter, request *http.Request) {
 		fail(writer, http.StatusBadRequest, "a secret needs a name")
 		return
 	}
-	// The YouTube key is the one secret that changes what MikkiLens can do the
-	// moment it is saved, so it takes effect now rather than at the next start.
-	if body.Name != "" && body.Name == s.engine.Config().YouTube.APIKeyEnv {
-		defer func() { go s.engine.RefreshYouTube(context.Background()) }()
-	}
-
 	if err := config.StoreSecret(body.Name, body.Value); err != nil {
 		fail(writer, http.StatusInternalServerError, err.Error())
 		return
@@ -580,7 +585,10 @@ func (s *Server) testOBS(writer http.ResponseWriter, _ *http.Request) {
 	respond(writer, http.StatusOK, result)
 }
 
-func (s *Server) testVision(writer http.ResponseWriter, request *http.Request) {
+// testModel checks the one configured provider, with an image, because the
+// image is the part that fails quietly: a text-only model answers the chat
+// summary perfectly well and then has nothing to say about her screen.
+func (s *Server) testModel(writer http.ResponseWriter, request *http.Request) {
 	ctx, cancel := context.WithTimeout(request.Context(), 60*time.Second)
 	defer cancel()
 	respond(writer, http.StatusOK,
@@ -600,24 +608,16 @@ func (s *Server) youtubeStatus(writer http.ResponseWriter, _ *http.Request) {
 	if ingest := s.engine.ChatIngest(); ingest != nil {
 		transport = ingest.TransportInUse()
 	}
-	settings := s.engine.Config().YouTube
 	respond(writer, http.StatusOK, map[string]any{
-		"enabled": true,
-		// "connected" keeps meaning what it always meant -- signed in -- so
-		// nothing that already reads it starts reporting a key as a full
-		// account. "access" is the finer answer.
-		"connected":         controller.Authenticated(),
-		"access":            string(controller.Access()),
-		"has_api_key":       s.engine.Config().YouTubeAPIKey() != "",
-		"channel_id":        settings.ChannelID,
-		"video_id":          settings.VideoID,
-		"api_key_env":       settings.APIKeyEnv,
-		"has_client_secret": youtubeHasClientSecret(),
-		// "file" means data/client_secret.json holds an OAuth client and the
-		// sign-in button will work; "none" means signing in is not on offer,
-		// and an API key is the way in.
-		"client_source":  youtubeClientSource(),
-		"channel":        controller.ChannelTitle(),
+		"enabled":   true,
+		"connected": controller.Authenticated(),
+		"access":    string(controller.Access()),
+		// Whether there is an OAuth client to sign in with at all. Without
+		// one, Connect cannot work and the page should say why rather than
+		// offering a button that fails.
+		"has_client": youtube.HasClientSecret(),
+		"channel":    controller.ChannelTitle(),
+
 		"quota_used":     controller.Quota.Used(),
 		"quota_budget":   controller.Quota.Budget(),
 		"quota_percent":  controller.Quota.Percent(),
@@ -625,41 +625,21 @@ func (s *Server) youtubeStatus(writer http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// youtubeConnect runs the consent flow.
-//
-// It is a button rather than a voice command because the consent screen is the
-// one step that genuinely needs sighted or screen-reader help, and it must
-// never open unasked in the middle of a stream.
+// youtubeConnect runs the consent flow. It blocks while she is in the browser,
+// which is why the request context is what gives up on it: closing the
+// settings page is a way to cancel a sign-in she changed her mind about.
 func (s *Server) youtubeConnect(writer http.ResponseWriter, request *http.Request) {
-	controller := s.engine.YouTube()
-	if controller == nil {
-		fail(writer, http.StatusBadRequest, "YouTube is disabled in the settings")
+	if err := s.engine.ConnectYouTube(request.Context()); err != nil {
+		fail(writer, http.StatusBadGateway, err.Error())
 		return
 	}
-	if !youtubeHasClientSecret() {
-		fail(writer, http.StatusBadRequest,
-			"Missing data/client_secret.json. Create OAuth desktop credentials "+
-				"in Google Cloud and save the file there.")
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	if err := controller.Authorize(ctx, openBrowser); err != nil {
-		respond(writer, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
-		return
-	}
-	s.engine.OnYouTubeConnected(ctx)
-	respond(writer, http.StatusOK, map[string]any{
-		"ok": true, "channel": controller.ChannelTitle(),
-	})
+	respond(writer, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) youtubeDisconnect(writer http.ResponseWriter, _ *http.Request) {
-	if controller := s.engine.YouTube(); controller != nil {
-		controller.SignOut()
-		s.engine.OnYouTubeDisconnected()
+	if err := s.engine.DisconnectYouTube(); err != nil {
+		fail(writer, http.StatusInternalServerError, err.Error())
+		return
 	}
 	respond(writer, http.StatusOK, map[string]any{"ok": true})
 }

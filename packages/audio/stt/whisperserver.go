@@ -36,6 +36,9 @@ type whisperServer struct {
 	binary    string
 	modelPath string
 	threads   int
+	beamSize  int
+	gpu       bool
+	note      string
 	language  string
 
 	mu      sync.Mutex
@@ -49,7 +52,7 @@ type whisperServer struct {
 var serverBinaries = []string{"whisper-server.exe", "whisper-server"}
 
 func newWhisperServer(settings config.STT) (Backend, error) {
-	binary, err := findNamedBinary(settings.Binary, serverBinaries)
+	build, err := chooseBuild(settings.Binary, settings.Device, serverBinaries)
 	if err != nil {
 		return nil, err
 	}
@@ -58,12 +61,38 @@ func newWhisperServer(settings config.STT) (Backend, error) {
 		return nil, err
 	}
 	return &whisperServer{
-		binary:    binary,
+		binary:    build.binary,
 		modelPath: model,
 		threads:   recognitionThreads(),
-		label: fmt.Sprintf("whisper.cpp server %s",
-			strings.TrimSuffix(filepath.Base(model), filepath.Ext(model))),
+		beamSize:  beamFor(settings.BeamSize, build.gpu),
+		gpu:       build.gpu,
+		note:      build.note,
+		label:     fmt.Sprintf("whisper.cpp %s on %s", modelLabel(model), build.where()),
 	}, nil
+}
+
+// beamFor decides how hard to search for the words.
+//
+// A wider beam is measurably more accurate and costs decode time roughly
+// linearly, which is a trade that depends entirely on where it runs: on the
+// graphics card five beams are still faster than she can notice, and on the
+// processor they are seconds she spends waiting in silence. Zero in the
+// config file means "decide", and is the default.
+func beamFor(configured int, gpu bool) int {
+	if configured > 0 {
+		return configured
+	}
+	if gpu {
+		return 5
+	}
+	return 1
+}
+
+// modelLabel is the model name without the ggml- prefix or the extension, so
+// the status page reads "whisper.cpp small on the graphics card".
+func modelLabel(path string) string {
+	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	return strings.TrimPrefix(name, "ggml-")
 }
 
 func (w *whisperServer) Name() string {
@@ -89,16 +118,30 @@ func (w *whisperServer) Load(ctx context.Context) error {
 		return &Error{Reason: "could not find a port for speech recognition: " + err.Error()}
 	}
 
-	command := exec.Command(w.binary,
+	arguments := []string{
 		"--model", w.modelPath,
 		"--host", "127.0.0.1",
 		"--port", strconv.Itoa(port),
 		"--threads", strconv.Itoa(w.threads),
+		"--beam-size", strconv.Itoa(w.beamSize),
 		// Recognition runs while she is streaming, so it must not take the
 		// machine with it. Whisper's own VAD is off: the recorder has already
 		// trimmed the silence.
 		"--no-timestamps",
-	)
+		// Whisper writes "(clears throat)" and the like as ordinary text,
+		// which then has to be matched as a command. Suppressing those tokens
+		// is cheaper than cleaning them out afterwards.
+		"--suppress-nst",
+	}
+	if w.gpu {
+		// Flash attention is a straight win on the card and unsupported off
+		// it, so it travels with the same decision.
+		arguments = append(arguments, "--flash-attn")
+	} else {
+		arguments = append(arguments, "--no-gpu")
+	}
+
+	command := exec.Command(w.binary, arguments...)
 	hideConsole(command)
 	command.Stdout = io.Discard
 	command.Stderr = io.Discard
@@ -118,8 +161,43 @@ func (w *whisperServer) Load(ctx context.Context) error {
 	w.client = &http.Client{Timeout: 60 * time.Second}
 	w.mu.Unlock()
 
-	slog.Info("speech recognition loaded", "model", filepath.Base(w.modelPath), "port", port)
+	// One throwaway inference before anything asks for a real one.
+	//
+	// A prebuilt whisper.cpp carries kernels for the cards that existed when
+	// it was published, and on a newer one the driver compiles them from PTX
+	// the first time they run: twelve seconds, once, cached afterwards. That
+	// is a fine price to pay while the rest of MikkiLens is still starting,
+	// and a terrible one to pay on the first thing she says.
+	if w.gpu {
+		w.warmUp(ctx)
+	}
+
+	slog.Info("speech recognition loaded",
+		"model", filepath.Base(w.modelPath), "port", port,
+		"accelerator", w.where(), "beam_size", w.beamSize)
+	if w.note != "" {
+		// Recognition that quietly runs ten times slower than it could is the
+		// hardest kind of problem to notice from the outside.
+		slog.Warn("speech recognition is not using the graphics card", "reason", w.note)
+	}
 	return nil
+}
+
+func (w *whisperServer) warmUp(ctx context.Context) {
+	started := time.Now()
+	if _, err := w.Transcribe(ctx, make([]float32, SampleRate), ""); err != nil {
+		// Not fatal: the next command simply pays for the compile instead.
+		slog.Warn("could not warm speech recognition up", "error", err)
+		return
+	}
+	slog.Info("speech recognition warmed up", "took", time.Since(started).Round(time.Millisecond))
+}
+
+func (w *whisperServer) where() string {
+	if w.gpu {
+		return "the graphics card"
+	}
+	return "the processor"
 }
 
 // waitForServer polls until the port answers, or the process gives up.
@@ -231,31 +309,39 @@ func freePort() (int, error) {
 	return listener.Addr().(*net.TCPAddr).Port, nil
 }
 
-// findNamedBinary looks where a person would actually put it: the configured
-// path, then data/models, then anywhere on PATH.
-func findNamedBinary(configured string, names []string) (string, error) {
+// namedBinaries looks where a person would actually put a whisper.cpp build:
+// the configured path, then data/models, then anywhere on PATH.
+//
+// Every match is returned rather than the first, in the order they were found,
+// because which one to run is not a question of order alone: a GPU build
+// further down the list beats a processor-only build at the top of it.
+func namedBinaries(configured string, names []string) ([]string, error) {
 	if configured != "" {
 		if resolved, err := exec.LookPath(configured); err == nil {
-			return resolved, nil
+			return []string{resolved}, nil
 		}
 		if _, err := os.Stat(configured); err == nil {
-			return configured, nil
+			return []string{configured}, nil
 		}
-		return "", &Error{Reason: "the configured whisper.cpp binary was not found: " + configured}
+		return nil, &Error{Reason: "the configured whisper.cpp binary was not found: " + configured}
 	}
 
-	for _, directory := range binarySearchPath() {
+	found := []string{}
+	for _, directory := range binaryDirectories() {
 		for _, name := range names {
 			candidate := filepath.Join(directory, name)
 			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-				return candidate, nil
+				found = append(found, candidate)
 			}
 		}
 	}
 	for _, name := range names {
 		if resolved, err := exec.LookPath(name); err == nil {
-			return resolved, nil
+			found = append(found, resolved)
 		}
 	}
-	return "", &Error{Reason: "no whisper.cpp build was found"}
+	if len(found) == 0 {
+		return nil, &Error{Reason: "no whisper.cpp build was found"}
+	}
+	return found, nil
 }

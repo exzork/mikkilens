@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -320,11 +321,18 @@ func (e *Engine) setTitle(slots map[string]string) error {
 		// Writing is the one thing a key cannot do. Saying "there is no
 		// broadcast" here would send her looking for a stream that is running
 		// perfectly well.
-		if _, needsAccount := err.(*youtube.NotAuthenticatedError); needsAccount {
+		var expired *youtube.ExpiredCredentialsError
+		switch {
+		case errors.As(err, &expired):
+			// A sign-in that used to work and has stopped needs a different
+			// answer from one that was never made: this one is fixed in OBS,
+			// and nothing else she tries will fix it.
+			e.bus.SayKey("youtube.sign_in_expired", feedback.Error)
+		case errors.As(err, new(*youtube.NotAuthenticatedError)):
 			e.bus.SayKey("youtube.needs_sign_in", feedback.Error)
-			return nil
+		default:
+			e.bus.SayKey("youtube.no_broadcast", feedback.Error)
 		}
-		e.bus.SayKey("youtube.no_broadcast", feedback.Error)
 		return nil
 	}
 	e.store.Update(state.Changes{"broadcast_title": text})
@@ -430,7 +438,7 @@ func visionHandlers(e *Engine) map[string]intent.Handler {
 
 func (e *Engine) askScreen(slots map[string]string) error {
 	settings := e.Config()
-	if !settings.Vision.Configured() {
+	if !settings.Model.Configured() {
 		e.bus.SayKey("vision.no_provider", feedback.Error)
 		return nil
 	}

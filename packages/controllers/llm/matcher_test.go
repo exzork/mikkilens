@@ -173,9 +173,8 @@ func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 	defer server.Close()
 
 	settings := config.Default()
-	settings.Matcher = config.Matcher{
-		Enabled: true, Base: server.URL + "/v1", Model: "gemma3n:e2b",
-	}
+	settings.Model = config.Model{Base: server.URL + "/v1", Model: "gemma3n:e2b"}
+	settings.Matcher = config.Matcher{Enabled: true}
 
 	guess, err := New(settings, i18n.Load("id")).MatchCommand(
 		context.Background(), "tolong jangan bacakan chatnya dulu",
@@ -208,7 +207,7 @@ func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 // that an unconfigured matcher costs nothing at all.
 func TestAnUnconfiguredMatcherRefusesWithoutCallingAnything(t *testing.T) {
 	settings := config.Default()
-	settings.Matcher = config.Matcher{Enabled: true}
+	settings.Matcher = config.Matcher{Enabled: true} // on, but nothing to ask
 
 	_, err := New(settings, i18n.Load("id")).MatchCommand(
 		context.Background(), "apa saja", []CommandOption{{ID: "mute_mic"}})
@@ -218,15 +217,20 @@ func TestAnUnconfiguredMatcherRefusesWithoutCallingAnything(t *testing.T) {
 	}
 }
 
-// Turning it off must actually turn it off, even with a base URL still filled
-// in from a previous experiment.
-func TestDisablingTheMatcherIgnoresAnEndpointLeftBehind(t *testing.T) {
+// Turning it off must actually turn it off. It shares the endpoint with
+// everything else now, so "off" cannot mean an empty base URL -- it has to be
+// the switch, or unrecognised speech would keep being sent to a provider that
+// is configured for summaries and screenshots.
+func TestDisablingTheMatcherStopsItUsingTheSharedEndpoint(t *testing.T) {
 	settings := config.Default()
-	settings.Matcher = config.Matcher{
-		Enabled: false, Base: "http://localhost:11434/v1", Model: "gemma3n:e2b",
-	}
+	settings.Model = config.Model{Base: "http://localhost:11434/v1", Model: "gemma3n:e2b"}
+	settings.Matcher = config.Matcher{Enabled: false}
 
-	if base, model, _ := settings.MatcherEndpoint(); base != "" || model != "" {
-		t.Errorf("disabled matcher still resolves to %q/%q", base, model)
+	if endpoint := New(settings, i18n.Load("id")).MatcherEndpoint(); endpoint.Configured() {
+		t.Errorf("a disabled matcher still resolves to %+v", endpoint)
+	}
+	// The same settings must still serve everything else.
+	if !New(settings, i18n.Load("id")).Endpoint().Configured() {
+		t.Error("switching the matcher off must not switch the model off")
 	}
 }

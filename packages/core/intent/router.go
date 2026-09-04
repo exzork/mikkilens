@@ -25,11 +25,15 @@ import (
 // the router can reach it without depending on audio hardware.
 type Priority int
 
+// The tiers are the app's own voice first, then anything someone paid for,
+// then the chat backlog. Donations sit above chat because a donation arrives
+// once and matters; chat is a stream that will still be there in a minute.
 const (
-	PriorityError   Priority = 0
-	PriorityConfirm Priority = 1
-	PriorityResult  Priority = 2
-	PriorityChat    Priority = 3
+	PriorityError    Priority = 0
+	PriorityConfirm  Priority = 1
+	PriorityResult   Priority = 2
+	PriorityDonation Priority = 3
+	PriorityChat     Priority = 4
 )
 
 // String is the name used in the log page and in tests.
@@ -41,6 +45,8 @@ func (p Priority) String() string {
 		return "CONFIRM"
 	case PriorityResult:
 		return "RESULT"
+	case PriorityDonation:
+		return "DONATION"
 	case PriorityChat:
 		return "CHAT"
 	default:

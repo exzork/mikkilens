@@ -17,6 +17,13 @@
 /config.toml
 /data/
 
+# Wake-word training: gigabytes of borrowed audio and the environment that
+# processes it. All of it is reproducible from tools/wakeword, and the one file
+# worth keeping -- the trained model -- is committed beside the code that loads
+# it.
+/.wakeword/
+/tools/wakeword/.venv/
+
 # Credentials, which never belong in a public repository.
 #
 # .npmrc carries an npm auth token. The OAuth client is read from
@@ -31,3 +38,17 @@
 .DS_Store
 Thumbs.db
 *.swp
+/tools/wakeword/__pycache__/
+
+# Scratch from the tools around the work, not the work.
+#
+# Logs an agent or the browser driver left behind, a captured engine run, and
+# one-off binaries built to answer a question. None of it rebuilds anything and
+# .trwatch alone is several megabytes, which is a poor thing to carry forever
+# in a repository this small.
+/.omo/
+/.playwright-mcp/
+/.trwatch/
+/score.exe
+/we.txt
+/wo.txt

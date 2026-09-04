@@ -1,0 +1,20 @@
+# Training the wake word. None of this is needed to build or run MikkiLens --
+# the engine only ever loads the .onnx file that comes out the far end.
+#
+# Install with uv, which is what the Makefile target uses:
+#
+#   uv venv --python 3.11 tools/wakeword/.venv
+#   uv pip install -r tools/wakeword/requirements.txt
+#
+# torch is the CPU build on purpose. The classifier is three small layers and
+# trains in a few minutes on a processor; a CUDA build is three gigabytes to
+# download for no gain, on a machine whose graphics card is busy encoding video.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+numpy>=2.0
+scipy>=1.13
+soundfile>=0.12
+onnx>=1.16
+onnxruntime>=1.18
+torch>=2.4
+pyarrow>=16.0

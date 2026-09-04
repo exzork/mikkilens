@@ -53,6 +53,7 @@ const (
 // KnownSlots are the placeholders the handlers understand.
 var KnownSlots = map[string]bool{
 	"scene": true, "source": true, "text": true, "question": true, "value": true,
+	"channel": true,
 }
 
 // Normalize lowercases, strips punctuation and collapses whitespace.

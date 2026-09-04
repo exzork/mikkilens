@@ -20,13 +20,11 @@ func SetStartup(bool) error {
 	return errors.New("running at login is only available on Windows")
 }
 
-func openBrowser(url string) {
+// OpenBrowser opens a URL in the desktop's browser.
+func OpenBrowser(url string) {
 	command := "xdg-open"
 	if runtime.GOOS == "darwin" {
 		command = "open"
 	}
 	_ = exec.Command(command, url).Start()
 }
-
-func youtubeHasClientSecret() bool { return youtube.HasClientSecret() }
-func youtubeClientSource() string  { return youtube.ClientSource() }

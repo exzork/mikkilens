@@ -14,7 +14,6 @@ import (
 	"image/jpeg"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/kbinani/screenshot"
 	"golang.org/x/image/draw"
@@ -46,33 +45,15 @@ func New(settings config.Config, locale *i18n.Locale) *Controller {
 	return &Controller{settings: settings, locale: locale, llm: llm.New(settings, locale)}
 }
 
-// Endpoint is the vision provider: whatever she configured, or the model
-// MikkiLens is already running if it can see.
+// Endpoint is the one configured provider, the same one everything else asks.
 //
-// Falling back matters more here than anywhere else in the application.
-// Describing the screen is the feature that otherwise needs an account, a
-// payment card and an API key pasted into a settings page -- three things that
-// are hard to do without sight, for the one feature that exists purely because
-// she cannot see. If a downloaded model can do it, it should, without being
-// asked and without anything leaving the machine.
-//
-// Anything she configured explicitly still wins: a cloud model is better at
-// this, and choosing one is a choice worth respecting.
+// Which means the model has to be able to see. That is a real requirement and
+// it is stated plainly rather than worked around: describing the screen is the
+// feature this application exists for, and a text-only model configured here
+// fails at the point she asks, which is exactly where the settings page says
+// to test it.
 func (c *Controller) Endpoint() llm.Endpoint {
-	vision := c.settings.Vision
-	if !vision.Configured() && llm.Bundled().Vision() {
-		return llm.Endpoint{
-			BaseURL: llm.Bundled().BaseURL(),
-			Model:   "local",
-			Timeout: time.Duration(vision.TimeoutS * float64(time.Second)),
-		}
-	}
-	return llm.Endpoint{
-		BaseURL: vision.Base,
-		Model:   vision.Model,
-		APIKey:  c.settings.VisionAPIKey(),
-		Timeout: time.Duration(vision.TimeoutS * float64(time.Second)),
-	}
+	return c.llm.Endpoint()
 }
 
 // -- capture ------------------------------------------------------------------
@@ -230,7 +211,7 @@ func (c *Controller) DescribeImage(ctx context.Context, question string, jpegByt
 func (c *Controller) SelfTest(ctx context.Context) llm.SelfTestResult {
 	endpoint := c.Endpoint()
 	if !endpoint.Configured() {
-		return llm.SelfTestResult{Error: "model penglihatan belum diatur"}
+		return llm.SelfTestResult{Error: "modelnya belum diatur"}
 	}
 
 	sample, err := encodeJPEG(testCard())

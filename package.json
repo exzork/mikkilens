@@ -11,14 +11,18 @@
     "build:daemon": "go build -ldflags \"-extldflags=-Wl,--strip-debug\" -o dist/mikkilensd.exe ./apps/daemon",
     "build:desktop": "npm run build --workspace @mikkilens/desktop",
     "start": "npm run start --workspace @mikkilens/desktop",
-    "dev": "npm run dev --workspace @mikkilens/desktop",
-    "package": "npm run build:daemon && npm run package --workspace @mikkilens/desktop",
+    "dev": "node scripts/dev.mjs",
+    "fetch:stt": "node scripts/fetch-whisper.mjs",
+    "fetch:wake": "node scripts/fetch-wake.mjs",
+    "docs": "electron scripts/build-docs.mjs",
+    "dev:window": "npm run dev --workspace @mikkilens/desktop",
+    "package": "npm run build:daemon && npm run fetch:wake && npm run package --workspace @mikkilens/desktop",
     "test": "npm run test:go && npm run test:desktop",
     "test:go": "go test ./...",
     "test:desktop": "npm run typecheck --workspace @mikkilens/desktop",
     "lint": "gofmt -l apps packages && go vet ./...",
-    "package:dir": "npm run build:daemon && npm run package:dir --workspace @mikkilens/desktop",
-    "release": "npm run build:daemon && npm run release --workspace @mikkilens/desktop"
+    "package:dir": "npm run build:daemon && npm run fetch:wake && npm run package:dir --workspace @mikkilens/desktop",
+    "release": "npm run build:daemon && npm run fetch:wake && npm run release --workspace @mikkilens/desktop"
   },
   "engines": {
     "node": ">=20"

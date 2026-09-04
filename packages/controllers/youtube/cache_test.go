@@ -57,16 +57,11 @@ func TestInvalidatingForgetsTheBroadcastEntirely(t *testing.T) {
 	controller := &Controller{Quota: NewLedger(10000, 80)}
 	controller.broadcast = &Broadcast{ID: "abc"}
 	controller.broadcastFetched = time.Now()
-	controller.publicResolved = time.Now()
 
 	controller.InvalidateBroadcast()
 
 	if cached, fresh := controller.cachedBroadcast(); fresh || cached != nil {
 		t.Error("the broadcast must be forgotten, not merely aged")
-	}
-	if !controller.publicResolved.IsZero() {
-		t.Error("the key-only path caches which video is live too, and it is " +
-			"just as wrong once chat has failed")
 	}
 }
 

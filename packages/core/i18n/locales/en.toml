@@ -14,6 +14,19 @@ shutdown = "MikkiLens shutting down."
 restarted = "MikkiLens restarted."
 ui_ready = "Settings page open at {url}"
 
+[assets]
+# The first-run download. She cannot see a progress bar, so the size is said
+# up front -- "half a gigabyte" is the number that decides whether now is a
+# good moment, and it is useless after the download has already started.
+starting = "There are some things to download before MikkiLens can hear you, about {size}. This happens once. You can carry on using everything else while it runs."
+stage_starting = "Downloading {what}, about {size}."
+can_hear = "The speech model is ready. MikkiLens can hear you now."
+failed = "Could not download {what}: {reason}. It will try again next time MikkiLens starts, and pick up where it left off."
+stage_engine = "the speech recognition engine"
+stage_model = "the speech model"
+stage_wake = "the wake word files"
+stage_gpu = "the graphics card build, which answers far faster"
+
 [status]
 live = "You are live."
 not_live = "Not streaming."
@@ -68,6 +81,15 @@ up_to_date = "Chat is up to date."
 message = "{author} says: {text}"
 superchat = "Super chat from {author}, {amount}. {text}"
 member = "{author} just became a member."
+member_level = "{author} just became a {level} member."
+member_upgraded = "{author} upgraded to {level}."
+member_months = "{author} has been a member for {months} months. {text}"
+member_months_level = "{author} has been a {level} member for {months} months. {text}"
+gift = "{author} gifted {count} memberships."
+gift_level = "{author} gifted {count} {level} memberships."
+gift_received = "{author} received a gift membership from {gifter}."
+gift_received_unknown = "{author} received a gift membership."
+gift_others = "And {count} others received one too."
 connected = "YouTube chat connected."
 disconnected = "YouTube chat disconnected. Reconnecting."
 unavailable = "This broadcast does not have live chat switched on, so there is nothing to read. I will keep checking."
@@ -75,25 +97,47 @@ summarizing = "Summarizing chat."
 summary = "Chat summary: {text}"
 quota_warning = "YouTube quota is {percent} percent used. Slowing chat down."
 
+[tako]
+unreachable = "I cannot reach the Tako donation overlay, so I will not know to go quiet when a donation comes in. Check the overlay link on the settings page."
+donation = "Donation from {donor}, {amount}. {text}"
+donation_no_message = "Donation from {donor}, {amount}."
+
+[trakteer]
+unreachable = "I cannot reach the Trakteer donation overlay, so I will not know to go quiet when a donation comes in. Check the overlay link on the settings page."
+donation = "{donor} gave {count} {unit}, {price}. {text}"
+donation_no_message = "{donor} gave {count} {unit}, {price}."
+
 [vision]
 looking = "Looking at your screen."
 failed = "Could not read the screen: {reason}"
-no_provider = "The vision model is not configured yet. Open the settings page."
+no_provider = "The model is not set up yet. Open the settings page and fill in the model endpoint."
 
 [youtube]
 connected = "YouTube connected as {channel}."
-connected_public = "YouTube connected with an API key. I can read the viewer count and the title, but changing the title needs you to sign in."
-needs_sign_in = "That needs you to sign in to YouTube. The viewer count and the title work with just the key."
-not_connected = "YouTube is not connected. Open the settings page."
-sign_in_expired = "Your YouTube sign-in has expired. Open the settings app and connect YouTube again."
+needs_sign_in = "That needs YouTube connected. Open the settings page and press Connect YouTube."
+not_connected = "YouTube is not connected. Open the settings page and press Connect YouTube."
+sign_in_expired = "The YouTube sign-in is no longer accepted. Open the settings page and press Connect YouTube again."
 no_broadcast = "There is no active broadcast."
 title_changed = "Title changed to {text}."
 title_is = "The current title is: {text}"
 
-[matcher]
-downloading = "Downloading the language model, {percent} percent."
-downloaded = "The language model is ready. I will understand commands better now."
-download_failed = "The language model could not be downloaded: {reason}"
+[channel]
+switched = "Now on {channel}."
+followed = "OBS switched profile. Now on {channel}."
+already = "Already on {channel}."
+current = "You are on {channel}."
+list = "Your channels: {channels}."
+not_found = "I could not find a channel called {channel}."
+none = "No channels are set up yet. Open the settings page and connect one."
+not_connected = "{channel} is not connected. Open the settings page and connect it."
+sign_in_expired = "The {channel} sign-in has expired. Open the settings page and connect it again."
+live = "You are live. Stop the stream before switching to {channel}."
+busy = "OBS is still loading scenes. Try again in a moment."
+no_profile = "{channel} does not have an OBS profile set yet."
+loading_scenes = "Loading the {channel} scenes."
+obs_failed = "Could not switch OBS: {reason}"
+
+
 
 [commands]
 reloaded = "Commands reloaded. {count} commands available."

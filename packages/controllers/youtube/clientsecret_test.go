@@ -94,33 +94,6 @@ func TestWithNoClientAtAllTheErrorSaysWhatToDo(t *testing.T) {
 
 // -- streaming authorization --------------------------------------------------
 
-// Streaming is the transport that keeps chat inside the quota, so it has to
-// work on the key-only path too, not just when signed in.
-func TestStreamingIsAuthorizedWithTheAPIKeyWhenNotSignedIn(t *testing.T) {
-	isolate(t)
-
-	controller := &Controller{apiKey: "AIza-test", Quota: NewLedger(10000, 80)}
-
-	request, err := http.NewRequest(http.MethodGet,
-		"https://youtube.googleapis.com/youtube/v3/liveChat/messages/stream?liveChatId=abc", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := controller.AuthorizeStream(request); err != nil {
-		t.Fatalf("AuthorizeStream: %v", err)
-	}
-
-	if got := request.URL.Query().Get("key"); got != "AIza-test" {
-		t.Errorf("key is %q, want the API key", got)
-	}
-	if got := request.URL.Query().Get("liveChatId"); got != "abc" {
-		t.Errorf("the existing query was lost: liveChatId is %q", got)
-	}
-	if request.Header.Get("Authorization") != "" {
-		t.Error("a key must not be sent as a bearer token")
-	}
-}
-
 func TestStreamingWithNoWayInIsRefusedRatherThanSentUnauthorized(t *testing.T) {
 	isolate(t)
 

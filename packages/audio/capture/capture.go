@@ -33,6 +33,11 @@ const (
 
 	prerollMS     = 400
 	prerollFrames = prerollMS / FrameMS
+
+	// levelDecay is how fast the meter falls between peaks: about half a
+	// second from a shout to silence, which is slow enough to see and fast
+	// enough to still look live.
+	levelDecay = 0.88
 )
 
 // Error is a microphone failure worth speaking aloud.
@@ -56,6 +61,7 @@ type Stream struct {
 	partial    []float32
 	framesSeen int
 	lastError  string
+	level      float64
 }
 
 // NewStream prepares a stream on one device. A nil device means the system
@@ -125,6 +131,19 @@ func (s *Stream) FramesSeen() int {
 	return s.framesSeen
 }
 
+// Level is how loud the microphone is right now, from 0 to 1.
+//
+// It decays rather than being the last frame outright, so a page reading it
+// five times a second sees the peaks of speech instead of whichever instant it
+// happened to ask in. The settings page draws it as a bar: "the wake word is
+// not hearing you" and "the microphone is dead" look identical from the
+// outside, and this is what tells them apart.
+func (s *Stream) Level() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.level
+}
+
 // LastError is the most recent problem the capture thread hit.
 //
 // A microphone that dies quietly -- a headset unplugged mid-stream, most often
@@ -192,6 +211,12 @@ func (s *Stream) onAudio(input []float32) {
 		s.preroll = append(s.preroll, frame)
 		if len(s.preroll) > prerollFrames {
 			s.preroll = s.preroll[len(s.preroll)-prerollFrames:]
+		}
+
+		if loudness := Level(frame); loudness > s.level {
+			s.level = loudness
+		} else {
+			s.level *= levelDecay
 		}
 	}
 	s.partial = append(s.partial[:0], chunk[count*FrameSamples:]...)

@@ -31,12 +31,12 @@ import (
 // few tokens, and a cap keeps a confused model from monologuing.
 const MatchLimit = 120
 
-// matchTimeout is how long to wait for a local model before giving up and
-// saying the command was not understood.
+// matchTimeout is how long to wait before giving up and saying the command was
+// not understood.
 //
-// Longer than a remote call would need, because this is expected to be a
-// small model on the same machine as OBS and a running encode. Past this she
-// is better served by a plain "I did not understand" than by more silence.
+// Generous, because the endpoint may well be a small model running on the same
+// machine as OBS and a live encode. Past this she is better served by a plain
+// "I did not understand" than by more silence.
 const matchTimeout = 12 * time.Second
 
 // CommandOption is one command the model may choose, described by its id and
@@ -82,22 +82,21 @@ func (c *Controller) MatchCommand(
 	return parseGuess(answer), nil
 }
 
-// MatcherEndpoint is the small local model used for fallback matching.
+// MatcherEndpoint is the same provider as everything else, with a timeout of
+// its own.
 //
-// Separate from Endpoint on purpose: that one falls back to the vision
-// provider, which for this would mean sending every unrecognised utterance to
-// a paid cloud API without anyone asking for that.
+// The timeout is the only difference worth having. A summary she asked for can
+// take its time; this one is in the way of a command she has already spoken,
+// and past a few seconds silence is worse than an honest "I did not
+// understand".
+//
+// Switching [matcher] off returns an unconfigured endpoint rather than a
+// working one, so unrecognised speech is never sent anywhere.
 func (c *Controller) MatcherEndpoint() Endpoint {
-	base, model, key := c.settings.MatcherEndpoint()
-	if base == "" && Bundled().BaseURL() != "" {
-		// The model MikkiLens runs itself. Any model name will do: the server
-		// has exactly one loaded and ignores what it is asked for.
-		return Endpoint{
-			BaseURL: Bundled().BaseURL(),
-			Model:   "local",
-			Timeout: matchTimeout,
-		}
+	if !c.settings.Matcher.Enabled {
+		return Endpoint{}
 	}
+	base, model, key := c.settings.ModelEndpoint()
 	return Endpoint{BaseURL: base, Model: model, APIKey: key, Timeout: matchTimeout}
 }
 

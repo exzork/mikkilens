@@ -166,7 +166,7 @@ func (w *Wizard) SelfTest(ctx context.Context) []CheckResult {
 		w.checkInput(),
 		w.checkVoice(),
 		w.checkRecognition(ctx),
-		w.checkVision(),
+		w.checkModel(),
 	}
 	for _, result := range results {
 		if result.OK {
@@ -222,11 +222,11 @@ func (w *Wizard) checkRecognition(ctx context.Context) CheckResult {
 	return CheckResult{Item: "Speech recognition", OK: true, Detail: transcriber.Describe()}
 }
 
-func (w *Wizard) checkVision() CheckResult {
-	if !w.settings.Vision.Configured() {
-		return CheckResult{Item: "Vision model", Detail: "not configured yet"}
+func (w *Wizard) checkModel() CheckResult {
+	if !w.settings.Model.Configured() {
+		return CheckResult{Item: "Model", Detail: "not configured yet"}
 	}
-	return CheckResult{Item: "Vision model", OK: true, Detail: w.settings.Vision.Model}
+	return CheckResult{Item: "Model", OK: true, Detail: w.settings.Model.Model}
 }
 
 // Run walks the whole first-run setup and saves the result.

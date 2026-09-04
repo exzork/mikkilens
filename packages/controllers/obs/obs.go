@@ -29,6 +29,27 @@ import (
 // referring to a scene or source that exists.
 const nameMatchThreshold = 65.0
 
+// responseTimeout is how long any one request may take.
+//
+// Generous, because SetCurrentSceneCollection blocks until OBS has torn down
+// every source and built the next collection's, and on a real scene collection
+// that is seconds rather than milliseconds. Timing that out would report a
+// switch as failed while OBS goes on and completes it.
+//
+// It must never be set with goobs.WithResponseTimeout, which is deprecated and
+// reads its time.Duration as milliseconds -- so the obvious 5*time.Second asked
+// for about fifty-eight days, meaning nothing ever timed out and a stalled OBS
+// hung the reconnect loop for good.
+const responseTimeout = 30 * time.Second
+
+// reloadPatience is how long a scene collection change may be in flight before
+// requests are allowed again regardless.
+//
+// The pause is normally lifted by the "changed" event; this is the backstop for
+// an event that never arrives. Without it one missed message would leave every
+// later command answering "OBS is reloading" until she restarts.
+const reloadPatience = 90 * time.Second
+
 // outputCaptureKinds capture what comes *out* of a device. These are the ones
 // that would put MikkiLens's own voice onto the broadcast.
 var outputCaptureKinds = map[string]bool{
@@ -53,6 +74,18 @@ type NotConnectedError struct{ Reason string }
 
 func (e *NotConnectedError) Error() string { return e.Reason }
 
+// ReloadingError means OBS is swapping scene collections and cannot be asked
+// anything until it has finished. It clears itself; nothing has gone wrong.
+type ReloadingError struct{ Reason string }
+
+func (e *ReloadingError) Error() string { return e.Reason }
+
+// StreamingError means the change would reconfigure an output OBS is using, so
+// it has to wait until she is off air.
+type StreamingError struct{ Reason string }
+
+func (e *StreamingError) Error() string { return e.Reason }
+
 // SceneItem is one source inside a scene.
 type SceneItem struct {
 	ID      int
@@ -63,11 +96,15 @@ type SceneItem struct {
 // Event is a change she made in OBS directly, which the app mirrors so its
 // state never drifts from what is actually on screen.
 type Event struct {
-	Kind      string // "scene_changed" | "stream_state" | "mute_changed"
-	SceneName string
-	InputName string
-	Muted     bool
-	Active    bool
+	// Kind is one of "scene_changed", "stream_state", "mute_changed",
+	// "profile_changed", "collection_reloading" or "collection_changed".
+	Kind           string
+	SceneName      string
+	InputName      string
+	ProfileName    string
+	CollectionName string
+	Muted          bool
+	Active         bool
 }
 
 // Options configure the controller.
@@ -94,6 +131,12 @@ type Controller struct {
 	running      bool
 	wasConnected bool
 	lastError    string
+
+	// reloadingSince is when a scene collection change started, and zero when
+	// none is in flight. obs-websocket is explicit that a request made while a
+	// collection is loading is undefined behaviour and can crash OBS, so every
+	// request is refused for the duration rather than merely discouraged.
+	reloadingSince time.Time
 }
 
 // New prepares a controller. Nothing connects until Start is called.
@@ -145,7 +188,7 @@ func (c *Controller) Connect() error {
 
 	client, err := goobs.New(address,
 		goobs.WithPassword(password),
-		goobs.WithResponseTimeout(5*time.Second))
+		goobs.WithResponseTimeoutDuration(responseTimeout))
 	if err != nil {
 		c.mu.Lock()
 		c.lastError = err.Error()
@@ -252,6 +295,11 @@ func (c *Controller) reconnectLoop(stop <-chan struct{}, done chan<- struct{}) {
 // client pointer is non-nil would miss a socket that died quietly, which is
 // exactly the case this loop exists to catch.
 func (c *Controller) probe() error {
+	if c.Reloading() {
+		// Asking anything now is the undefined behaviour the pause exists to
+		// avoid, and a health check is not worth crashing OBS over.
+		return nil
+	}
 	client, err := c.request()
 	if err != nil {
 		return err
@@ -313,6 +361,21 @@ func (c *Controller) watchEvents(client *goobs.Client) {
 			callback(Event{
 				Kind: "mute_changed", InputName: event.InputName, Muted: event.InputMuted,
 			})
+		case *events.CurrentProfileChanged:
+			// The profile carries the stream key, so this is OBS saying she is
+			// pointed at a different channel now -- whether MikkiLens asked for
+			// the change or she picked it from the menu herself.
+			callback(Event{Kind: "profile_changed", ProfileName: event.ProfileName})
+		case *events.CurrentSceneCollectionChanging:
+			c.setReloading(true)
+			callback(Event{
+				Kind: "collection_reloading", CollectionName: event.SceneCollectionName,
+			})
+		case *events.CurrentSceneCollectionChanged:
+			c.setReloading(false)
+			callback(Event{
+				Kind: "collection_changed", CollectionName: event.SceneCollectionName,
+			})
 		}
 	}
 }
@@ -322,19 +385,54 @@ func (c *Controller) watchEvents(client *goobs.Client) {
 func (c *Controller) request() (*goobs.Client, error) {
 	c.mu.RLock()
 	client := c.client
+	since := c.reloadingSince
 	c.mu.RUnlock()
 
 	if client == nil {
 		return nil, &NotConnectedError{Reason: "not connected to OBS"}
 	}
+	if !since.IsZero() && time.Since(since) < reloadPatience {
+		return nil, &ReloadingError{Reason: "OBS is loading a scene collection"}
+	}
 	return client, nil
+}
+
+// Reloading reports whether OBS is in the middle of a scene collection change.
+func (c *Controller) Reloading() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return !c.reloadingSince.IsZero() && time.Since(c.reloadingSince) < reloadPatience
+}
+
+func (c *Controller) setReloading(active bool) {
+	c.mu.Lock()
+	if active {
+		c.reloadingSince = time.Now()
+	} else {
+		c.reloadingSince = time.Time{}
+	}
+	c.mu.Unlock()
 }
 
 func (c *Controller) fail(err error) error {
 	c.mu.Lock()
 	c.lastError = err.Error()
 	c.mu.Unlock()
-	return &Error{Reason: err.Error()}
+
+	// goobs pairs a response with its request by reading the next one off a
+	// shared channel, so a request that times out leaves its late response
+	// waiting for the *following* request to collect -- which then fails on a
+	// mismatched id, and so does every request after it, for good. The
+	// connection is unusable from here, so it is dropped and the reconnect loop
+	// builds a clean one rather than answering wrongly forever.
+	message := err.Error()
+	if strings.Contains(message, "timeout waiting for response") ||
+		strings.Contains(message, "mismatched ID") {
+		slog.Warn("dropping a desynchronised OBS connection", "error", err)
+		c.Disconnect()
+		c.reportDisconnected(message)
+	}
+	return &Error{Reason: message}
 }
 
 // -- scenes -------------------------------------------------------------------

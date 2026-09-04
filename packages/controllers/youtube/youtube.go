@@ -1,9 +1,21 @@
 // Package youtube covers OAuth, broadcast metadata, and quota accounting.
 //
-// The consent screen is a browser flow and genuinely cannot be driven by
-// voice. It is the one setup step that needs sighted or screen-reader help.
-// Everything after it is voice-operable, because the refresh token is cached
-// and reused.
+// One way in, and one button for it: MikkiLens runs the consent flow itself,
+// with the OAuth client in data/client_secret.json, and caches the refresh
+// token beside it. The browser page is the one setup step that genuinely
+// cannot be driven by voice; everything after it can, because the token is
+// reused and renewed without asking again.
+//
+// Chat does not come from here at all. It is read from the public page, the
+// way OBS's own chat dock reads it, so it needs no credential and spends no
+// quota. What the sign-in buys is the viewer count, the title, and the one
+// write MikkiLens makes.
+//
+// An API key with a channel or stream link used to sit beside this as a
+// second, read-only way in. It bought the viewer count and the title without
+// an account, at the price of a Cloud project, a key to copy and a link to
+// paste -- three more fields to read out, in an application whose argument is
+// that she should not have to read a settings page at all.
 package youtube
 
 import (
@@ -15,7 +27,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -26,25 +37,24 @@ import (
 	yt "google.golang.org/api/youtube/v3"
 
 	"github.com/exzork/mikkilens/packages/core/config"
-	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
 // Scope is the narrowest one that covers what MikkiLens actually does.
 //
 // The obvious choice is youtube.force-ssl, and it is the wrong one. Google
 // reads it out on the consent screen as "see, edit, and permanently delete
-// your YouTube videos, ratings, comments, and captions" -- which is alarming,
-// accurate, and far more than this application ever asks for. She has to have
-// that sentence read to her by whoever is helping, and being asked to hand
-// over deletion rights to her own channel is a good reason to say no.
+// your YouTube videos, ratings, comments, and captions" -- alarming, accurate,
+// and far more than this application ever asks for. She has to have that
+// sentence read to her by whoever is helping, and being asked to hand over
+// deletion rights to her own channel is a good reason to say no.
 //
 // Every call MikkiLens makes is satisfied by plain youtube, which Google
 // describes as "manage your YouTube account":
 //
 //	liveBroadcasts.list       read
 //	liveBroadcasts.update     write -- the only one, and only the title
-//	liveChatMessages.list     read
-//	liveChat.messages.stream  read
+//	liveChatMessages.list     read -- fallback only; chat comes from the page
+//	liveChat.messages.stream  read -- fallback only
 //	videos.list               read
 //	channels.list             read
 //	search.list               read
@@ -68,13 +78,13 @@ type NotAuthenticatedError struct{ Reason string }
 
 func (e *NotAuthenticatedError) Error() string { return e.Reason }
 
-// ExpiredCredentialsError means the saved consent is no longer accepted and
-// she has to sign in again.
+// ExpiredCredentialsError means the sign-in is no longer accepted and she has
+// to connect YouTube again.
 //
-// This is worth its own type rather than folding into "not connected", because
-// the two need different answers. Not connected means she never signed in;
-// this means she did, it worked, and it stopped -- and the only thing that
-// fixes it is pressing the button again.
+// Worth its own type rather than folding into "not connected", because the two
+// need different answers. Not connected means she never signed in; this means
+// she did, it worked, and it stopped -- and the only thing that fixes it is
+// pressing Connect once more.
 type ExpiredCredentialsError struct{ Reason string }
 
 func (e *ExpiredCredentialsError) Error() string { return e.Reason }
@@ -113,13 +123,19 @@ type Broadcast struct {
 	Viewers    int    `json:"viewers"`
 }
 
-// Controller talks to the YouTube Data API, signed in or with a key.
+// Controller talks to the YouTube Data API for one channel at a time.
+//
+// One at a time rather than one controller per channel, because everything
+// downstream -- chat ingest, the reader, the quota ledger, what the settings
+// page shows -- is about the channel she is streaming on now. Switching swaps
+// the sign-in underneath and drops what was learned about the old channel,
+// which is the same thing signing in afresh does and reuses the same paths.
 type Controller struct {
-	mu           sync.RWMutex
-	service      *yt.Service
-	tokenSource  oauth2.TokenSource
-	channelTitle string
-	broadcast    *Broadcast
+	mu          sync.RWMutex
+	service     *yt.Service
+	tokenSource oauth2.TokenSource
+	account     Account
+	broadcast   *Broadcast
 
 	// When the cached broadcast was fetched. Without this the first answer is
 	// kept for the life of the process, which is wrong for everything on it:
@@ -127,24 +143,13 @@ type Controller struct {
 	// id itself once she starts a new stream.
 	broadcastFetched time.Time
 
-	// The read-only path: an API key, a channel to watch, and when the live
-	// video was last looked up.
-	publicService  *yt.Service
-	apiKey         string
-	channelID      string
-	videoID        string
-	publicResolved time.Time
-
 	Quota *Ledger
 }
 
 // New builds a controller from the YouTube settings.
-func New(settings config.YouTube, apiKey string) *Controller {
+func New(settings config.YouTube) *Controller {
 	return &Controller{
-		Quota:     NewLedger(settings.QuotaBudget, settings.QuotaWarnPercent),
-		apiKey:    apiKey,
-		channelID: ParseChannelID(settings.ChannelID),
-		videoID:   ParseVideoID(settings.VideoID),
+		Quota: NewLedger(settings.QuotaBudget, settings.QuotaWarnPercent),
 	}
 }
 
@@ -152,33 +157,24 @@ func New(settings config.YouTube, apiKey string) *Controller {
 type Access string
 
 const (
-	// AccessNone: neither a sign-in nor a key.
+	// AccessNone: no sign-in to borrow.
 	AccessNone Access = "none"
-	// AccessPublic: an API key. Reading works, writing does not.
-	AccessPublic Access = "public"
 	// AccessAccount: signed in. Everything works.
 	AccessAccount Access = "account"
 )
 
-// Access reports which of the two ways in is available.
+// Access reports whether the sign-in is available.
 func (c *Controller) Access() Access {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	switch {
-	case c.service != nil:
+	if c.service != nil {
 		return AccessAccount
-	case c.publicService != nil:
-		return AccessPublic
-	default:
-		return AccessNone
 	}
+	return AccessNone
 }
 
 // Available reports whether anything can be read at all.
 func (c *Controller) Available() bool { return c.Access() != AccessNone }
-
-// StartPublic prepares the key-only path. It is not an error to have no key.
-func (c *Controller) StartPublic(ctx context.Context) error { return c.startPublic(ctx) }
 
 // -- authentication -----------------------------------------------------------
 
@@ -189,59 +185,90 @@ func (c *Controller) Authenticated() bool {
 	return c.service != nil
 }
 
-// HasToken reports whether a previous consent has been cached.
-func HasToken() bool {
-	_, err := os.Stat(paths.TokenFile())
-	return err == nil
+// HasToken reports whether any previous consent has been cached.
+func HasToken() bool { return HasAccounts() }
+
+// ActiveAccount is the channel the controller is currently signed in as.
+func (c *Controller) ActiveAccount() Account {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.account
 }
 
-// LoadSavedCredentials reuses a cached token.
+// ActiveChannelID is the id of that channel, empty when the stored sign-in has
+// not been identified yet.
+func (c *Controller) ActiveChannelID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.account.ChannelID
+}
+
+// LoadSavedCredentials reuses whichever cached sign-in is the one to use now.
 //
 // It opens no browser, so it is safe to run at startup: the consent screen
 // must never appear unasked in the middle of a stream.
 func (c *Controller) LoadSavedCredentials(ctx context.Context) (bool, error) {
+	return c.Use(ctx, "")
+}
+
+// Use signs in as one stored channel, and makes it the active one.
+//
+// An empty id means "whichever is sensible": the single sign-in from before
+// there were several, or the only account there is. That fallback is what keeps
+// an installation that never had two channels working exactly as it did.
+//
+// Nothing here opens a browser either. Switching channels mid-stream has to be
+// a thing that happens in under a second on her say-so, not a thing that puts a
+// consent screen on the broadcast.
+func (c *Controller) Use(ctx context.Context, channelID string) (bool, error) {
 	settings, err := oauthConfig()
 	if err != nil {
 		return false, err
 	}
-	data, err := os.ReadFile(paths.TokenFile())
-	if err != nil {
+
+	account, ok := LoadAccount(channelID)
+	if !ok {
+		if channelID != "" {
+			return false, &NotAuthenticatedError{Reason: "that channel is not connected: " +
+				"open the settings app and press Connect YouTube for it"}
+		}
+		// No id was asked for and there is no pre-accounts token, so fall back
+		// to the only account there is. More than one and there is nothing to
+		// guess at: the caller has to say which.
+		if all := Accounts(); len(all) == 1 {
+			account, ok = all[0], true
+		}
+	}
+	if !ok {
 		return false, nil
 	}
 
-	var token oauth2.Token
-	if err := json.Unmarshal(data, &token); err != nil {
-		slog.Warn("the stored YouTube token is unusable", "error", err)
-		return false, nil
-	}
+	token := account.Token
 	if token.RefreshToken == "" && !token.Valid() {
 		return false, nil
 	}
 
-	source := settings.TokenSource(ctx, &token)
+	source := settings.TokenSource(ctx, token)
 	refreshed, err := source.Token()
 	if err != nil {
 		if isRevokedGrant(err) {
 			// The consent is gone for good, so the stored token is dead weight:
 			// keeping it would fail identically at every start. Removing it
-			// puts things back to "never signed in", which is true and is a
-			// state the settings page already knows how to describe.
+			// puts that channel back to "never signed in", which is true and is
+			// a state the settings page already knows how to describe -- and it
+			// leaves her other channels alone, because only this one is dead.
 			//
 			// A Google Cloud project still in Testing expires refresh tokens
 			// after seven days, so for such a build this is not an edge case;
 			// it is next week.
-			if err := os.Remove(paths.TokenFile()); err != nil && !os.IsNotExist(err) {
-				slog.Warn("could not remove the dead YouTube token", "error", err)
-			}
-			return false, &ExpiredCredentialsError{Reason: "your YouTube sign-in has " +
-				"expired; open the settings app and connect YouTube again"}
+			ForgetAccount(account.ChannelID)
+			return false, &ExpiredCredentialsError{Reason: "your " + account.Named() +
+				" sign-in has expired; open the settings app and press Connect " +
+				"YouTube again"}
 		}
 		// Anything else is probably the network, and will likely work later.
-		slog.Warn("could not refresh the YouTube token", "error", err)
+		slog.Warn("could not refresh a YouTube token", "channel", account.Named(), "error", err)
 		return false, nil
-	}
-	if refreshed.AccessToken != token.AccessToken {
-		c.writeToken(refreshed)
 	}
 
 	service, err := yt.NewService(ctx, option.WithTokenSource(source))
@@ -251,7 +278,13 @@ func (c *Controller) LoadSavedCredentials(ctx context.Context) (bool, error) {
 
 	c.mu.Lock()
 	c.service, c.tokenSource = service, source
+	c.account = account
+	c.broadcast, c.broadcastFetched = nil, time.Time{}
 	c.mu.Unlock()
+
+	if refreshed.AccessToken != token.AccessToken {
+		c.writeToken(refreshed)
+	}
 	return true, nil
 }
 
@@ -304,8 +337,14 @@ func (c *Controller) Authorize(ctx context.Context, openBrowser func(url string)
 		_ = server.Shutdown(shutdown)
 	}()
 
-	url := settings.AuthCodeURL(state,
-		oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
+	// "select_account" as well as "consent", because connecting a *second*
+	// channel is the whole point of doing this twice. Without it Google reuses
+	// whoever is already signed in to that browser and hands back a token for
+	// the channel she has connected already -- a sign-in that appears to work,
+	// costs her a trip through a browser she cannot see, and leaves her with
+	// two names for one channel.
+	url := settings.AuthCodeURL(state, oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("prompt", "consent select_account"))
 	if openBrowser != nil {
 		openBrowser(url)
 	}
@@ -327,7 +366,6 @@ func (c *Controller) Authorize(ctx context.Context, openBrowser func(url string)
 	if err != nil {
 		return &Error{Reason: "the sign-in could not be completed: " + err.Error()}
 	}
-	c.writeToken(token)
 
 	source := settings.TokenSource(ctx, token)
 	service, err := yt.NewService(ctx, option.WithTokenSource(source))
@@ -337,7 +375,20 @@ func (c *Controller) Authorize(ctx context.Context, openBrowser func(url string)
 
 	c.mu.Lock()
 	c.service, c.tokenSource = service, source
+	c.account = Account{Token: token, ConnectedAt: time.Now()}
+	c.broadcast, c.broadcastFetched = nil, time.Time{}
 	c.mu.Unlock()
+
+	// Ask whose channel this is before saving, so the sign-in is filed under
+	// its channel id rather than overwriting whichever one was there. Getting
+	// this wrong is how connecting the music channel would sign her out of the
+	// main one -- silently, and only noticed next time she went live.
+	if _, err := c.ChannelName(ctx); err != nil {
+		slog.Warn("could not identify the channel just connected", "error", err)
+	}
+	if err := SaveAccount(c.ActiveAccount()); err != nil {
+		return &Error{Reason: "the sign-in worked but could not be saved: " + err.Error()}
+	}
 	return nil
 }
 
@@ -347,13 +398,36 @@ func consentPage(message string) string {
 		`<h1>MikkiLens</h1><p role="status">` + message + `</p></body></html>`
 }
 
-// SignOut forgets the account.
+// SignOut forgets the active channel, on disk as well as in memory.
+//
+// Both, because a sign-out that only cleared memory would undo itself at the
+// next start, and a button that quietly reverses itself overnight is worse
+// than no button.
+//
+// Only the active one. Her other channels are separate consents that this has
+// no quarrel with, and signing her out of all of them because one token was
+// refused would turn a five-second reconnection into an afternoon.
 func (c *Controller) SignOut() {
 	c.mu.Lock()
+	account := c.account
 	c.service, c.tokenSource = nil, nil
-	c.channelTitle, c.broadcast = "", nil
+	c.account = Account{}
+	c.broadcast, c.broadcastFetched = nil, time.Time{}
 	c.mu.Unlock()
-	_ = os.Remove(paths.TokenFile())
+
+	ForgetAccount(account.ChannelID)
+}
+
+// SignOutEverywhere forgets every channel. This is the settings page's
+// disconnect, where "YouTube" means all of it.
+func (c *Controller) SignOutEverywhere() {
+	c.mu.Lock()
+	c.service, c.tokenSource = nil, nil
+	c.account = Account{}
+	c.broadcast, c.broadcastFetched = nil, time.Time{}
+	c.mu.Unlock()
+
+	ForgetAllAccounts()
 }
 
 // Token is the current access token, which the streaming chat transport needs
@@ -364,23 +438,44 @@ func (c *Controller) Token() (*oauth2.Token, error) {
 	c.mu.RUnlock()
 
 	if source == nil {
-		return nil, &NotAuthenticatedError{Reason: "YouTube is not connected"}
+		return nil, &NotAuthenticatedError{Reason: notSignedIn}
 	}
 	return source.Token()
 }
 
+// writeToken saves a refreshed token back to the active channel's file.
 func (c *Controller) writeToken(token *oauth2.Token) {
-	if _, err := paths.EnsureDataDir(); err != nil {
-		return
+	c.mu.Lock()
+	c.account.Token = token
+	account := c.account
+	c.mu.Unlock()
+
+	if err := SaveAccount(account); err != nil {
+		slog.Warn("could not save the YouTube token", "channel", account.Named(), "error", err)
 	}
-	encoded, err := json.Marshal(token)
-	if err != nil {
-		return
+}
+
+// notSignedIn is the one sentence that says what to actually do.
+const notSignedIn = "YouTube is not connected: open the settings app and press " +
+	"Connect YouTube."
+
+// isRevokedGrant reports whether Google has refused the refresh token for
+// good, as opposed to failing for a reason that might clear up.
+//
+// "invalid_grant" is what a revoked, expired or already-used refresh token
+// comes back as. It is checked as a string as well as a typed field because
+// the token endpoint's shape has changed over the years, and getting this
+// wrong means silently retrying a credential that will never work again -- or,
+// worse, telling her to sign in again over a dropped connection.
+func isRevokedGrant(err error) bool {
+	if err == nil {
+		return false
 	}
-	// The token is a credential, so it is written for this user only.
-	if err := os.WriteFile(paths.TokenFile(), encoded, 0o600); err != nil {
-		slog.Warn("could not save the YouTube token", "error", err)
+	var retrieve *oauth2.RetrieveError
+	if errors.As(err, &retrieve) && retrieve.ErrorCode == "invalid_grant" {
+		return true
 	}
+	return strings.Contains(strings.ToLower(err.Error()), "invalid_grant")
 }
 
 // -- request plumbing ---------------------------------------------------------
@@ -393,7 +488,7 @@ func (c *Controller) apiService(method string) (*yt.Service, error) {
 	c.mu.RUnlock()
 
 	if service == nil {
-		return nil, &NotAuthenticatedError{Reason: "YouTube is not connected"}
+		return nil, &NotAuthenticatedError{Reason: notSignedIn}
 	}
 	if c.Quota.Exhausted() {
 		return nil, &QuotaExhaustedError{Reason: "the daily YouTube quota is used up"}
@@ -405,49 +500,23 @@ func (c *Controller) apiService(method string) (*yt.Service, error) {
 //
 // Live chat streaming is a long-lived response that the generated client
 // cannot express -- it decodes one document and returns -- so the request is
-// built by hand and authorized here, where both ways in are known. Signed in
-// it carries a bearer token; with a key alone it carries the key.
+// built by hand and authorized here.
 func (c *Controller) AuthorizeStream(request *http.Request) error {
 	c.mu.RLock()
-	source, key := c.tokenSource, c.apiKey
+	source := c.tokenSource
 	c.mu.RUnlock()
 
-	if source != nil {
-		// Fetched per connection, not once per stream: an access token lasts
-		// about an hour, and a stream can easily run longer than that.
-		token, err := source.Token()
-		if err != nil {
-			return err
-		}
-		request.Header.Set("Authorization", "Bearer "+token.AccessToken)
-		return nil
+	if source == nil {
+		return &NotAuthenticatedError{Reason: notSignedIn}
 	}
-
-	if key != "" {
-		query := request.URL.Query()
-		query.Set("key", key)
-		request.URL.RawQuery = query.Encode()
-		return nil
+	// Fetched per connection, not once per stream: an access token lasts about
+	// an hour, and a stream can easily run longer than that.
+	token, err := source.Token()
+	if err != nil {
+		return err
 	}
-	return &NotAuthenticatedError{Reason: "YouTube is not connected"}
-}
-
-// isRevokedGrant reports whether Google has refused the refresh token for
-// good, as opposed to failing for a reason that might clear up.
-//
-// "invalid_grant" is what a revoked, expired or already-used refresh token
-// comes back as. It is checked as a string as well as a typed field because
-// the token endpoint's shape has changed over the years and getting this wrong
-// means silently retrying a credential that will never work again.
-func isRevokedGrant(err error) bool {
-	if err == nil {
-		return false
-	}
-	var retrieve *oauth2.RetrieveError
-	if errors.As(err, &retrieve) && retrieve.ErrorCode == "invalid_grant" {
-		return true
-	}
-	return strings.Contains(strings.ToLower(err.Error()), "invalid_grant")
+	request.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	return nil
 }
 
 // ClassifyHTTP turns a raw error response into the right error type.
@@ -514,6 +583,14 @@ func (c *Controller) classify(err error) error {
 		return nil
 	}
 	var apiErr *googleapi.Error
+	if errors.As(err, &apiErr) && apiErr.Code == http.StatusUnauthorized {
+		// The grant is gone. Dropping it now is what stops every remaining
+		// call in the stream failing with the same 401, and puts the settings
+		// page back to a state with a button that fixes it.
+		c.SignOut()
+		return &ExpiredCredentialsError{Reason: "your YouTube sign-in is no longer " +
+			"accepted: open the settings app and press Connect YouTube again"}
+	}
 	if errors.As(err, &apiErr) {
 		for _, detail := range apiErr.Errors {
 			switch detail.Reason {
@@ -561,12 +638,6 @@ func (c *Controller) ActiveBroadcast(ctx context.Context, refresh bool) (*Broadc
 		if cached, fresh := c.cachedBroadcast(); fresh {
 			return cached, nil
 		}
-	}
-
-	// Without a sign-in, read the public video instead. It answers the two
-	// questions she actually asks -- how many are watching, what is it called.
-	if c.Access() == AccessPublic {
-		return c.publicBroadcast(ctx, refresh)
 	}
 
 	service, err := c.apiService("liveBroadcasts.list")
@@ -629,25 +700,11 @@ func (c *Controller) cachedBroadcast() (*Broadcast, bool) {
 func (c *Controller) InvalidateBroadcast() {
 	c.mu.Lock()
 	c.broadcast, c.broadcastFetched = nil, time.Time{}
-	c.publicResolved = time.Time{}
 	c.mu.Unlock()
 }
 
 // ViewerCount is how many people are watching right now.
 func (c *Controller) ViewerCount(ctx context.Context) (int, error) {
-	// The public read returns the count with the broadcast, so there is
-	// nothing further to ask for.
-	if c.Access() == AccessPublic {
-		broadcast, err := c.publicBroadcast(ctx, true)
-		if err != nil {
-			return 0, err
-		}
-		if broadcast == nil {
-			return 0, &Error{Reason: "there is no active broadcast"}
-		}
-		return broadcast.Viewers, nil
-	}
-
 	broadcast, err := c.currentBroadcast(ctx)
 	if err != nil {
 		return 0, err
@@ -692,13 +749,6 @@ func (c *Controller) Title(ctx context.Context) (string, error) {
 
 // SetTitle renames the broadcast.
 func (c *Controller) SetTitle(ctx context.Context, title string) error {
-	if c.Access() == AccessPublic {
-		// A key can read a public stream; changing her channel is a write, and
-		// no key should be able to do that.
-		return &NotAuthenticatedError{Reason: "changing the title needs you to " +
-			"sign in to YouTube; the viewer count and the title work with just the key"}
-	}
-
 	broadcast, err := c.currentBroadcast(ctx)
 	if err != nil {
 		return err
@@ -739,21 +789,33 @@ func (c *Controller) LiveChatID(ctx context.Context) (string, error) {
 	return broadcast.LiveChatID, nil
 }
 
-// ChannelName is her channel's name, cached after the first look.
+// ChatTarget names the stream whose chat should be read: the video id, and the
+// live chat id.
+//
+// Both, because the transports disagree about which they need. The page
+// scraper wants only the video id and no credential at all; the Data API
+// transports want the chat id.
+func (c *Controller) ChatTarget(ctx context.Context) (string, string, error) {
+	broadcast, err := c.currentBroadcast(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	return broadcast.ID, broadcast.LiveChatID, nil
+}
+
+// ChannelName is the active channel's name, cached after the first look.
+//
+// It doubles as the moment a sign-in learns whose it is: the id comes back on
+// the same one-unit call as the name, and with the id the account can be filed
+// properly. That is what turns the single youtube_token.json from before there
+// were several channels into a real account, without her doing anything.
 func (c *Controller) ChannelName(ctx context.Context) (string, error) {
 	c.mu.RLock()
-	cached := c.channelTitle
+	cached := c.account.ChannelTitle
+	identified := c.account.ChannelID != ""
 	c.mu.RUnlock()
-	if cached != "" {
+	if cached != "" && identified {
 		return cached, nil
-	}
-
-	if c.Access() == AccessPublic {
-		// Mine(true) needs a sign-in. The channel is named by its id here,
-		// which is at least something to say.
-		c.mu.RLock()
-		defer c.mu.RUnlock()
-		return c.channelID, nil
 	}
 
 	service, err := c.apiService("channels.list")
@@ -769,18 +831,33 @@ func (c *Controller) ChannelName(ctx context.Context) (string, error) {
 		return "", nil
 	}
 
-	title := response.Items[0].Snippet.Title
+	item := response.Items[0]
 	c.mu.Lock()
-	c.channelTitle = title
+	wasUnidentified := c.account.ChannelID == ""
+	c.account.ChannelID = item.Id
+	c.account.ChannelTitle = item.Snippet.Title
+	account := c.account
 	c.mu.Unlock()
-	return title, nil
+
+	if wasUnidentified && account.ChannelID != "" {
+		// It has a name and an id now, so it can be stored as an account.
+		// Only then is the old single-token file removed: losing it before the
+		// replacement is written would sign her out over a failed disk write.
+		if err := SaveAccount(account); err != nil {
+			slog.Warn("could not file the YouTube sign-in under its channel",
+				"channel", account.Named(), "error", err)
+		} else {
+			ForgetAccount("")
+		}
+	}
+	return account.ChannelTitle, nil
 }
 
 // ChannelTitle is whatever name has already been looked up, without a call.
 func (c *Controller) ChannelTitle() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.channelTitle
+	return c.account.ChannelTitle
 }
 
 // currentBroadcast prefers the cached broadcast and looks one up if there is
@@ -804,10 +881,6 @@ func (c *Controller) currentBroadcast(ctx context.Context) (*Broadcast, error) {
 // ListChatMessages fetches one page of live chat, spending its quota. The
 // polling transport calls it; the streaming one goes over raw HTTP.
 func (c *Controller) ListChatMessages(ctx context.Context, liveChatID, pageToken string) (*yt.LiveChatMessageListResponse, error) {
-	if c.Access() == AccessPublic {
-		return c.publicChatMessages(ctx, liveChatID, pageToken)
-	}
-
 	service, err := c.apiService("liveChatMessages.list")
 	if err != nil {
 		return nil, err

@@ -26,7 +26,7 @@ type fakeTransport struct {
 func (f *fakeTransport) Name() string { return f.name }
 
 func (f *fakeTransport) Run(
-	_ context.Context, _ string, _ func([]Message), ready func(),
+	_ context.Context, _ Target, _ func([]Message), ready func(),
 ) error {
 	f.runs++
 	if f.readyFirst {
@@ -44,7 +44,7 @@ func TestConnectedIsNotAnnouncedUntilChatActuallyWorks(t *testing.T) {
 	})
 
 	// Run the transport the way the ingest loop does.
-	_ = transport.Run(context.Background(), "chat-1", ingest.accept, func() {
+	_ = transport.Run(context.Background(), Target{LiveChatID: "chat-1"}, ingest.accept, func() {
 		ingest.status("connected", transport.Name())
 	})
 
@@ -63,7 +63,7 @@ func TestATransportThatWorksDoesAnnounceItself(t *testing.T) {
 		OnStatus: func(state, _ string) { announced = append(announced, state) },
 	})
 
-	_ = transport.Run(context.Background(), "chat-1", ingest.accept, func() {
+	_ = transport.Run(context.Background(), Target{LiveChatID: "chat-1"}, ingest.accept, func() {
 		ingest.status("connected", transport.Name())
 	})
 

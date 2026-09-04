@@ -30,6 +30,7 @@ type whisperCPP struct {
 	modelPath string
 	beamSize  int
 	threads   int
+	gpu       bool
 	label     string
 }
 
@@ -41,33 +42,33 @@ var candidateBinaries = []string{
 }
 
 func newWhisperCPP(settings config.STT) (Backend, error) {
-	binary, err := findBinary(settings.Binary)
+	build, err := chooseBuild(settings.Binary, settings.Device, candidateBinaries)
 	if err != nil {
 		return nil, err
 	}
+	binary := build.binary
 	model, err := findModel(settings.ModelPath, settings.ModelSize)
 	if err != nil {
 		return nil, err
 	}
 
-	beam := settings.BeamSize
-	if beam < 1 {
-		beam = 1
-	}
-
 	return &whisperCPP{
 		binary:    binary,
 		modelPath: model,
-		beamSize:  beam,
+		beamSize:  beamFor(settings.BeamSize, build.gpu),
 		threads:   recognitionThreads(),
-		label: fmt.Sprintf("whisper.cpp %s (%s)",
-			strings.TrimSuffix(filepath.Base(model), filepath.Ext(model)),
-			filepath.Base(binary)),
+		gpu:       build.gpu,
+		label: fmt.Sprintf("whisper.cpp %s on %s (one-shot)",
+			modelLabel(model), build.where()),
 	}, nil
 }
 
-// binarySearchPath is where a person would actually put a whisper.cpp build.
-func binarySearchPath() []string {
+// binaryDirectories is where a person would actually put a whisper.cpp build.
+//
+// A variable rather than a function so the tests can point it somewhere
+// temporary: which build is chosen from several is the whole question, and it
+// cannot be asked of a machine that happens to have one.
+var binaryDirectories = func() []string {
 	return []string{
 		paths.ModelsDir(),
 		filepath.Join(paths.ModelsDir(), "whisper"),
@@ -89,10 +90,6 @@ func recognitionThreads() int {
 		threads = 8
 	}
 	return threads
-}
-
-func findBinary(configured string) (string, error) {
-	return findNamedBinary(configured, candidateBinaries)
 }
 
 // findModel looks for a GGML model matching the configured size.
@@ -172,6 +169,10 @@ func (w *whisperCPP) Transcribe(ctx context.Context, audio []float32, language s
 		"--threads", strconv.Itoa(w.threads),
 		"--no-timestamps",
 		"--no-prints",
+		"--suppress-nst",
+	}
+	if !w.gpu {
+		arguments = append(arguments, "--no-gpu")
 	}
 	if language != "" && language != "auto" {
 		arguments = append(arguments, "--language", language)

@@ -17,6 +17,7 @@ layar sama sekali.
 | "mulai siaran" | OBS mulai streaming |
 | "hentikan siaran" | Tanya dulu, lalu berhenti |
 | "ganti ke just chatting" | Pindah scene di OBS |
+| "ganti channel ke musik" | Pindah profil OBS **dan** akun YouTube sekaligus |
 | "matikan mikrofon" | Mikrofon OBS dimatikan |
 | "sembunyikan kamera" | Sumber di scene disembunyikan |
 | "berapa penontonnya" | Jumlah penonton dibacakan |
@@ -119,7 +120,12 @@ atau apa pun.
    menaruh pintasan di desktop).
 2. Di halaman **Suara**, tekan tombol "Tes" pada tiap perangkat sampai kamu
    dengar nadanya keluar dari perangkat yang kamu pakai, lalu pilih dan simpan.
-3. Di halaman **Koneksi**, hubungkan YouTube dan isi model penglihatan.
+3. Di halaman **Koneksi**, tekan **Sambungkan YouTube**, lalu isi alamat
+   modelnya.
+
+Saat pertama dijalankan, model suaranya diunduh dulu — dan itu dikatakan, bukan
+didiamkan. Lihat [Pengenalan suara](#pengenalan-suara). Semua langkah di atas
+bisa dikerjakan sambil menunggu.
 
 Windows mungkin memperingatkan bahwa berkasnya tidak dikenal, karena belum
 ditandatangani. Pilih **Info lebih lanjut**, lalu **Tetap jalankan**.
@@ -163,12 +169,44 @@ Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
 
 ### Pengenalan suara
 
-MikkiLens tidak membawa model suara sendiri, supaya kamu bisa pilih yang cocok
-dengan komputermu. Taruh dua berkas ini di `data\models`:
+MikkiLens tidak membawa model suara di dalam aplikasinya — model itu sendiri
+setengah giga, dan build mana yang cocok tergantung kartu di komputermu. Jadi
+kalau belum ada, **diunduh sendiri saat pertama dijalankan**, berurutan:
 
-- Sebuah build **whisper.cpp** (`whisper-cli.exe`), bebas pilih yang CPU, CUDA,
-  atau Vulkan.
+| Tahap | Ukuran | Sesudahnya |
+|---|---|---|
+| Build prosesor | 8 MB | ada yang bisa dijalankan |
+| Model suara | 488 MB | **sudah bisa mendengar** |
+| Berkas kata pemicu | 68 MB | bebas tangan — kalau `[wake] enabled` menyala |
+| Build kartu grafis | 670 MB | menjawab lima kali lebih cepat — kalau ada drivernya |
+
+Setiap tahap **diucapkan** saat mulai, dan urutannya disengaja: tiap tahap
+meninggalkan komputer dalam keadaan lebih berguna dari sebelumnya, jadi unduhan
+yang terputus tidak pernah jadi beda antara jalan dan tidak. Yang terputus
+dilanjutkan, bukan diulang dari nol, dan yang sudah ada tidak diunduh lagi.
+
+Matikan lewat `[stt] auto_install = false` kalau kamu lebih suka menyiapkannya
+sendiri.
+
+Dari kode sumber, `npm run fetch:stt` melakukan hal yang sama lebih dulu:
+
+```
+npm run fetch:stt           # build CUDA + model "small"
+npm run fetch:stt -- --cpu  # kalau tidak ada kartu grafis NVIDIA
+```
+
+Atau taruh sendiri dua berkas ini di `data\models` — yang sudah ada di situ
+dipakai apa adanya:
+
+- Sebuah build **whisper.cpp** (`whisper-server.exe` atau `whisper-cli.exe`),
+  bebas pilih yang CPU, CUDA, atau Vulkan. Build GPU taruh di
+  `data\models\whisper`: MikkiLens memilihnya sendiri kalau ada drivernya,
+  dan kembali ke prosesor kalau tidak.
 - Sebuah model GGML, misalnya `ggml-small.bin`.
+
+Model dan tempat menjalankannya bisa diubah di aplikasi Pengaturan, tab
+**Audio**. `small` adalah bawaannya; `base` terlalu sering salah dengar untuk
+perintah pendek.
 
 Kalau kamu lebih suka mengirim suara ke server, isi `[stt] base_url` di
 `config.toml` dengan endpoint apa pun yang kompatibel dengan OpenAI.
@@ -177,104 +215,125 @@ Kalau kamu lebih suka mengirim suara ke server, isi `[stt] base_url` di
 
 Kata pemicu perlu empat berkas di `data\models`: `onnxruntime.dll`,
 `melspectrogram.onnx`, `embedding_model.onnx`, dan `<nama_model>.onnx`.
-Kalau tidak ada, MikkiLens mengatakannya saat mulai lalu mematikan kata
-pemicu. Tombol pintasan tetap jalan, dan memang lebih andal.
+Keempatnya ikut diunduh sendiri saat pertama dijalankan, selama
+`[wake] enabled` menyala — empat-empatnya sekaligus, karena tiga dari empat
+sama saja dengan tidak ada: yang kamu dapat adalah kata pemicu yang tidak
+pernah menyala, dan itu terasa persis seperti mikrofon yang mati.
+
+Kalau salah satunya tetap tidak ada, MikkiLens mengatakannya saat mulai lalu
+mematikan kata pemicu. Tombol pintasan tetap jalan, dan memang lebih andal.
+
+Di aplikasi Pengaturan, tab **Bahasa**, kata pemicu dipilih dari daftar yang
+benar-benar terpasang, dan di bawahnya ada dua batang: satu untuk mikrofon,
+satu untuk skor kata pemicu sekarang, dengan tanda di posisi ambangnya. Itu
+cara tercepat menjawab "mikrofonnya memang tidak dengar" atau "dengar, tapi
+ambangnya kelewat tinggi". Tombol pintasan diatur dengan menekan tombolnya
+langsung: tekan **Ubah**, lalu tekan kombinasinya.
 
 ### Menghubungkan YouTube
 
-Ada dua cara, dan kamu cukup pakai salah satu.
+Dua tombol, dan tidak ada satu pun kolom yang harus diketik: **Sambungkan
+YouTube** dan **Putuskan**, di halaman Koneksi.
 
-**Cara cepat: kunci API.** Ini yang paling ringan dan tidak ada layar
-persetujuan sama sekali. Kamu dapat **jumlah penonton** dan **judul siaran**.
+**Chat bahkan tidak perlu itu.** MikkiLens membaca chat dari halaman yang sama
+dengan yang ditampilkan OBS di dock chat-nya — halaman publik
+`youtube.com/live_chat`, yang bisa dibuka siapa saja tanpa kunci, tanpa login,
+tanpa proyek Google Cloud. Chat tidak memakan kuota sedikit pun.
+
+Yang dibeli oleh tombol Sambungkan adalah tiga hal: jumlah penonton, judul
+siaran, dan mengganti judul lewat suara.
+
+**Cara menyambungkan.**
+
+1. Buka halaman **Koneksi**, tekan **Sambungkan YouTube**.
+2. Browser terbuka di halaman persetujuan Google. Setujui di sana.
+3. Kembali ke MikkiLens. Selesai, dan cukup sekali seumur pemasangan.
+
+Izin yang diminta cuma satu, **"Kelola akun YouTube Anda"** — bukan
+`force-ssl`, yang dibacakan Google sebagai "melihat, mengubah, dan menghapus
+permanen video Anda". Satu-satunya tulisan yang dilakukan MikkiLens adalah
+mengganti judul siaran.
+
+**Putuskan** menghapus loginnya dari mesin ini — dari memori dan dari berkas —
+dan mematikan YouTube sampai kamu menekan Sambungkan lagi. Jadi keputusannya
+bertahan setelah MikkiLens ditutup.
+
+**Satu berkas yang harus kamu siapkan sendiri: `data/client_secret.json`.**
+
+MikkiLens tidak membawa kredensial Google apa pun, dan tidak akan pernah.
+Secret yang ditaruh di repositori publik akan diambil orang dalam hitungan jam,
+dan Google mencabut client-nya, bukan salinan yang bocor — artinya login-nya
+mati untuk semua orang sekaligus, termasuk kamu, di tengah siaran.
+
+Jadi OAuth client-nya milikmu:
 
 1. Buat proyek di [Google Cloud Console](https://console.cloud.google.com/),
    aktifkan **YouTube Data API v3**.
-2. Di **Credentials**, buat **API key**, lalu salin kuncinya.
-3. Di halaman Koneksi, tempel kuncinya, tempel juga tautan channel atau tautan
-   siaranmu, lalu tekan **Simpan**.
+2. Di **Credentials**, buat **OAuth client ID** dengan tipe **Desktop app**.
+3. Unduh JSON-nya, simpan sebagai **`data/client_secret.json`**.
 
-Langsung berlaku — tidak perlu menutup MikkiLens.
+Kalau berkas itu belum ada, halaman Koneksi mengatakannya dengan jelas dan
+tombolnya dimatikan — bukan tombol yang bisa ditekan tapi selalu gagal.
 
-Kalau kamu tempel tautan siaran (`video_id`), MikkiLens langsung membaca siaran
-itu dan kuotanya sangat hemat. Kalau hanya tautan channel, MikkiLens mencari
-dulu siaran mana yang sedang live; pencarian itu mahal, jadi hasilnya dipakai
-ulang selama lima menit.
-
-**Cara lengkap: masuk ke akun.** Tekan **Hubungkan YouTube** di halaman
-Koneksi, lalu selesaikan halaman Google di browser. Cukup sekali — setelah itu
-izinnya tersimpan dan tidak ditanya lagi. Hanya cara ini yang bisa **mengganti
-judul lewat suara**, dan hanya cara ini yang dijamin bisa **membaca chat**.
-
-Layar persetujuan itu halaman milik Google, jadi minta bantuan sekali di awal.
-Izin yang diminta hanya **"Kelola akun YouTube Anda"** — MikkiLens tidak pernah
-menghapus video, menyentuh komentar, atau mengirim pesan chat. Satu-satunya hal
-yang ditulisnya adalah judul siaran.
-
-MikkiLens sudah membawa login-nya sendiri, jadi tidak ada berkas yang perlu
-kamu unduh atau simpan. Cukup tombol itu.
-
-> **Selama proyeknya masih berstatus Testing:** akun Google-mu harus
-> didaftarkan dulu sebagai **test user**, dan izinnya **kedaluwarsa setiap 7
-> hari** — MikkiLens akan mengatakannya saat itu terjadi ("izin YouTube-nya
-> sudah kedaluwarsa"), dan kamu tinggal menekan Hubungkan lagi. Lihat catatan
-> pengembang di bawah untuk menghilangkan batasan ini.
-
-Kalau kamu coba mengganti judul sementara baru punya kunci API, MikkiLens
-mengatakannya: "harus masuk ke akun YouTube dulu" — bukan diam, dan bukan
-"tidak ada siaran".
+> Proyek Google Cloud yang masih berstatus **Testing** membuat refresh token
+> kedaluwarsa setelah tujuh hari. Kalau itu terjadi MikkiLens mengatakannya dan
+> menyuruhmu menekan Sambungkan sekali lagi. Publikasikan proyeknya kalau kamu
+> tidak mau mengulang tiap minggu.
 
 > Kunci siaran (stream key) yang dipakai OBS tidak bisa dipakai di sini. Itu
-> jalur satu arah untuk mengirim video, tidak membawa data balik. Jumlah
-> penonton dan chat di OBS pun datang dari API yang sama seperti di atas.
+> jalur satu arah untuk mengirim video, tidak membawa data balik.
 
-### Membangun MikkiLens dengan login YouTube sendiri
+### Punya lebih dari satu channel
 
-Ini untuk yang membangun MikkiLens, bukan untuk yang memakainya. Tujuannya
-supaya pengguna tidak perlu membuat proyek Google Cloud sama sekali — persis
-seperti OBS, yang juga membawa client id-nya sendiri.
+Satu channel utama dan satu channel review musik adalah dua channel YouTube
+yang berbeda: siaran, judul, dan chat-nya sendiri-sendiri. Jadi masing-masing
+punya login sendiri, dan masing-masing dipasangkan dengan satu **profil OBS**.
 
-Login bawaan ada di `packages/controllers/youtube/embedded_client_secret.json`
-(proyek `mikkilens`). Untuk memakai proyek Google Cloud lain, ganti isi berkas
-itu dengan OAuth client ID bertipe **Desktop app**, lalu `make build`.
+Kenapa profil OBS: di OBS, *profil* menyimpan pengaturan siarannya — termasuk
+**stream key**. Satu profil per channel memang cara OBS sendiri menangani ini,
+dan artinya MikkiLens tidak pernah menyentuh stream key-mu. Kuncinya tetap di
+dalam OBS.
 
-**Status proyek menentukan pengalaman pemakainya.**
+**Menyiapkannya:**
 
-Selama **Testing**:
+1. Di OBS, buat satu profil per channel (menu **Profile** → **New**), isi
+   stream key masing-masing. Kalau tiap channel punya set scene sendiri, buat
+   juga **Scene Collection** untuk masing-masing.
+2. Di halaman **Koneksi** MikkiLens, tekan **Sambungkan channel lain**, lalu
+   pilih channel yang dimaksud di browser. Ulangi per channel.
+3. Di kotak **Channel**, beri nama panggilan tiap channel ("utama", "musik")
+   dan pilih profil OBS-nya dari daftar. Tekan **Simpan**.
 
-- Hanya akun yang terdaftar di **OAuth consent screen → Test users** yang bisa
-  menyelesaikan persetujuan. Akun lain langsung ditolak dengan "Access
-  blocked". Daftarkan akun Mikki di sana lebih dulu.
-- Refresh token **kedaluwarsa setiap 7 hari**. MikkiLens mendeteksinya,
-  menghapus token mati itu, dan mengatakan "izin YouTube-nya sudah
-  kedaluwarsa" — tapi tetap saja layar persetujuan harus diulang tiap minggu,
-  dan itu langkah yang paling sulit dilakukan tanpa penglihatan.
+Setelah itu cukup diucapkan: **"ganti channel ke musik"**. Profil OBS dan akun
+YouTube pindah bersamaan — dan itu memang intinya. Pindah OBS saja berarti
+review musik keluar di channel utama; pindah akun saja berarti chat channel
+yang salah dibacakan di atas siaran yang mengarah ke tempat lain.
 
-Karena itu, ubah publishing status menjadi **In production** begitu bisa. Tanpa
-verifikasi Google, aplikasi "In production" menampilkan peringatan **"Google
-hasn't verified this app"** sekali — tekan *Advanced* lalu *Go to MikkiLens
-(unsafe)* — tetapi tokennya bertahan, dan tidak ada lagi daftar test user.
-Batasnya sekitar 100 pengguna.
+Berlaku dua arah. Kalau kamu (atau siapa pun yang membantu) mengganti profil
+langsung dari menu OBS, akun YouTube-nya ikut pindah sendiri.
 
-Verifikasi penuh menghapus peringatan dan batas itu. Scope `youtube.force-ssl`
-termasuk *sensitive*, bukan *restricted*, jadi verifikasinya gratis: perlu
-kebijakan privasi, homepage, dan video demo — bukan audit keamanan berbayar.
+> **OBS tidak mau ganti profil selagi kamu live.** MikkiLens mengatakannya dan
+> tidak mengubah apa-apa, bukan pindah setengah-setengah. Hentikan siaran dulu.
 
-Dua hal yang perlu kamu sadari:
+> Kuota harian YouTube itu milik proyek Google Cloud, bukan milik channel. Dua
+> channel berbagi satu jatah 10.000 unit yang sama.
 
-- **Client secret di aplikasi desktop bukan rahasia.** RFC 8252 menyatakannya
-  terang-terangan, dan Google menerbitkan kredensial desktop dengan pemahaman
-  itu. Yang nyata bukan risiko penyamaran, melainkan poin berikut.
-- **Kuota harian ditanggung bersama.** 10.000 unit per hari itu milik
-  proyekmu, bukan milik masing-masing pengguna. Karena itu jalur kunci API
-  tetap ada: kalau kuota bersama habis, siapa pun bisa memakai kuncinya sendiri
-  tanpa membangun ulang. Berkas `data/client_secret.json` juga tetap menang
-  atas login bawaan, jadi orang bisa memakai proyek Google Cloud-nya sendiri.
+### Kalau halaman chat berubah
 
-Chat memakai **endpoint streaming**, bukan polling. Bedanya besar untuk kuota:
-polling `liveChatMessages.list` berharga 5 unit sekali tanya, jadi siaran 8 jam
-dengan jeda 5 detik menghabiskan sekitar 28.800 unit — hampir tiga kali jatah
-harian, untuk satu orang saja. Streaming dihitung per sambungan, bukan per
-pesan. Polling tetap ada sebagai cadangan otomatis kalau streaming ditolak.
+Halaman `live_chat` itu bukan API resmi. YouTube bisa mengubah bentuknya
+kapan saja tanpa memberi tahu siapa pun. Karena itu jalur lamanya tetap ada:
+kalau pembacaan halaman gagal, MikkiLens otomatis pindah ke endpoint streaming
+YouTube Data API, lalu ke polling. Yang terjadi kalau halamannya berubah adalah
+chat jadi memakan kuota, bukan chat jadi diam.
+
+Urutannya bisa dipaksa lewat `transport` di `config.toml`: `"page"` hanya
+halaman, `"api"` hanya Data API, `"auto"` (bawaan) mencoba semuanya sesuai
+urutan di atas.
+
+Bedanya besar untuk kuota: polling `liveChatMessages.list` berharga 5 unit
+sekali tanya, jadi siaran 8 jam dengan jeda 5 detik menghabiskan sekitar 28.800
+unit — hampir tiga kali jatah harian, untuk satu orang saja. Halaman publik
+berharga nol.
 
 ## Mengubah perintah
 
@@ -340,11 +399,16 @@ yang lain — berguna saat sedang sibuk.
 
 MikkiLens is a local Windows app that gives a blind or low-vision VTuber voice
 control of OBS, YouTube broadcast metadata, live chat read-aloud, and screen
-description through a vision model.
+description through a vision-capable model.
 
 **Design rule:** if an action produces no audible feedback, it did not happen.
 Silence is treated as a bug, which is why every subsystem reports through a
 single priority-ordered speech bus.
+
+Nothing ever overlaps: the bus owns the output device and speaks one thing at a
+time, in tiers -- the app's own voice (errors, open questions, command results),
+then donations, then the chat backlog. A higher tier cuts off a lower one, and
+what it cut off goes back on the queue to be re-read rather than lost.
 
 ### Layout
 
@@ -402,22 +466,54 @@ endpoint. Running whisper.cpp out of process costs a few tens of milliseconds
 per command and buys a build that needs no CUDA SDK on the streaming machine —
 you drop in whichever prebuilt binary suits your GPU.
 
+Neither the build nor the model ships inside the installer, and neither is a
+manual step either: `packages/audio/assets` fetches what is missing on the
+first run, from pinned releases. Pinned rather than latest, because a build
+that changed between one stream and the next with no way to see what happened
+is the opposite of what this application is for.
+
+The staging is the design. The processor build (8 MB) comes first so there is
+something runnable, then the model (488 MB) so it can hear, then the wake word
+files, and only then — and only where there is a driver to run it — the CUDA
+build (670 MB), into `data/models/whisper` where `chooseBuild` picks it up with
+no restart. Every stage is announced through the speech bus rather than shown,
+because the person waiting cannot see a progress bar; downloads resume rather
+than restart, and a file is renamed into place only once it is whole, so an
+interrupted download is never mistaken on the next start for a model that can
+be loaded.
+
 The wake word runs openWakeWord's three-stage ONNX pipeline
 locally, so the always-open microphone never leaves the machine. Recognition
 prefers whisper.cpp's server over its one-shot CLI, because the CLI reloads the
 whole model for every command. OBS is driven over its
-WebSocket with [goobs](https://github.com/andreykaipov/goobs). Vision and chat
-summaries go through any **OpenAI-compatible endpoint** — `base_url` is
-configuration, so OpenAI, z.ai, OpenRouter, Groq, or a local Ollama or LM
-Studio server are drop-in.
+WebSocket with [goobs](https://github.com/andreykaipov/goobs).
+
+Everything a model does — describing the screen, summarising chat, and working
+out a command none of the written phrases matched — goes to **one
+OpenAI-compatible endpoint**, configured in `[model]`. One endpoint, one model,
+one key. `base_url` is configuration, so OpenAI, z.ai, OpenRouter, Groq, or a
+local Ollama or LM Studio server are drop-in, and running the model on her own
+machine stays one line rather than a downloader and a child process to keep
+alive. The one requirement that follows is that the model must be able to see;
+the settings page tests it with a real image so a text-only one fails there
+rather than mid-stream.
 
 ### Chat
 
 Ingestion and playback are decoupled: the connection never stops and only a
-cursor moves, so pausing can never lose a message. The streaming endpoint is
-preferred because polling would exhaust the 10,000-unit daily quota on a long
-stream; a polling transport with a quota guard takes over automatically if
-streaming is unavailable.
+cursor moves, so pausing can never lose a message.
+
+Chat is read from the public `live_chat` page — the same one OBS embeds in its
+chat dock — which needs no key, no sign-in and no quota. That matters because
+chat is the highest-volume thing here: polling `liveChatMessages.list` costs 5
+units a call, so an eight hour stream at five second intervals spends about
+28,800 units, nearly three times the daily allowance for one person. The page
+costs nothing.
+
+It is also not a published contract, so both Data API transports stay behind it
+as the fallback, streaming ahead of polling. If YouTube reshapes the page, chat
+gets more expensive rather than going silent. `transport` in `config.toml`
+pins the choice: `"page"`, `"api"`, or `"auto"` for all three in order.
 
 ### Triggers
 
@@ -501,14 +597,85 @@ file much harder to read for the one job it exists to do.
 - Voice activity detection is an adaptive energy detector rather than WebRTC's
   model. It adapts better to a room that changes and needs no C toolchain;
   WebRTC is better at picking a voice out of loud broadband noise.
-- The wake word models are English-trained, so a custom "hey mikki" model
-  needs separate training. `hey_jarvis` works today.
-- Recognition runs on the CPU. `base` decodes a short command in about
-  0.7 seconds, `small` in about 2.2; a GPU build of whisper.cpp makes `small`
-  affordable, and the config comments explain the trade.
-- Google's OAuth consent screen needs one-time sighted or screen-reader help.
+- The wake word is her own name, trained for this application and carried
+  inside the executable, so it cannot be missing. It is trained on the
+  *Indonesian* pronunciation, /mˈiki lˈɛns/, with about a quarter of its
+  training data in the English one for guests and English sentences. At the
+  default threshold of 0.8 it answers 84 of every 100 utterances put through
+  random rooms and noise, and fires 0.28 times an hour on eleven hours of
+  recorded conversation containing no wake word -- against 0.47 for
+  openWakeWord's own `hey_jarvis` measured the same way. On a close microphone
+  in a quiet room the median score is 0.98.
+
+  Two syllables of common phonemes is a genuinely harder wake word than "hey
+  jarvis": /miki lɛns/ collides with ordinary speech in a way /dʒɑːrvɪs/ does
+  not, and the training set is built around that. `tools/wakeword/` retrains
+  it, and its README says how and why.
+
+  The settings page still offers only what is installed, because a wake word
+  named in the config with no model behind it loads nothing and never fires --
+  which is indistinguishable from a microphone that is not listening.
+- Recognition uses the graphics card when there is a GPU build of whisper.cpp
+  in `data/models` and a driver for it, and the processor otherwise; `npm run
+  fetch:stt` fetches the CUDA build. On an RTX 3070 `small` decodes a short
+  command in about 0.2 seconds against 2.2 on the processor, which is the
+  difference between answering and being asked again.
+- The viewer count, the stream title, and changing the title need YouTube
+  connected: Connections → Connect YouTube, which is a browser consent screen
+  once. Reading chat needs none of it. The consent screen is the one setup step
+  that genuinely cannot be driven by voice.
+- No Google credential is built in, so signing in needs an OAuth desktop client
+  of the operator's own in `data/client_secret.json`. A secret in a public
+  source tree is scraped within hours and Google revokes the client rather than
+  the leaked copy, which would break the sign-in for everyone at once. Without
+  the file the Connect button is disabled and the page says why.
+- A Google Cloud project still in Testing expires refresh tokens after seven
+  days. MikkiLens detects that, removes the dead token and says to connect
+  again; publishing the project is the fix.
+- The model has to be multimodal, because one endpoint serves both text and
+  images. A text-only model answers chat summaries perfectly well and then has
+  nothing to say about the screen.
+- The `live_chat` page is not a published contract and YouTube can change it
+  without notice. The Data API transports are the fallback, so the failure mode
+  is quota rather than silence.
 - A global hotkey is Windows-only. The wake word and the settings app work
   anywhere Go and Electron do.
+
+### Iterating
+
+```
+npm run dev              watch both halves
+npm run dev -- --silent  the same, with the engine muted
+```
+
+One command, two watchers, because the two halves reload differently.
+
+The engine is a process, so a Go change means building it and starting it
+again. [air](https://github.com/air-verse/air) does that, configured in
+`.air.toml`; the dev script installs it the first time if it is not there. The
+window is three things -- a main process, a preload and a page -- and only the
+page can be swapped out from under a running Electron. So a change to the page,
+the stylesheet or the window's strings reloads it in place and keeps the tab
+you were on, while a change to the main process or the preload restarts
+Electron, which is the only way to load that code again.
+
+Two details are worth knowing before they confuse you.
+
+The engine belongs to air here, not to the window. Normally the window starts
+an engine when it cannot find one; in dev that would be a second engine
+fighting the first for the microphone, the global hotkey and the port. The
+`--dev` flag makes the window attach and never spawn, and the script refuses to
+start at all while an installed MikkiLens is running -- two windows and two
+engines is not a smaller problem than it sounds, and the worst version of it is
+editing code that is not the code you are looking at.
+
+The dev build goes to `dist/mikkilensd-dev.exe`, not `dist/mikkilensd.exe`.
+That keeps a packaged window from ever picking one up by accident, and it lets
+the script clean up after itself by name without touching an engine you started
+yourself in another terminal. It is built with the same `-extldflags` as the
+release build, which is not an optimisation: without them the linker leaves a
+binary Windows refuses to load, and the error it gives says nothing about link
+flags.
 
 ### Building and testing
 

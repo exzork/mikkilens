@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>MikkiLens — Panduan Pemakaian</title>
+<style>
+  :root {
+    --ink: #1c1a17;
+    --soft: #55504a;
+    --line: #d9d2c8;
+    --rule: #b8ae9f;
+    --accent: #7a3b12;
+    --accent-soft: #f4ece3;
+    --warn: #8a5a00;
+    --warn-soft: #fdf5e3;
+    --code-bg: #f3f1ed;
+  }
+
+  @page { size: A4; }
+
+  * { box-sizing: border-box; }
+
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: var(--ink);
+    background: #fff;
+  }
+
+  /* ---------- cover ---------- */
+
+  .cover {
+    break-after: page;
+    page-break-after: always;
+    padding-top: 4.5cm;
+  }
+
+  .cover .mark {
+    font-size: 9pt;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .cover h1 {
+    font-size: 32pt;
+    line-height: 1.1;
+    margin: 0.5cm 0 0;
+    letter-spacing: -0.015em;
+  }
+
+  .cover .sub {
+    font-size: 14pt;
+    color: var(--soft);
+    margin-top: 0.4cm;
+    max-width: 13cm;
+    line-height: 1.4;
+  }
+
+  .cover hr {
+    border: 0;
+    border-top: 3px solid var(--accent);
+    width: 3.2cm;
+    margin: 1.1cm 0;
+  }
+
+  .cover .meta { font-size: 10pt; color: var(--soft); }
+  .cover .meta b { color: var(--ink); font-weight: 600; }
+
+  .cover .note {
+    margin-top: 2.6cm;
+    padding: 0.6cm 0.7cm;
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+    font-size: 10.5pt;
+    max-width: 14cm;
+  }
+
+  /* ---------- contents ---------- */
+
+  .toc { break-after: page; page-break-after: always; }
+  .toc h2 { margin-top: 0; }
+
+  .toc ol {
+    list-style: none;
+    counter-reset: toc;
+    padding: 0;
+    margin: 0.7cm 0 0;
+  }
+
+  .toc li {
+    counter-increment: toc;
+    padding: 4pt 0;
+    border-bottom: 1px dotted var(--line);
+    display: flex;
+    gap: 0.5cm;
+  }
+
+  .toc li::before {
+    content: counter(toc);
+    color: var(--accent);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    min-width: 1.1cm;
+  }
+
+  .toc li span { color: var(--soft); }
+  .toc li em { font-style: normal; color: var(--rule); font-size: 9.5pt; }
+
+  /* ---------- one point, one page ---------- */
+
+  section.page {
+    break-before: page;
+    page-break-before: always;
+    break-inside: avoid-page;
+  }
+
+  h1, h2, h3 {
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  h2 {
+    font-size: 18pt;
+    margin: 0 0 0.45cm;
+    padding-bottom: 0.2cm;
+    border-bottom: 2px solid var(--accent);
+  }
+
+  h2 .num {
+    display: inline-block;
+    font-size: 10pt;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 700;
+    margin-right: 0.35cm;
+    vertical-align: 0.22em;
+  }
+
+  h3 {
+    font-size: 12.5pt;
+    margin: 0.75cm 0 0.2cm;
+    color: var(--accent);
+  }
+
+  p { margin: 0 0 0.35cm; }
+
+  .lede {
+    color: var(--soft);
+    font-size: 11.5pt;
+    margin-bottom: 0.6cm;
+  }
+
+  /* ---------- lists ---------- */
+
+  ol.steps {
+    counter-reset: s;
+    list-style: none;
+    padding: 0;
+    margin: 0.4cm 0 0.5cm;
+  }
+
+  ol.steps > li {
+    counter-increment: s;
+    position: relative;
+    padding-left: 1.05cm;
+    margin-bottom: 0.4cm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  ol.steps > li::before {
+    content: counter(s);
+    position: absolute;
+    left: 0;
+    top: 1pt;
+    width: 0.65cm;
+    height: 0.65cm;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 9pt;
+    font-weight: 700;
+    text-align: center;
+    line-height: 0.65cm;
+  }
+
+  ul { margin: 0.25cm 0 0.45cm; padding-left: 0.65cm; }
+  li { margin-bottom: 0.15cm; }
+
+  /* ---------- tables ---------- */
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.35cm 0 0.5cm;
+    font-size: 10pt;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  th, td {
+    text-align: left;
+    vertical-align: top;
+    padding: 5pt 8pt;
+    border-bottom: 1px solid var(--line);
+  }
+
+  thead th {
+    background: var(--accent-soft);
+    border-bottom: 1.5px solid var(--rule);
+    font-size: 9.5pt;
+  }
+
+  tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
+
+  td.k { font-weight: 600; }
+
+  table.tight { font-size: 9.5pt; }
+  table.tight th, table.tight td { padding: 3.5pt 8pt; }
+
+  /* ---------- callouts ---------- */
+
+  .box {
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 0.45cm 0.55cm;
+    margin: 0.5cm 0;
+    font-size: 10.5pt;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .box.warn {
+    border-left-color: var(--warn);
+    background: var(--warn-soft);
+  }
+
+  .box p:last-child { margin-bottom: 0; }
+
+  .box .tag {
+    display: block;
+    font-size: 8.5pt;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0.15cm;
+  }
+
+  .box.warn .tag { color: var(--warn); }
+
+  /* ---------- bits ---------- */
+
+  code {
+    font-family: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+    font-size: 9.5pt;
+    background: var(--code-bg);
+    padding: 0.5pt 3pt;
+    border-radius: 2px;
+  }
+
+  pre {
+    font-family: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+    font-size: 9.5pt;
+    line-height: 1.5;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0.4cm 0.5cm;
+    margin: 0.35cm 0 0.5cm;
+    white-space: pre-wrap;
+    break-inside: avoid;
+  }
+
+  pre code { background: none; padding: 0; }
+
+  kbd {
+    font-family: "Segoe UI", sans-serif;
+    font-size: 9pt;
+    font-weight: 600;
+    border: 1px solid var(--rule);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: 1pt 5pt;
+    background: #fff;
+    white-space: nowrap;
+  }
+
+  .ui { font-weight: 650; color: var(--accent); }
+  .say { font-style: italic; }
+
+  ul.check { list-style: none; padding: 0; }
+
+  ul.check li {
+    padding-left: 0.85cm;
+    position: relative;
+    margin-bottom: 0.3cm;
+  }
+
+  ul.check li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 3pt;
+    width: 0.45cm;
+    height: 0.45cm;
+    border: 1.5px solid var(--rule);
+    border-radius: 2px;
+    background: #fff;
+  }
+
+  .optional {
+    display: inline-block;
+    font-size: 8.5pt;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--soft);
+    border: 1px solid var(--rule);
+    border-radius: 10pt;
+    padding: 1pt 7pt;
+    vertical-align: 0.25em;
+    margin-left: 0.3cm;
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="mark">Panduan Pemakaian</div>
+  <h1>MikkiLens</h1>
+  <p class="sub">Yang perlu diatur setelah MikkiLens dipasang, satu langkah per halaman.</p>
+  <hr>
+  <p class="meta">
+    Untuk <b>MikkiLens 0.2</b> di Windows &nbsp;·&nbsp; Bahasa Indonesia
+  </p>
+  <div class="note">
+    <p><b>Semua yang MikkiLens lakukan, dia ucapkan.</b> Setiap perintah, setiap hasil, dan setiap kesalahan dibacakan — jadi kamu tidak perlu melihat layar saat memakainya.</p>
+    <p>Pengaturan awal di panduan ini cukup dikerjakan sekali. Sesudah itu, semuanya lewat suara.</p>
+  </div>
+</div>
+
+<div class="toc">
+  <h2>Isi panduan</h2>
+  <ol>
+    <li><span>Membuka MikkiLens</span></li>
+    <li><span>Memilih perangkat suara</span></li>
+    <li><span>Mengatur suaranya</span></li>
+    <li><span>Memilih mikrofon</span></li>
+    <li><span>Memilih bahasa</span></li>
+    <li><span>Tombol untuk bicara</span></li>
+    <li><span>Menyambungkan OBS</span></li>
+    <li><span>Menyambungkan YouTube</span></li>
+    <li><span>Donasi <em>— opsional</em></span></li>
+    <li><span>Mencobanya</span></li>
+    <li><span>Cara memakainya sehari-hari</span></li>
+    <li><span>Perintah yang bisa diucapkan</span></li>
+    <li><span>Kalau ada perintah yang sering salah didengar</span></li>
+    <li><span>Satu tombol, satu perintah <em>— opsional</em></span></li>
+    <li><span>Lebih dari satu channel <em>— opsional</em></span></li>
+    <li><span>Kalau ada yang tidak jalan</span></li>
+    <li><span>Pembaruan</span></li>
+  </ol>
+</div>
+
+<!-- 1 -->
+<section class="page">
+  <h2><span class="num">Langkah 1</span>Membuka MikkiLens</h2>
+  <p class="lede">Satu ikon, satu klik. Tidak ada yang perlu dijalankan terpisah.</p>
+
+  <ol class="steps">
+    <li>Klik dua kali ikon <b>MikkiLens</b> di desktop.</li>
+    <li>Kalau Windows memperingatkan bahwa berkasnya tidak dikenal, pilih <span class="ui">Info lebih lanjut</span>, lalu <span class="ui">Tetap jalankan</span>.</li>
+    <li>Jendela pengaturan terbuka, dan MikkiLens langsung menyala di belakangnya.</li>
+  </ol>
+
+  <h3>Enam halaman di jendela itu</h3>
+  <table class="tight">
+    <tbody>
+      <tr><td class="k">Status</td><td>Keadaan sekarang, dan tombol untuk mulai atau menghentikan siaran.</td></tr>
+      <tr><td class="k">Suara</td><td>Perangkat keluaran, mikrofon, dan suara bicaranya.</td></tr>
+      <tr><td class="k">Perintah</td><td>Kalimat apa saja yang memicu tiap perintah.</td></tr>
+      <tr><td class="k">Koneksi</td><td>OBS, YouTube, dan donasi.</td></tr>
+      <tr><td class="k">Bahasa</td><td>Bahasa dan tombol untuk bicara.</td></tr>
+      <tr><td class="k">Catatan</td><td>Apa yang dia dengar dan apa yang dia ucapkan.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Berpindah halaman bisa dengan tombol panah kiri dan kanan saat fokus ada di deretan tab.</p>
+
+  <div class="box">
+    <span class="tag">Pertama kali dijalankan, ada yang diunduh dulu</span>
+    <p>Supaya MikkiLens bisa mendengar, ada beberapa berkas yang perlu diunduh —
+    sekitar setengah giga. Itu berjalan sendiri, <b>dikatakan dengan suara</b> saat
+    mulai, dan cuma sekali seumur pemasangan.</p>
+    <p>Tidak perlu ditunggu diam. Semua langkah di panduan ini bisa kamu kerjakan
+    sambil menunggu — dan begitu selesai, MikkiLens memberitahumu bahwa dia sudah
+    bisa mendengar.</p>
+  </div>
+
+  <div class="box">
+    <span class="tag">Menutup jendelanya tidak mematikan MikkiLens</span>
+    <p>Jendela ini hanya untuk mengatur. Setelah semuanya diatur, jendelanya boleh ditutup — MikkiLens tetap mendengarkan, dan ikonnya tetap ada di tray. Untuk membukanya lagi, klik ikon itu.</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section class="page">
+  <h2><span class="num">Langkah 2</span>Memilih perangkat suara</h2>
+  <p class="lede">Ini yang pertama diatur: sampai kamu bisa mendengarnya, tidak ada langkah berikutnya yang bisa kamu ikuti dengan telinga.</p>
+
+  <ol class="steps">
+    <li>Buka halaman <span class="ui">Suara</span>.</li>
+    <li>Di kotak <span class="ui">Perangkat keluaran</span>, tekan tombol <span class="ui">Tes</span> di sebelah tiap perangkat. Kamu akan dengar nada pendek dari perangkat itu.</li>
+    <li>Begitu nadanya terdengar dari perangkat yang benar-benar kamu pakai, pilih perangkat itu.</li>
+    <li>Tekan <span class="ui">Simpan</span>.</li>
+  </ol>
+
+  <p>Mencari lewat tombol Tes seperti ini memang disengaja. Nama perangkat di Windows sering tidak menolong sama sekali — telingamu tahu mana yang benar, daftarnya tidak.</p>
+
+  <div class="box">
+    <span class="tag">Penontonmu ikut mendengar, dan itu wajar</span>
+    <p>Kalau perangkat yang kamu pilih juga ditangkap OBS — biasanya perangkat bawaan Windows — suara MikkiLens ikut masuk ke siaran. Itu normal, dan banyak yang justru menyukainya.</p>
+    <p>Kalau kamu ingin dia hanya terdengar olehmu, pilih headphone yang tidak ditangkap OBS.</p>
+  </div>
+
+  <div class="box warn">
+    <span class="tag">Kalau memakai headphone Bluetooth</span>
+    <p>Headphone Bluetooth kadang memotong kata pertama, karena sambungannya baru menyala saat ada suara. Kalau itu sering terjadi, pakai headphone berkabel untuk MikkiLens.</p>
+  </div>
+</section>
+
+<!-- 3 -->
+<section class="page">
+  <h2><span class="num">Langkah 3</span>Mengatur suaranya</h2>
+  <p class="lede">Seberapa cepat dan sekeras apa dia bicara. Masih di halaman <span class="ui">Suara</span>.</p>
+
+  <h3>Suara bicara</h3>
+  <table class="tight">
+    <tbody>
+      <tr><td class="k" style="width:34%">Suara</td><td>Ada dua suara Indonesia, satu perempuan dan satu laki-laki. Pilih yang paling enak kamu dengar berjam-jam.</td></tr>
+      <tr><td class="k">Kecepatan bicara</td><td>Mulai dari biasa. Kalau nanti sudah hafal kalimat-kalimatnya, mempercepatnya terasa jauh lebih enak.</td></tr>
+      <tr><td class="k">Volume bicara</td><td>Cukup keras untuk terdengar di atas game atau musik yang sedang kamu siarkan.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Tekan <span class="ui">Dengarkan contoh</span> untuk mencobanya sebelum disimpan.</p>
+
+  <h3>Membaca chat</h3>
+  <p>Chat dibacakan berjam-jam, sedangkan konfirmasi hanya sesekali — jadi keduanya diatur terpisah.</p>
+  <ul>
+    <li><span class="ui">Kecepatan membaca chat</span> — biasanya sedikit lebih cepat dari suara konfirmasi.</li>
+    <li><span class="ui">Volume membaca chat</span> — biasanya lebih pelan, supaya chat duduk <i>di bawah</i> siaranmu, bukan menimpanya.</li>
+  </ul>
+
+  <h3>Volume nada</h3>
+  <p>Nada pendek — mulai mendengarkan, berhasil, gagal — punya volumenya sendiri. Nada inilah yang paling sering kamu dengar sepanjang siaran, dan yang paling cepat memberi tahu keadaan. Jangan dikecilkan sampai hilang.</p>
+
+  <p>Tekan <span class="ui">Simpan</span> kalau sudah pas.</p>
+</section>
+
+<!-- 4 -->
+<section class="page">
+  <h2><span class="num">Langkah 4</span>Memilih mikrofon</h2>
+  <p class="lede">Boleh mikrofon yang sama dengan mikrofon siaranmu. Tidak perlu yang kedua.</p>
+
+  <ol class="steps">
+    <li>Masih di halaman <span class="ui">Suara</span>, buka kotak <span class="ui">Mikrofon</span>.</li>
+    <li>Pilih mikrofon yang kamu pakai.</li>
+    <li>Tekan <span class="ui">Simpan</span>.</li>
+  </ol>
+
+  <h3>Memastikan dia benar-benar mendengar</h3>
+  <p>Buka halaman <span class="ui">Bahasa</span>. Di bagian bawah ada batang <span class="ui">Mikrofon</span> yang bergerak. Bicaralah — batang itu harus ikut bergerak.</p>
+
+  <table class="tight">
+    <thead><tr><th style="width:44%">Yang kamu lihat</th><th>Artinya</th></tr></thead>
+    <tbody>
+      <tr><td>Batangnya bergerak saat kamu bicara</td><td>Beres. Mikrofonnya jalan.</td></tr>
+      <tr><td>Batangnya diam saja</td><td>Mikrofonnya salah pilih, atau Windows belum memberi izin.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box">
+    <span class="tag">Kalau batangnya diam</span>
+    <p>Buka <b>Pengaturan Windows</b> → <b>Privasi &amp; keamanan</b> → <b>Mikrofon</b>, dan pastikan aplikasi desktop diizinkan memakai mikrofon.</p>
+    <p>Lalu cek juga hal yang paling sering terlupa: tombol mute di mikrofon atau di headset-nya sendiri.</p>
+  </div>
+</section>
+
+<!-- 5 -->
+<section class="page">
+  <h2><span class="num">Langkah 5</span>Memilih bahasa</h2>
+  <p class="lede">Dua pilihan, dan keduanya berbeda maksudnya. Buka halaman <span class="ui">Bahasa</span>.</p>
+
+  <table>
+    <tbody>
+      <tr>
+        <td class="k" style="width:44%">Bahasa yang diucapkan MikkiLens</td>
+        <td>Bahasa yang dia pakai untuk berbicara kepadamu — dan juga bahasa jendela ini.</td>
+      </tr>
+      <tr>
+        <td class="k">Bahasa yang kamu ucapkan</td>
+        <td>Bahasa yang dia harapkan keluar dari mulutmu.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>Tekan <span class="ui">Simpan</span>.</p>
+
+  <div class="box">
+    <span class="tag">Sebutkan bahasanya, jangan biarkan menebak</span>
+    <p>Ada pilihan <span class="ui">Deteksi otomatis</span> untuk bahasa yang kamu ucapkan. Sebaiknya jangan dipakai kalau kamu memang selalu memakai satu bahasa: perintah biasanya pendek, dan tebakan dari kalimat pendek sering meleset.</p>
+  </div>
+
+  <div class="box">
+    <span class="tag">Keduanya tidak harus sama</span>
+    <p>Kamu boleh bicara dalam bahasa Indonesia dan minta MikkiLens menjawab dalam bahasa Inggris, atau sebaliknya. Perintahnya pun punya daftar kalimatnya sendiri-sendiri per bahasa.</p>
+  </div>
+</section>
+
+<!-- 6 -->
+<section class="page">
+  <h2><span class="num">Langkah 6</span>Tombol untuk bicara</h2>
+  <p class="lede">Tekan tombolnya, ucapkan perintahnya, lepas. Ini cara memanggil yang paling andal.</p>
+
+  <p>Bawaannya <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Spasi</kbd>. Kalau itu sudah cocok, tidak ada yang perlu diubah.</p>
+
+  <h3>Menggantinya</h3>
+  <ol class="steps">
+    <li>Di halaman <span class="ui">Bahasa</span>, cari <span class="ui">Tombol pintasan</span>.</li>
+    <li>Tekan tombol <span class="ui">Ubah</span>.</li>
+    <li>Tekan kombinasi yang kamu mau — ditekan langsung, bukan diketik. <kbd>Escape</kbd> untuk batal.</li>
+    <li>Tekan <span class="ui">Simpan</span>.</li>
+  </ol>
+
+  <p>Kombinasinya harus mengandung <kbd>Ctrl</kbd>, <kbd>Alt</kbd>, <kbd>Shift</kbd>, atau tombol Windows. Tombol tunggal tidak bisa dipakai — ia akan diambil dari semua aplikasi lain.</p>
+
+  <p>Kalau kombinasinya ternyata sudah dipegang aplikasi lain, MikkiLens mengatakannya. Tinggal pilih yang lain.</p>
+
+  <div class="box">
+    <span class="tag">Kata pemicu — bebas tangan</span>
+    <p>Kalau kata pemicu tersedia di komputermu, kamu bisa memanggilnya dengan suara saja, tanpa menekan apa pun. Nyalakan lewat <span class="ui">Dengarkan kata pemicu</span> di halaman yang sama.</p>
+    <p>Kalau sering menyala sendiri saat kamu sedang ngobrol dengan penonton, naikkan <span class="ui">Ambang kata pemicu</span>. Kalau dipanggil tapi tidak menjawab, turunkan.</p>
+    <p><b>Tombol tetap yang paling andal untuk siaran.</b> Kata pemicu itu tambahan, bukan pengganti.</p>
+  </div>
+</section>
+
+<!-- 7 -->
+<section class="page">
+  <h2><span class="num">Langkah 7</span>Menyambungkan OBS</h2>
+  <p class="lede">OBS yang menyiarkan; MikkiLens hanya menyetirnya. Keduanya perlu dikenalkan sekali.</p>
+
+  <h3>Di OBS</h3>
+  <ol class="steps">
+    <li>Buka menu <span class="ui">Tools</span> → <span class="ui">WebSocket Server Settings</span>.</li>
+    <li>Centang <span class="ui">Enable WebSocket server</span>.</li>
+    <li>Tekan <span class="ui">Show Connect Info</span>, lalu salin <b>kata sandinya</b>.</li>
+  </ol>
+
+  <h3>Di MikkiLens</h3>
+  <p>Buka halaman <span class="ui">Koneksi</span>, kotak <span class="ui">OBS Studio</span>.</p>
+  <table class="tight">
+    <tbody>
+      <tr><td class="k" style="width:32%">Alamat dan Port</td><td>Biarkan seperti apa adanya kalau OBS ada di komputer yang sama.</td></tr>
+      <tr><td class="k">Kata sandi</td><td>Tempelkan yang barusan disalin dari OBS.</td></tr>
+      <tr><td class="k">Nama sumber mic</td><td>Nama sumber mikrofonmu di OBS, ditulis persis sama. Ini yang dipakai perintah <span class="say">“matikan mikrofon”</span>.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Tekan <span class="ui">Tes koneksi</span>. Kalau berhasil, dia menyebutkan daftar scene-mu — sekaligus bukti bahwa nama scene yang nanti kamu ucapkan memang cocok. Lalu tekan <span class="ui">Simpan</span>.</p>
+
+  <div class="box warn">
+    <span class="tag">Kalau gagal</span>
+    <p>Hampir selalu salah satu dari tiga ini: OBS belum dibuka, centang WebSocket-nya belum dinyalakan, atau sandinya kurang lengkap saat disalin.</p>
+    <p>OBS boleh ditutup dan dibuka kapan saja — MikkiLens menyambung sendiri lagi.</p>
+  </div>
+</section>
+
+<!-- 8 -->
+<section class="page">
+  <h2><span class="num">Langkah 8</span>Menyambungkan YouTube</h2>
+
+  <div class="box">
+    <span class="tag">Chat tidak perlu diatur sama sekali</span>
+    <p>Chat sudah bisa dibacakan tanpa login apa pun. Kalau yang kamu butuhkan cuma itu, <b>lewati halaman ini</b>.</p>
+    <p>Yang didapat dengan menyambungkan akun ada tiga: <b>jumlah penonton</b>, <b>judul siaran</b>, dan <b>mengganti judul lewat suara</b>.</p>
+  </div>
+
+  <h3>Menyambungkan</h3>
+  <ol class="steps">
+    <li>Buka halaman <span class="ui">Koneksi</span>, kotak <span class="ui">YouTube</span>.</li>
+    <li>Tekan <span class="ui">Sambungkan YouTube</span>.</li>
+    <li>Browser terbuka di halaman persetujuan Google. Setujui di sana — ini bisa memakan waktu semenit.</li>
+    <li>Kembali ke MikkiLens. Selesai, dan cukup sekali seumur pemakaian.</li>
+  </ol>
+
+  <p>Izin yang diminta hanya satu, untuk mengelola akun YouTube-mu. Satu-satunya perubahan yang MikkiLens lakukan di sana adalah <b>mengganti judul siaran</b>, dan itu pun selalu ditanyakan dulu.</p>
+
+  <p>Tombol <span class="ui">Putuskan</span> menghapus loginnya dari komputer ini kapan pun kamu mau.</p>
+
+  <div class="box warn">
+    <span class="tag">Kalau tombolnya tidak bisa ditekan</span>
+    <p>Berarti komputer ini belum punya berkas izin dari Google. Berkas itu dibuat sekali dari <b>Google Cloud Console</b> dan bukan sesuatu yang MikkiLens boleh sediakan sendiri.</p>
+    <p>Kalau kamu tidak terbiasa dengan itu, minta bantuan sekali — sesudah terpasang, tidak perlu disentuh lagi. Halaman Koneksi menyebutkan persis berkas apa yang dicari dan di mana harus ditaruh.</p>
+  </div>
+</section>
+
+<!-- 9 -->
+<section class="page">
+  <h2><span class="num">Langkah 9</span>Donasi<span class="optional">Opsional</span></h2>
+  <p class="lede">Supaya chat tidak dibacakan menimpa alert donasi — satu-satunya pesan di siaranmu yang orang bayar supaya didengar.</p>
+
+  <p>Buka halaman <span class="ui">Koneksi</span>, kotak <span class="ui">Donasi</span>.</p>
+
+  <ol class="steps">
+    <li>Centang <span class="ui">Pantau Tako</span>, atau <span class="ui">Pantau Trakteer</span>, atau keduanya.</li>
+    <li>Dari dashboard masing-masing, salin <b>seluruh tautan overlay alert</b>-nya.</li>
+    <li>Tempelkan tautan itu utuh — jangan dipotong sebagian — ke kolom yang sesuai.</li>
+    <li>Tekan <span class="ui">Simpan</span>.</li>
+  </ol>
+
+  <p>Sesudah itu, setiap kali ada alert donasi tampil, pembacaan chat berhenti sebentar dan lanjut lagi begitu alert-nya selesai. Berapa lamanya diambil dari durasi yang kamu atur di dashboard, jadi tidak ada yang perlu dihitung sendiri.</p>
+
+  <div class="box warn">
+    <span class="tag">Kalau kamu menyalakan “Bacakan donasi”</span>
+    <p><b>Matikan dulu suara overlay-nya di dashboard Tako atau Trakteer.</b> Kalau tidak, setiap donasi dibacakan dua kali sekaligus — sekali oleh overlay, sekali oleh MikkiLens.</p>
+    <p>Untungnya dibacakan MikkiLens: suaranya sama, bahasanya sama, keluar di perangkat yang sama, dan dia mengantre rapi alih-alih memotong yang lain di tengah kalimat.</p>
+  </div>
+
+  <div class="box">
+    <span class="tag">Hadiah membership yang banyak sekaligus</span>
+    <p>Kalau ada yang menghadiahkan membership ke banyak orang, nama-namanya tidak dibacakan semua. Beberapa nama disebut, lalu ditutup dengan “dan 45 orang lainnya”. Jumlahnya bisa diatur di kotak yang sama.</p>
+  </div>
+</section>
+
+<!-- 10 -->
+<section class="page">
+  <h2><span class="num">Langkah 10</span>Mencobanya</h2>
+  <p class="lede">Coba satu per satu sebelum siaran betulan. Semuanya dijawab dengan suara, jadi bisa dilakukan sambil memejamkan mata.</p>
+
+  <ul class="check">
+    <li>Tekan tombol pintasanmu. Kamu mendengar <b>satu nada tinggi</b> seketika.</li>
+    <li>Ucapkan <span class="say">“apa saja perintahnya”</span>. Daftarnya dibacakan.</li>
+    <li>Ucapkan <span class="say">“status”</span>. Seluruh keadaan dibacakan sekaligus.</li>
+    <li>Ucapkan <span class="say">“ganti ke”</span> lalu nama salah satu scene-mu. OBS berpindah, dan dia mengatakannya.</li>
+    <li>Ucapkan <span class="say">“matikan mikrofon”</span>, lalu <span class="say">“nyalakan mikrofon”</span>.</li>
+    <li>Ucapkan <span class="say">“mulai siaran”</span>, lalu <span class="say">“hentikan siaran”</span>. Yang kedua bertanya dulu — jawab <span class="say">“ya”</span> atau <span class="say">“tidak”</span> dengan suara.</li>
+    <li>Saat sedang siaran, chat yang masuk dibacakan sendiri.</li>
+    <li>Ucapkan <span class="say">“berapa penontonnya”</span>, kalau kamu menyambungkan YouTube.</li>
+  </ul>
+
+  <div class="box">
+    <span class="tag">Kalau ada yang belum jalan</span>
+    <p>Buka halaman <span class="ui">Catatan</span>. Di situ tertulis apa yang MikkiLens dengar dan perintah apa yang dia kenali. Hampir semua masalah kelihatan dari sana.</p>
+  </div>
+</section>
+
+<!-- 11 -->
+<section class="page">
+  <h2><span class="num">Langkah 11</span>Cara memakainya sehari-hari</h2>
+  <p class="lede">Tiga cara memanggil, dan enam nada yang perlu kamu kenali.</p>
+
+  <h3>Tiga cara memanggil</h3>
+  <table class="tight">
+    <tbody>
+      <tr><td class="k" style="width:34%">Tombol pintasan</td><td>Tekan, bicara, lepas. Paling andal, dan paling sering dipakai.</td></tr>
+      <tr><td class="k">Kata pemicu</td><td>Bebas tangan. Kadang aktif sendiri saat kamu sedang ngobrol dengan penonton.</td></tr>
+      <tr><td class="k">Tombol perintah</td><td>Satu tombol, satu perintah, tanpa bicara sama sekali. Lihat Langkah 14.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Arti setiap nada</h3>
+  <table class="tight">
+    <tbody>
+      <tr><td class="k" style="width:34%">Satu nada tinggi</td><td>Mulai mendengarkan — silakan bicara</td></tr>
+      <tr><td class="k">Dua nada naik</td><td>Berhasil</td></tr>
+      <tr><td class="k">Dua nada turun, rendah</td><td>Gagal</td></tr>
+      <tr><td class="k">Naik-turun-naik</td><td>Sedang bertanya — jawab “ya” atau “tidak”</td></tr>
+      <tr><td class="k">Blip pendek pelan</td><td>Chat masuk</td></tr>
+      <tr><td class="k">Tiga nada naik</td><td>Super chat</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box">
+    <span class="tag">Nadanya duluan, selalu</span>
+    <p>Nada “mulai mendengarkan” muncul seketika begitu kamu menekan tombolnya — jauh sebelum suara apa pun sempat menjawab. Jadi kamu tidak pernah perlu menebak apakah dia sedang mendengar atau tidak.</p>
+  </div>
+</section>
+
+<!-- 12 -->
+<section class="page">
+  <h2><span class="num">Langkah 12</span>Perintah yang bisa diucapkan</h2>
+  <p class="lede">Semua kalimat di bawah ini bisa kamu ubah dan tambah sendiri — lihat Langkah 13.</p>
+
+  <table class="tight">
+    <thead><tr><th style="width:46%">Kamu ucapkan</th><th>Yang terjadi</th></tr></thead>
+    <tbody>
+      <tr><td>“mulai siaran”</td><td>OBS mulai menyiarkan</td></tr>
+      <tr><td>“hentikan siaran”</td><td>Tanya dulu, lalu berhenti</td></tr>
+      <tr><td>“ganti ke just chatting”</td><td>Pindah scene di OBS</td></tr>
+      <tr><td>“matikan mikrofon”</td><td>Mikrofon di OBS dimatikan</td></tr>
+      <tr><td>“sembunyikan kamera”</td><td>Sumber di scene disembunyikan</td></tr>
+      <tr><td>“berapa penontonnya”</td><td>Jumlah penonton dibacakan</td></tr>
+      <tr><td>“ganti judul jadi main valorant”</td><td>Tanya dulu, lalu ganti judul</td></tr>
+      <tr><td>“jeda chat” / “lanjutkan chat”</td><td>Berhenti dan lanjut membaca chat</td></tr>
+      <tr><td>“susul chat”</td><td>Lompat ke chat terbaru</td></tr>
+      <tr><td>“rangkum chat”</td><td>Ringkasan chat dibacakan</td></tr>
+      <tr><td>“apa yang ada di layar”</td><td>Isi layar dijelaskan</td></tr>
+      <tr><td>“ganti channel ke musik”</td><td>Pindah channel, lihat Langkah 15</td></tr>
+      <tr><td>“status”</td><td>Semua keadaan dibacakan sekaligus</td></tr>
+      <tr><td>“apa saja perintahnya”</td><td>Daftar perintah dibacakan</td></tr>
+      <tr><td>“muat ulang perintah”</td><td>Membaca ulang perintah yang baru kamu ubah</td></tr>
+    </tbody>
+  </table>
+
+  <p>Kalau lupa, tidak perlu membuka panduan ini: ucapkan saja <span class="say">“apa saja perintahnya”</span>.</p>
+</section>
+
+<!-- 13 -->
+<section class="page">
+  <h2><span class="num">Langkah 13</span>Kalau ada perintah yang sering salah didengar</h2>
+  <p class="lede">Jangan ubah cara bicaramu. Tambahkan saja kalimat yang salah didengar itu sebagai kalimat baru.</p>
+
+  <ol class="steps">
+    <li>Buka halaman <span class="ui">Catatan</span> dan lihat apa yang sebenarnya dia dengar dari ucapanmu.</li>
+    <li>Buka halaman <span class="ui">Perintah</span>, lalu cari perintah yang dimaksud.</li>
+    <li>Tambahkan kalimat yang tadi salah didengar itu — <b>satu kalimat per baris</b>.</li>
+    <li>Tekan <span class="ui">Simpan perintah</span>.</li>
+  </ol>
+
+  <p>Kalimat yang lama tidak perlu dihapus. Makin banyak kalimat yang terdaftar, makin sering perintahnya kena.</p>
+
+  <div class="box">
+    <span class="tag">Contoh nyata</span>
+    <p><span class="say">“jeda chat”</span> pernah berkali-kali terdengar sebagai <span class="say">“jidak check”</span>. Perbaikannya bukan dengan berbicara lebih jelas, tapi dengan menambahkan kalimat yang lebih panjang sebagai gantinya.</p>
+  </div>
+
+  <div class="box warn">
+    <span class="tag">Perintah pendek memang lebih sering meleset</span>
+    <p>Kalimat dua kata sulit dikenali; kalimat yang lebih panjang jauh lebih andal. Kalau ada perintah yang sering gagal, tambahkan versi panjangnya — misalnya <span class="say">“tolong jeda dulu chatnya”</span>.</p>
+  </div>
+
+  <p>Perubahan langsung berlaku. Kalau kamu mengubahnya lewat berkas, ucapkan <span class="say">“muat ulang perintah”</span>.</p>
+</section>
+
+<!-- 14 -->
+<section class="page">
+  <h2><span class="num">Langkah 14</span>Satu tombol, satu perintah<span class="optional">Opsional</span></h2>
+  <p class="lede"><span class="say">“Mulai siaran”</span> sebaiknya satu tekan, bukan satu kalimat — apalagi di tengah kamu sedang ngobrol dengan penonton.</p>
+
+  <p>Tombol pintasan di Langkah 6 <b>membuka mikrofon</b>. Yang di sini tidak: satu tombol langsung menjalankan satu perintah, dan tetap mengatakan apa yang terjadi.</p>
+
+  <p>Alat apa pun bisa dipakai, merek apa pun, karena semuanya hanya mengirim kombinasi tombol biasa:</p>
+
+  <table class="tight">
+    <tbody>
+      <tr><td class="k" style="width:44%">Stream Deck (Elgato)</td><td>aksi <span class="ui">Hotkey</span></td></tr>
+      <tr><td class="k">Loupedeck, Ajazz, Mirabox</td><td>aksi hotkey atau keyboard</td></tr>
+      <tr><td class="k">Mouse Logitech atau Razer</td><td>makro “keystroke”</td></tr>
+      <tr><td class="k">Pedal kaki</td><td>terbaca sebagai tombol biasa</td></tr>
+    </tbody>
+  </table>
+
+  <p>Memasangnya perlu menambahkan beberapa baris di berkas pengaturan MikkiLens. Kalau kamu tidak terbiasa dengan itu, ini pekerjaan lima menit untuk orang yang membantumu — sesudah terpasang, tinggal ditekan.</p>
+
+  <div class="box">
+    <span class="tag">Konfirmasi tetap berlaku</span>
+    <p>Tombol yang menghentikan siaran <b>tetap bertanya dulu</b> — dan mikrofonnya terbuka sendiri, jadi kamu tinggal menjawab <span class="say">“ya”</span> atau <span class="say">“tidak”</span> tanpa menekan apa pun lagi.</p>
+    <p>Kalau tombolnya memang khusus dan tidak mungkin tertekan tidak sengaja, konfirmasinya bisa dimatikan untuk tombol itu saja.</p>
+  </div>
+</section>
+
+<!-- 15 -->
+<section class="page">
+  <h2><span class="num">Langkah 15</span>Lebih dari satu channel<span class="optional">Opsional</span></h2>
+  <p class="lede">Lewati kalau kamu hanya punya satu channel.</p>
+
+  <p>Satu channel di sini adalah satu pasangan: <b>satu profil OBS</b>, yang menyimpan kunci siaran channel itu, dan <b>satu akun YouTube</b>, yang membaca chat-nya dan membawa judulnya.</p>
+
+  <p>Sekali ganti, dua-duanya pindah bersamaan. Itulah gunanya. Pindah OBS saja berarti review musikmu keluar di channel utama; pindah akun saja berarti chat channel yang salah dibacakan di atas siaran yang mengarah ke tempat lain.</p>
+
+  <ol class="steps">
+    <li>Di OBS, buat satu <span class="ui">Profile</span> per channel, masing-masing dengan kunci siarannya sendiri.</li>
+    <li>Di halaman <span class="ui">Koneksi</span> MikkiLens, tekan <span class="ui">Sambungkan channel lain</span>, lalu pilih channel yang dimaksud di browser. Ulangi per channel.</li>
+    <li>Di kotak <span class="ui">Channel</span>, beri nama panggilan tiap channel — “utama”, “musik” — dan pilih profil OBS-nya. Tekan <span class="ui">Simpan</span>.</li>
+  </ol>
+
+  <p>Setelah itu cukup diucapkan: <span class="say">“ganti channel ke musik”</span>. Berlaku dua arah — kalau profil OBS diganti dari menu OBS, akun YouTube-nya ikut pindah sendiri.</p>
+
+  <div class="box warn">
+    <span class="tag">OBS tidak mau ganti profil selagi kamu live</span>
+    <p>MikkiLens mengatakannya dan tidak mengubah apa pun, alih-alih pindah setengah-setengah. Hentikan siaran dulu, baru ganti.</p>
+  </div>
+</section>
+
+<!-- 16 -->
+<section class="page">
+  <h2><span class="num">Langkah 16</span>Kalau ada yang tidak jalan</h2>
+  <p class="lede">Buka halaman <span class="ui">Catatan</span> lebih dulu. Di situ ada apa yang MikkiLens dengar dan perintah apa yang dia kenali — hampir semua masalah kelihatan dari sana.</p>
+
+  <table class="tight">
+    <thead><tr><th style="width:42%">Gejala</th><th>Yang perlu dicek</th></tr></thead>
+    <tbody>
+      <tr><td>Tidak ada suara sama sekali</td><td>Perangkat keluarannya salah. Langkah 2.</td></tr>
+      <tr><td>Perintahnya tidak dikenali</td><td>Tambahkan kalimat yang salah didengar itu. Langkah 13.</td></tr>
+      <tr><td>Dia tidak bereaksi saat tombol ditekan</td><td>Kombinasinya mungkin dipakai aplikasi lain. Ganti di Langkah 6.</td></tr>
+      <tr><td>“OBS tidak merespons”</td><td>OBS belum dibuka, atau WebSocket-nya mati. Langkah 7.</td></tr>
+      <tr><td>Nama scene tidak dikenali</td><td>Tekan Tes koneksi di halaman Koneksi untuk mendengar nama scene yang sebenarnya.</td></tr>
+      <tr><td>“YouTube belum tersambung”</td><td>Sambungkan di halaman Koneksi. Langkah 8.</td></tr>
+      <tr><td>Chat tidak dibacakan</td><td>Pastikan memang sedang ada siaran yang berjalan.</td></tr>
+      <tr><td>Donasi tertimpa chat</td><td>Tautan overlay-nya belum diisi, atau kurang lengkap. Langkah 9.</td></tr>
+      <tr><td>Berhenti merespons sama sekali</td><td>Halaman <span class="ui">Status</span> → <span class="ui">Mulai ulang mesin</span>.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box">
+    <span class="tag">Kalau minta bantuan orang lain</span>
+    <p>Menu <span class="ui">Bantuan</span> → <span class="ui">Catatan MikkiLens</span> membuka catatan lengkapnya. Berkas itu aman diberikan ke orang yang membantumu — kunci dan sandi tidak ikut tersimpan di sana.</p>
+  </div>
+</section>
+
+<!-- 17 -->
+<section class="page">
+  <h2><span class="num">Langkah 17</span>Pembaruan</h2>
+  <p class="lede">MikkiLens mencari versi baru sendiri dan mengunduhnya diam-diam. Yang tidak dia lakukan sendiri adalah memasangnya.</p>
+
+  <p>Begitu ada versi baru yang siap, MikkiLens <b>mengatakannya</b>. Pemasangannya baru berjalan kalau kamu memilih <span class="ui">Pasang pembaruan</span> dari menu atau dari ikon di tray.</p>
+
+  <p>Kalau kamu sedang siaran, permintaannya ditunda — dan itu pun dikatakan. Minta lagi setelah siaran selesai.</p>
+
+  <div class="box">
+    <span class="tag">Kenapa tidak otomatis</span>
+    <p>Memasang pembaruan berarti mematikan sebentar hal yang sedang mendengarkan mikrofonmu dan memegang siaranmu. Itu tidak boleh terjadi hanya karena sebuah pengatur waktu memutuskan sekarang saatnya. Jadi keputusannya selalu ada di tanganmu.</p>
+  </div>
+
+  <div class="box">
+    <span class="tag">Pengaturanmu tidak ikut terhapus</span>
+    <p>Semua yang kamu atur di panduan ini — perangkat suara, bahasa, tombol, sambungan OBS dan YouTube, dan kalimat perintah yang kamu tambahkan — disimpan terpisah dari aplikasinya. Memperbarui, atau bahkan memasang ulang, tidak menghapus apa pun.</p>
+  </div>
+
+  <h3>Selesai</h3>
+  <p>Sesudah semua langkah di panduan ini, jendelanya boleh ditutup. MikkiLens tetap mendengarkan.</p>
+</section>
+
+</body>
+</html>

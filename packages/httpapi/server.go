@@ -23,13 +23,13 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/exzork/mikkilens/packages/audio/assets"
 	"github.com/exzork/mikkilens/packages/audio/capture"
 	"github.com/exzork/mikkilens/packages/audio/feedback"
 	"github.com/exzork/mikkilens/packages/audio/hotkey"
 	"github.com/exzork/mikkilens/packages/audio/stt"
 	"github.com/exzork/mikkilens/packages/audio/wake"
 	"github.com/exzork/mikkilens/packages/chat"
-	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/controllers/obs"
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -54,8 +54,11 @@ type Engine interface {
 	ReloadCommands()
 	Router() *intent.Router
 	Transcriber() *stt.Transcriber
+	Installing() assets.Progress
 	Wake() *wake.Detector
+	WakeError() string
 	Hotkey() hotkey.Watcher
+	HotkeyError() string
 	Microphone() *capture.Stream
 	OBS() *obs.Controller
 	YouTube() *youtube.Controller
@@ -63,10 +66,11 @@ type Engine interface {
 	ChatReader() *chat.Reader
 	BeginListening()
 	RunCommand(id string, confirm bool)
-	OnYouTubeConnected(context.Context)
-	OnYouTubeDisconnected()
 	RefreshYouTube(context.Context)
-	OnMatcherProgress(llm.Progress)
+	ConnectYouTube(context.Context) error
+	ConnectChannel(context.Context) error
+	DisconnectYouTube() error
+	SwitchChannel(context.Context, string) error
 }
 
 // Server runs the API alongside the voice engine.

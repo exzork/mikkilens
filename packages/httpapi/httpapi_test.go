@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/exzork/mikkilens/packages/audio/assets"
 	"github.com/exzork/mikkilens/packages/audio/capture"
 	"github.com/exzork/mikkilens/packages/audio/devices"
 	"github.com/exzork/mikkilens/packages/audio/feedback"
@@ -22,7 +24,6 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/tts"
 	"github.com/exzork/mikkilens/packages/audio/wake"
 	"github.com/exzork/mikkilens/packages/chat"
-	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/controllers/obs"
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -47,11 +48,17 @@ type stubEngine struct {
 	commands *intent.Set
 	router   *intent.Router
 
-	applied []config.Config
-	adopted []*intent.Set
-	reloads int
-	listens int
-	ran     []ranCommand
+	wakeError   string
+	hotkeyError string
+
+	applied     []config.Config
+	adopted     []*intent.Set
+	reloads     int
+	listens     int
+	ran         []ranCommand
+	connects    int
+	disconnects int
+	switched    []string
 }
 
 // ranCommand records a command a button or a key asked for.
@@ -129,8 +136,11 @@ func (e *stubEngine) AdoptCommands(set *intent.Set) {
 func (e *stubEngine) ReloadCommands()               { e.reloads++ }
 func (e *stubEngine) Router() *intent.Router        { return e.router }
 func (e *stubEngine) Transcriber() *stt.Transcriber { return stt.New(e.settings.STT, "id") }
+func (e *stubEngine) Installing() assets.Progress   { return assets.Progress{} }
 func (e *stubEngine) Wake() *wake.Detector          { return nil }
+func (e *stubEngine) WakeError() string             { return e.wakeError }
 func (e *stubEngine) Hotkey() hotkey.Watcher        { return nil }
+func (e *stubEngine) HotkeyError() string           { return e.hotkeyError }
 func (e *stubEngine) Microphone() *capture.Stream   { return nil }
 func (e *stubEngine) OBS() *obs.Controller          { return nil }
 func (e *stubEngine) YouTube() *youtube.Controller  { return nil }
@@ -143,7 +153,34 @@ func (e *stubEngine) RunCommand(id string, confirm bool) {
 func (e *stubEngine) OnYouTubeConnected(context.Context) {}
 func (e *stubEngine) OnYouTubeDisconnected()             {}
 func (e *stubEngine) RefreshYouTube(context.Context)     {}
-func (e *stubEngine) OnMatcherProgress(llm.Progress)     {}
+
+// Connecting is the consent flow, which no test may open a browser for. The
+// stub records that it was asked and answers as a machine with no OAuth client
+// would: it cannot.
+func (e *stubEngine) ConnectYouTube(context.Context) error {
+	e.connects++
+	return errors.New("there is no YouTube sign-in set up")
+}
+
+// Connecting a second channel is the same browser flow, and just as off limits
+// to a test, so it answers the same way.
+func (e *stubEngine) ConnectChannel(context.Context) error {
+	e.connects++
+	return errors.New("there is no YouTube sign-in set up")
+}
+
+func (e *stubEngine) DisconnectYouTube() error {
+	e.disconnects++
+	return nil
+}
+
+// Switching records the channel it was asked for. No sign-in and no OBS in a
+// test, so there is nothing to move; the engine says so out loud in the real
+// application, which is not this one.
+func (e *stubEngine) SwitchChannel(_ context.Context, channel string) error {
+	e.switched = append(e.switched, channel)
+	return nil
+}
 
 // client wires a stub engine to a running test server, with every write
 // contained in a temporary directory.
@@ -220,6 +257,57 @@ func TestStateEndpointReportsTheSnapshot(t *testing.T) {
 	}
 	if count, _ := body["command_count"].(float64); count <= 0 {
 		t.Errorf("command_count = %v", body["command_count"])
+	}
+}
+
+// TestWakeEndpointOffersWhatIsInstalled: the settings page builds its wake
+// word list from this. A name that is not installed loads nothing and never
+// fires, which she experiences as a microphone that is not listening -- so the
+// page offers a choice of what is there rather than a box to type into.
+func TestWakeEndpointOffersWhatIsInstalled(t *testing.T) {
+	server, _, directory := client(t)
+	models := filepath.Join(directory, "data", "models")
+	if err := os.MkdirAll(models, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"melspectrogram.onnx", "embedding_model.onnx", "hey_jarvis_v0.1.onnx",
+	} {
+		if err := os.WriteFile(filepath.Join(models, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	body := get(t, server, "/api/wake")
+
+	// Two: the one written above, and MikkiLens's own, which ships inside the
+	// executable and is written out the moment anything asks what is
+	// installed. The configured model is that one.
+	installed, _ := body["installed"].([]any)
+	if len(installed) != 2 || installed[0] != "hey_jarvis" ||
+		installed[1] != "mikkilens" {
+		t.Errorf("installed = %v, want the downloaded one and the built-in one",
+			installed)
+	}
+	if body["model"] != "mikkilens" {
+		t.Errorf("model = %v", body["model"])
+	}
+	if body["enabled"] != true {
+		t.Errorf("enabled = %v", body["enabled"])
+	}
+}
+
+// TestWakeEndpointSaysWhyThereIsNoWakeWord: "wake word: off" is the reading
+// she is trying to explain, so the reason travels with it.
+func TestWakeEndpointSaysWhyThereIsNoWakeWord(t *testing.T) {
+	server, engine, _ := client(t)
+	engine.wakeError = "the wake word model \"hi miki\" was not found"
+
+	if body := get(t, server, "/api/wake"); body["error"] != engine.wakeError {
+		t.Errorf("error = %v, want %q", body["error"], engine.wakeError)
+	}
+	if body := get(t, server, "/api/state"); body["wake_error"] != engine.wakeError {
+		t.Errorf("wake_error = %v, want it in the snapshot too", body["wake_error"])
 	}
 }
 
@@ -667,5 +755,85 @@ func TestStreamControlRejectsAGetRequest(t *testing.T) {
 
 	if status != http.StatusMethodNotAllowed {
 		t.Errorf("status is %d, want %d", status, http.StatusMethodNotAllowed)
+	}
+}
+
+// -- youtube ------------------------------------------------------------------
+
+// Two buttons, two endpoints. The settings page decides what to say from the
+// status alone, so the status has to carry enough to tell "not connected"
+// apart from "cannot connect, there is no OAuth client on this machine" --
+// they have different next steps and she can only hear one sentence.
+func TestYouTubeStatusSaysWhetherConnectingIsEvenPossible(t *testing.T) {
+	server, _, _ := client(t)
+
+	body := get(t, server, "/api/youtube/status")
+
+	if body["enabled"] != false {
+		t.Errorf("with no controller YouTube is not enabled: %v", body["enabled"])
+	}
+	if body["connected"] != false {
+		t.Errorf("connected = %v, want false", body["connected"])
+	}
+}
+
+func TestConnectingReportsTheFailureRatherThanClaimingSuccess(t *testing.T) {
+	server, engine, _ := client(t)
+
+	status, payload := send(t, server, http.MethodPost, "/api/youtube/connect", nil)
+
+	if engine.connects != 1 {
+		t.Errorf("the engine was asked to connect %d times", engine.connects)
+	}
+	if status == http.StatusOK {
+		t.Error("a sign-in that could not happen must not answer OK")
+	}
+	if payload["detail"] == nil {
+		t.Error("the refusal must say why, because it is going to be read aloud")
+	}
+}
+
+func TestDisconnectingIsAcceptedAndReachesTheEngine(t *testing.T) {
+	server, engine, _ := client(t)
+
+	status, _ := send(t, server, http.MethodPost, "/api/youtube/disconnect", nil)
+
+	if status != http.StatusOK {
+		t.Errorf("status is %d, want %d", status, http.StatusOK)
+	}
+	if engine.disconnects != 1 {
+		t.Errorf("the engine was asked to disconnect %d times", engine.disconnects)
+	}
+}
+
+// Connecting opens a browser and signs into her channel, and disconnecting
+// throws the sign-in away. Neither may be reachable by anything that merely
+// follows a link.
+func TestTheYouTubeButtonsRejectGetRequests(t *testing.T) {
+	server, engine, _ := client(t)
+
+	for _, path := range []string{"/api/youtube/connect", "/api/youtube/disconnect"} {
+		status, _ := send(t, server, http.MethodGet, path, nil)
+		if status != http.StatusMethodNotAllowed {
+			t.Errorf("GET %s returned %d, want %d", path, status, http.StatusMethodNotAllowed)
+		}
+	}
+	if engine.connects != 0 || engine.disconnects != 0 {
+		t.Error("a GET must not have reached the engine at all")
+	}
+}
+
+// The model download endpoints are gone with the downloader. A stale settings
+// page still asking for them must get a plain 404 rather than a hang.
+func TestTheModelDownloadEndpointsAreGone(t *testing.T) {
+	server, _, _ := client(t)
+
+	for _, path := range []string{
+		"/api/matcher/status", "/api/matcher/download", "/api/matcher/cancel",
+	} {
+		status, _ := send(t, server, http.MethodPost, path, nil)
+		if status != http.StatusNotFound {
+			t.Errorf("POST %s returned %d, want %d", path, status, http.StatusNotFound)
+		}
 	}
 }

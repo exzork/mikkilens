@@ -116,11 +116,16 @@
       <section role="tabpanel" id="panel-status" aria-labelledby="tab-status" tabindex="0">
         <h2 data-i18n="status.heading">Status</h2>
 
-        <div class="scroller">
-          <dl class="status-grid" id="status-grid"></dl>
+        <div class="scroller columns">
+          <section class="card full">
+            <h3 data-i18n="status.readings">Right now</h3>
+            <dl class="status-grid" id="status-grid"></dl>
+          </section>
 
-          <h3 data-i18n="status.connections">Connections</h3>
-          <ul class="health" id="health-list"></ul>
+          <section class="card full">
+            <h3 data-i18n="status.connections">Connections</h3>
+            <ul class="health" id="health-list"></ul>
+          </section>
         </div>
 
         <div class="actions">
@@ -145,38 +150,68 @@
         <h2 data-i18n="audio.heading">Audio</h2>
 
         <div class="scroller columns">
-        <fieldset>
-          <legend data-i18n="audio.outputLegend">Output device</legend>
-          <p class="hint" data-i18n="audio.outputHint"></p>
-          <div id="output-devices" class="device-list"></div>
-        </fieldset>
+          <fieldset class="wide">
+            <legend data-i18n="audio.outputLegend">Output device</legend>
+            <p class="hint" data-i18n="audio.outputHint"></p>
+            <div id="output-devices" class="device-list"></div>
+          </fieldset>
 
-        <fieldset>
-          <legend data-i18n="audio.inputLegend">Microphone</legend>
-          <div id="input-devices" class="device-list"></div>
-        </fieldset>
+          <fieldset class="wide">
+            <legend data-i18n="audio.inputLegend">Microphone</legend>
+            <div id="input-devices" class="device-list"></div>
+          </fieldset>
 
-        <fieldset>
-          <legend data-i18n="audio.voiceLegend">Speaking voice</legend>
-          <p>
-            <label for="voice" data-i18n="audio.voice">Voice</label>
-            <select id="voice"></select>
-          </p>
-          <p>
-            <label for="rate" data-i18n="audio.rate">Speaking rate</label>
-            <input type="text" id="rate" size="8" />
-            <span class="hint" data-i18n="audio.rateHint"></span>
-          </p>
-          <p>
-            <label for="chat-rate" data-i18n="audio.chatRate">Chat reading rate</label>
-            <input type="text" id="chat-rate" size="8" />
-          </p>
-          <p>
-            <label for="earcon-volume" data-i18n="audio.earconVolume">Tone volume</label>
-            <input type="range" id="earcon-volume" min="0" max="1" step="0.05" />
-            <output id="earcon-volume-out"></output>
-          </p>
-        </fieldset>
+          <fieldset class="wide long-labels">
+            <legend data-i18n="audio.sttLegend">Speech recognition</legend>
+            <p class="hint" data-i18n="audio.sttHint"></p>
+            <p>
+              <label for="stt-model-size" data-i18n="audio.sttModel">Recognition model</label>
+              <select id="stt-model-size"></select>
+            </p>
+            <p>
+              <label for="stt-device" data-i18n="audio.sttDevice">Run it on</label>
+              <select id="stt-device"></select>
+            </p>
+            <p class="hint" id="stt-running"></p>
+          </fieldset>
+
+          <fieldset class="wide">
+            <legend data-i18n="audio.voiceLegend">Speaking voice</legend>
+            <p>
+              <label for="voice" data-i18n="audio.voice">Voice</label>
+              <select id="voice"></select>
+            </p>
+            <p>
+              <label for="rate" data-i18n="audio.rate">Speaking rate</label>
+              <input type="range" id="rate" min="-50" max="100" step="5" data-unit="percent" />
+              <output id="rate-out"></output>
+            </p>
+            <p>
+              <label for="volume" data-i18n="audio.volume">Speaking volume</label>
+              <input type="range" id="volume" min="-50" max="50" step="5" data-unit="percent" />
+              <output id="volume-out"></output>
+            </p>
+            <p>
+              <label for="earcon-volume" data-i18n="audio.earconVolume">Tone volume</label>
+              <input type="range" id="earcon-volume" min="0" max="1" step="0.05" data-unit="fraction" />
+              <output id="earcon-volume-out"></output>
+            </p>
+          </fieldset>
+
+          <fieldset class="wide">
+            <legend data-i18n="audio.chatLegend">Chat reading</legend>
+            <p class="hint" data-i18n="audio.chatHint"></p>
+            <p>
+              <label for="chat-rate" data-i18n="audio.chatRate">Chat reading rate</label>
+              <input type="range" id="chat-rate" min="-50" max="100" step="5" data-unit="percent" />
+              <output id="chat-rate-out"></output>
+            </p>
+            <p>
+              <label for="chat-volume" data-i18n="audio.chatVolume">Chat reading volume</label>
+              <input type="range" id="chat-volume" min="-50" max="50" step="5" data-unit="percent" />
+              <output id="chat-volume-out"></output>
+            </p>
+          </fieldset>
         </div>
 
         <div class="actions">
@@ -199,7 +234,7 @@
         <h2 data-i18n="commands.heading">Commands</h2>
         <p class="hint" data-i18n="commands.hint"></p>
         <p id="command-warnings" class="warnings" role="status" hidden></p>
-        <div id="command-list" class="scroller"></div>
+        <div id="command-list" class="scroller command-list"></div>
 
         <div class="actions">
           <button type="button" id="save-commands" class="primary" data-i18n="commands.save">
@@ -221,24 +256,24 @@
         <h2 data-i18n="connections.heading">Connections</h2>
 
         <div class="scroller columns">
-        <fieldset>
+        <fieldset class="wide">
           <legend data-i18n="obs.legend">OBS Studio</legend>
           <p><label for="obs-host" data-i18n="obs.host">Address</label> <input type="text" id="obs-host" /></p>
           <p><label for="obs-port" data-i18n="obs.port">Port</label> <input type="number" id="obs-port" /></p>
           <p><label for="obs-password" data-i18n="obs.password">Password</label> <input type="password" id="obs-password" /></p>
           <p><label for="obs-mic" data-i18n="obs.micSource">Microphone source name</label> <input type="text" id="obs-mic" /></p>
-          <p>
+          <p class="buttons">
             <button type="button" id="save-obs" class="primary" data-i18n="common.save">Save</button>
             <button type="button" id="test-obs" data-i18n="obs.test">Test the connection</button>
           </p>
           <p class="result" id="obs-result" role="status"></p>
         </fieldset>
 
-        <fieldset>
+        <fieldset class="wide">
           <legend data-i18n="youtube.legend">YouTube</legend>
           <p class="hint" data-i18n="youtube.hint"></p>
           <p id="youtube-state" role="status" data-i18n="youtube.checking">Checking…</p>
-          <p>
+          <p class="buttons">
             <button type="button" id="connect-youtube" class="primary" data-i18n="youtube.connect">
               Connect YouTube
             </button>
@@ -246,70 +281,85 @@
               Disconnect
             </button>
           </p>
-          <p class="result" id="youtube-result" role="status"></p>
-
-          <p class="hint" data-i18n="youtube.keyHint"></p>
-          <p>
-            <label for="youtube-key" data-i18n="youtube.apiKey">API key</label>
-            <input type="password" id="youtube-key" size="40" />
-          </p>
-          <p>
-            <label for="youtube-channel" data-i18n="youtube.channel">Channel link</label>
-            <input type="text" id="youtube-channel" size="40" />
-          </p>
-          <p>
-            <label for="youtube-video" data-i18n="youtube.video">Stream link</label>
-            <input type="text" id="youtube-video" size="40" />
-          </p>
-          <p>
-            <button type="button" id="save-youtube-key" class="primary" data-i18n="common.save">
-              Save
-            </button>
-          </p>
-          <p class="result" id="youtube-key-result" role="status"></p>
+          <p class="result" id="youtube-result" role="status" aria-live="polite"></p>
         </fieldset>
 
-        <fieldset>
-          <legend data-i18n="startup.legend">Run automatically</legend>
+        <fieldset class="wide">
+          <legend data-i18n="donations.legend">Donations</legend>
+          <p class="hint" data-i18n="donations.hint"></p>
+
           <p>
-            <input type="checkbox" id="startup" />
-            <label for="startup" data-i18n="startup.label">Start MikkiLens when Windows starts</label>
+            <label for="tako-enabled" data-i18n="donations.takoEnabled">Watch Tako</label>
+            <input type="checkbox" id="tako-enabled" />
           </p>
+          <p>
+            <label for="tako-link" data-i18n="donations.takoLink">Tako alert overlay link</label>
+            <input type="text" id="tako-link" placeholder="https://tako.id/overlay/alert?overlay_key=..." />
+          </p>
+          <p>
+            <label for="tako-read" data-i18n="donations.takoReadAloud">Read Tako donations aloud</label>
+            <input type="checkbox" id="tako-read" />
+          </p>
+
+          <p>
+            <label for="trakteer-enabled" data-i18n="donations.trakteerEnabled">Watch Trakteer</label>
+            <input type="checkbox" id="trakteer-enabled" />
+          </p>
+          <p>
+            <label for="trakteer-link" data-i18n="donations.trakteerLink">Trakteer overlay link</label>
+            <input type="text" id="trakteer-link" placeholder="https://stream.trakteer.id/notification/...?key=...&hash=..." />
+          </p>
+          <p>
+            <label for="trakteer-read" data-i18n="donations.trakteerReadAloud">Read Trakteer donations aloud</label>
+            <input type="checkbox" id="trakteer-read" />
+          </p>
+
+          <p class="hint" data-i18n="donations.readAloudWarning"></p>
+
+          <p>
+            <label for="max-gift-recipients" data-i18n="donations.maxGiftRecipients">
+              Gift membership names to read
+            </label>
+            <input type="number" id="max-gift-recipients" min="0" max="100" step="1" />
+          </p>
+          <p class="hint" data-i18n="donations.maxGiftRecipientsHint"></p>
+
+          <p class="buttons">
+            <button type="button" id="save-donations" class="primary" data-i18n="common.save">Save</button>
+          </p>
+          <p class="result" id="donations-result" role="status"></p>
         </fieldset>
 
-        <fieldset>
-          <legend data-i18n="matcher.legend">Understanding commands</legend>
-          <p class="hint" data-i18n="matcher.hint"></p>
-          <p id="matcher-state" role="status" data-i18n="matcher.checking">Checking…</p>
-          <p>
-            <label for="matcher-model" data-i18n="matcher.model">Model</label>
-            <select id="matcher-model"></select>
-          </p>
-          <p>
-            <button type="button" id="download-matcher" class="primary" data-i18n="matcher.download">
-              Download
-            </button>
-            <button type="button" id="cancel-matcher" data-i18n="matcher.cancel">
-              Stop downloading
+        <fieldset class="full">
+          <legend data-i18n="channels.legend">Channels</legend>
+          <p class="hint" data-i18n="channels.hint"></p>
+          <p id="channels-state" role="status" data-i18n="channels.loading">Loading…</p>
+          <div id="channel-list"></div>
+          <p class="buttons">
+            <button type="button" id="save-channels" class="primary" data-i18n="common.save">Save</button>
+            <button type="button" id="connect-channel" data-i18n="channels.connectAnother">
+              Connect another channel
             </button>
           </p>
-          <p>
-            <progress id="matcher-progress" max="100" value="0" hidden></progress>
-          </p>
-          <p class="result" id="matcher-result" role="status" aria-live="polite"></p>
+          <p class="result" id="channels-result" role="status" aria-live="polite"></p>
         </fieldset>
 
-        <fieldset>
-          <legend data-i18n="vision.legend">Vision model</legend>
-          <p class="hint" data-i18n="vision.hint"></p>
-          <p><label for="vision-url" data-i18n="vision.baseURL">Base URL</label> <input type="text" id="vision-url" size="40" /></p>
-          <p><label for="vision-model" data-i18n="vision.model">Model</label> <input type="text" id="vision-model" /></p>
-          <p><label for="vision-key" data-i18n="vision.apiKey">API key</label> <input type="password" id="vision-key" size="40" /></p>
+        <fieldset class="full">
+          <legend data-i18n="model.legend">Model</legend>
+          <p class="hint" data-i18n="model.hint"></p>
+          <p><label for="model-url" data-i18n="model.baseURL">Base URL</label> <input type="text" id="model-url" size="40" /></p>
+          <p><label for="model-name" data-i18n="model.model">Model</label> <input type="text" id="model-name" /></p>
+          <p><label for="model-key" data-i18n="model.apiKey">API key</label> <input type="password" id="model-key" size="40" /></p>
           <p>
-            <button type="button" id="save-vision" class="primary" data-i18n="common.save">Save</button>
-            <button type="button" id="test-vision" data-i18n="vision.test">Test the model</button>
+            <input type="checkbox" id="matcher-enabled" />
+            <label for="matcher-enabled" data-i18n="model.matcherLabel">Use it to work out commands it did not recognise</label>
           </p>
-          <p class="result" id="vision-result" role="status"></p>
+          <p class="hint" data-i18n="model.matcherHint"></p>
+          <p class="buttons">
+            <button type="button" id="save-model" class="primary" data-i18n="common.save">Save</button>
+            <button type="button" id="test-model" data-i18n="model.test">Test the model</button>
+          </p>
+          <p class="result" id="model-result" role="status"></p>
         </fieldset>
         </div>
       </section>
@@ -322,31 +372,72 @@
         hidden
       >
         <h2 data-i18n="language.heading">Language</h2>
-        <div class="scroller">
-        <p>
-          <label for="lang-output" data-i18n="language.spoken">The language MikkiLens speaks</label>
-          <select id="lang-output"></select>
-        </p>
-        <p>
-          <label for="lang-stt" data-i18n="language.yours">The language you speak</label>
-          <select id="lang-stt"></select>
-        </p>
-        <p>
-          <label for="wake-model" data-i18n="language.wakeModel">Wake word</label>
-          <input type="text" id="wake-model" />
-        </p>
-        <p>
-          <label for="wake-threshold" data-i18n="language.wakeThreshold">Wake word sensitivity</label>
-          <input type="range" id="wake-threshold" min="0.1" max="0.95" step="0.05" />
-          <output id="wake-threshold-out"></output>
-          <span class="hint" data-i18n="language.wakeHint"></span>
-        </p>
-        <p>
-          <label for="hotkey" data-i18n="language.hotkey">Hotkey</label>
-          <input type="text" id="hotkey" size="24" />
-          <span class="hint" data-i18n="language.hotkeyHint"></span>
-        </p>
+        <div class="scroller columns">
+          <fieldset class="wide long-labels">
+            <legend data-i18n="language.legend">Languages</legend>
+            <p>
+              <label for="lang-output" data-i18n="language.spoken">The language MikkiLens speaks</label>
+              <select id="lang-output"></select>
+            </p>
+            <p>
+              <label for="lang-stt" data-i18n="language.yours">The language you speak</label>
+              <select id="lang-stt"></select>
+            </p>
+          </fieldset>
+
+          <fieldset class="wide">
+            <legend data-i18n="language.triggerLegend">Getting her attention</legend>
+            <p>
+              <input type="checkbox" id="wake-enabled" />
+              <label for="wake-enabled" data-i18n="language.wakeEnabled">
+                Listen for a wake word
+              </label>
+            </p>
+            <p>
+              <label for="wake-model" data-i18n="language.wakeModel">Wake word</label>
+              <select id="wake-model"></select>
+            </p>
+            <p class="hint" id="wake-model-note"></p>
+            <p>
+              <label for="wake-threshold" data-i18n="language.wakeThreshold">Wake word threshold</label>
+              <input type="range" id="wake-threshold" min="0.1" max="0.95" step="0.05" data-unit="fraction" />
+              <output id="wake-threshold-out"></output>
+              <span class="hint" data-i18n="language.wakeHint"></span>
+            </p>
+
+            <!-- Two bars and a sentence. "It is not hearing me" and "it hears
+                 me but never triggers" are different faults with the same
+                 symptom, and this is what tells them apart without a log. -->
+            <p>
+              <span class="pseudo-label" data-i18n="language.micLevel">Microphone</span>
+              <span class="level" aria-hidden="true"><span id="mic-level-fill"></span></span>
+              <output id="mic-level-out">0%</output>
+            </p>
+            <p>
+              <span class="pseudo-label" data-i18n="language.wakeScore">Wake word now</span>
+              <span class="level" aria-hidden="true">
+                <span id="wake-score-fill"></span>
+                <span id="wake-threshold-mark" class="level-mark"></span>
+              </span>
+              <output id="wake-score-out">0%</output>
+            </p>
+            <p class="hint" id="wake-live-note" role="status"></p>
+
+            <p>
+              <label for="hotkey" data-i18n="language.hotkey">Hotkey</label>
+              <input type="text" id="hotkey" size="24" readonly aria-describedby="hotkey-hint" />
+              <button type="button" id="hotkey-record" data-i18n="language.hotkeyRecord">
+                Change
+              </button>
+              <span class="hint" id="hotkey-hint" data-i18n="language.hotkeyHint"></span>
+            </p>
+            <!-- Not a live region: every message written here is announced
+                 through the page's announcer already, and two live regions
+                 saying the same sentence is a screen reader saying it twice. -->
+            <p class="hint" id="hotkey-note"></p>
+          </fieldset>
         </div>
+
         <div class="actions">
           <button type="button" id="save-language" class="primary" data-i18n="common.save">Save</button>
         </div>
@@ -356,8 +447,10 @@
         <h2 data-i18n="log.heading">Log</h2>
         <p class="hint" data-i18n="log.hint"></p>
 
-        <h3 data-i18n="log.lastHeard">Last heard</h3>
-        <p id="last-heard" class="big"></p>
+        <section class="card">
+          <h3 data-i18n="log.lastHeard">Last heard</h3>
+          <p id="last-heard" class="big"></p>
+        </section>
 
         <h3 data-i18n="log.spoken">What was said</h3>
         <div class="scroller" tabindex="0">

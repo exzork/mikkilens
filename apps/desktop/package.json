@@ -55,6 +55,22 @@
       {
         "from": "../../config.example.toml",
         "to": "config.example.toml"
+      },
+      {
+        "from": "../../data/models/onnxruntime.dll",
+        "to": "wake/onnxruntime.dll"
+      },
+      {
+        "from": "../../data/models/onnxruntime_providers_shared.dll",
+        "to": "wake/onnxruntime_providers_shared.dll"
+      },
+      {
+        "from": "../../data/models/melspectrogram.onnx",
+        "to": "wake/melspectrogram.onnx"
+      },
+      {
+        "from": "../../data/models/embedding_model.onnx",
+        "to": "wake/embedding_model.onnx"
       }
     ],
     "win": {

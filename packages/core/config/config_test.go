@@ -45,6 +45,21 @@ func TestChatVoiceDefaultsToTheMainVoice(t *testing.T) {
 	}
 }
 
+// TestDonationVoiceFallsBackToTheMainVoiceNotTheChatVoice: an unconfigured
+// donation must not arrive sounding like one more chat message.
+func TestDonationVoiceFallsBackToTheMainVoiceNotTheChatVoice(t *testing.T) {
+	settings := config.Default()
+	settings.Speech.Voice = "id-ID-ArdiNeural"
+	settings.Speech.ChatVoice = "id-ID-GadisNeural"
+	if got := settings.VoiceForDonation("x"); got != "id-ID-ArdiNeural" {
+		t.Errorf("VoiceForDonation() = %q, want the main voice", got)
+	}
+	settings.Speech.DonationVoice = "en-US-AriaNeural"
+	if got := settings.VoiceForDonation("x"); got != "en-US-AriaNeural" {
+		t.Errorf("VoiceForDonation() = %q", got)
+	}
+}
+
 func TestUnknownKeysAreIgnoredRatherThanFatal(t *testing.T) {
 	settings := config.FromMap(map[string]any{
 		"speech": map[string]any{"rate": "+20%", "typo_here": int64(1)},
@@ -124,42 +139,46 @@ func TestMissingFileYieldsDefaults(t *testing.T) {
 	}
 }
 
-func TestLLMEndpointFallsBackToTheVisionProvider(t *testing.T) {
-	t.Setenv("MIKKILENS_VISION_KEY", "secret-value")
+func TestOneEndpointServesEverything(t *testing.T) {
+	t.Setenv("MIKKILENS_MODEL_KEY", "secret-value")
 	settings := config.FromMap(map[string]any{
-		"vision": map[string]any{"base_url": "https://example/v1", "model": "vision-model"},
+		"model": map[string]any{"base_url": "https://example/v1", "model": "gpt-4o-mini"},
 	})
-	base, model, key := settings.LLMEndpoint()
-	if base != "https://example/v1" || model != "vision-model" || key != "secret-value" {
+	base, model, key := settings.ModelEndpoint()
+	if base != "https://example/v1" || model != "gpt-4o-mini" || key != "secret-value" {
 		t.Errorf("got %q %q %q", base, model, key)
 	}
 }
 
-func TestLLMEndpointPrefersItsOwnSettings(t *testing.T) {
-	t.Setenv("MIKKILENS_TEXT_KEY", "text-secret")
-	settings := config.FromMap(map[string]any{
-		"vision": map[string]any{"base_url": "https://vision/v1", "model": "vision-model"},
-		"llm": map[string]any{
-			"base_url": "https://text/v1", "model": "text-model",
-			"api_key_env": "MIKKILENS_TEXT_KEY",
-		},
-	})
-	base, model, key := settings.LLMEndpoint()
-	if base != "https://text/v1" || model != "text-model" || key != "text-secret" {
-		t.Errorf("got %q %q %q", base, model, key)
-	}
-}
-
-func TestVisionIsNotConsideredConfiguredWithoutAModel(t *testing.T) {
-	without := config.FromMap(map[string]any{"vision": map[string]any{"base_url": "https://x/v1"}})
-	if without.Vision.Configured() {
+func TestTheModelIsNotConsideredConfiguredWithoutBothHalves(t *testing.T) {
+	without := config.FromMap(map[string]any{"model": map[string]any{"base_url": "https://x/v1"}})
+	if without.Model.Configured() {
 		t.Error("a base_url alone is not a configured provider")
 	}
 	with := config.FromMap(map[string]any{
-		"vision": map[string]any{"base_url": "https://x/v1", "model": "m"},
+		"model": map[string]any{"base_url": "https://x/v1", "model": "m"},
 	})
-	if !with.Vision.Configured() {
+	if !with.Model.Configured() {
 		t.Error("base_url plus model is configured")
+	}
+}
+
+// The sections that used to hold endpoints of their own are gone. A config
+// still carrying them must start rather than fail, because the file on her
+// machine was written by the previous version and she cannot see the warning.
+func TestAConfigFromTheOlderLayoutStillStarts(t *testing.T) {
+	settings := config.FromMap(map[string]any{
+		"vision": map[string]any{"base_url": "https://old/v1", "model": "old", "max_edge": 800},
+		"llm":    map[string]any{"base_url": "https://old/v1"},
+		"youtube": map[string]any{
+			"enabled": true, "api_key_env": "MIKKILENS_YOUTUBE_KEY", "video_id": "abc",
+		},
+	})
+	if settings.Vision.MaxEdge != 800 {
+		t.Errorf("a key that still exists was lost: max_edge = %d", settings.Vision.MaxEdge)
+	}
+	if settings.Model.Configured() {
+		t.Error("an endpoint from the old layout must not be adopted silently")
 	}
 }
 

@@ -33,6 +33,25 @@ phrases = ["what scene am i on", "which scene is this", "what is the current sce
 [commands.list_scenes]
 phrases = ["list my scenes", "what scenes do i have", "name my scenes"]
 
+# --------------------------------------------------------------- channel ----
+
+# A channel is an OBS profile and a YouTube sign-in together: switching moves
+# the stream key and the chat at the same time, so a music review does not go
+# out on the main channel.
+#
+# Every phrase here says the word "channel" on purpose. "Switch to music" and
+# "switch to just chatting" are the same sentence to speech recognition, and
+# the two mean completely different things -- one changes what is on screen,
+# the other changes where the stream is going.
+[commands.switch_channel]
+phrases = ["switch channel to {channel}", "change channel to {channel}", "stream to my {channel} channel", "use my {channel} channel"]
+
+[commands.current_channel]
+phrases = ["which channel am i on", "what channel is this", "which channel am i streaming to"]
+
+[commands.list_channels]
+phrases = ["list my channels", "what channels do i have", "name my channels"]
+
 # ----------------------------------------------------------------- audio ----
 
 # "mute X" and "unmute X" differ by two letters, which speech recognition can

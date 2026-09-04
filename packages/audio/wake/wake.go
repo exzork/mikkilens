@@ -18,10 +18,14 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
 // ChunkSamples is openWakeWord's window: 80 ms of 16 kHz audio.
@@ -106,6 +110,8 @@ func (d *Detector) Load() error {
 	}
 	model := d.options.Model
 	d.mu.Unlock()
+
+	installBuiltin()
 
 	built, err := newPipeline(model)
 	if err != nil {
@@ -289,4 +295,73 @@ func findModelFile(root, name string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("%s.onnx was not found under %s", name, root)
+}
+
+// -- what is installed --------------------------------------------------------
+
+// versionSuffix is openWakeWord's habit of stamping the training run into the
+// file name: hey_jarvis_v0.1.onnx is the "hey_jarvis" wake word.
+var versionSuffix = regexp.MustCompile(`_v\d+(\.\d+)*$`)
+
+// shared are the two stages every wake word runs through. They sit in the same
+// directory as the wake words themselves and are not wake words.
+var shared = map[string]bool{
+	"melspectrogram":  true,
+	"embedding_model": true,
+	"silero_vad":      true,
+}
+
+// Installed lists the wake words whose model is actually on the machine.
+//
+// The settings page offers this list rather than a text box. A name that is
+// not installed cannot be typed into working: the detector fails to load, the
+// engine falls back to the hotkey, and what she sees is a microphone that
+// never answers -- which is indistinguishable from one that is not listening
+// at all.
+func Installed() []string {
+	// MikkiLens's own wake word ships inside the executable, so this is where
+	// it lands on disk: the list is built by scanning the directory, and a
+	// model that is not in the directory cannot be offered.
+	installBuiltin()
+
+	seen := map[string]bool{}
+	names := []string{}
+
+	for _, directory := range modelDirectories(paths.ModelsDir()) {
+		entries, err := os.ReadDir(directory)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".onnx") {
+				continue
+			}
+			name := WakeWordName(entry.Name())
+			if name == "" || shared[name] || seen[name] {
+				continue
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+
+	sort.Strings(names)
+	return names
+}
+
+// WakeWordName turns a model file name into the name the config file uses.
+func WakeWordName(file string) string {
+	name := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
+	return versionSuffix.ReplaceAllString(name, "")
+}
+
+// RuntimeReady reports whether the ONNX runtime is where the wake word needs
+// it, without loading anything.
+//
+// The settings page asks before it offers the list, so an empty list is
+// explained as "the runtime is missing" rather than shown as a dropdown with
+// nothing in it.
+func RuntimeReady() error {
+	_, err := findRuntimeLibrary()
+	return err
 }

@@ -21,9 +21,20 @@ chat_tts = "follow" # "follow" reads chat in the output-language voice.
 voice = ""            # Empty uses the language default (id -> id-ID-GadisNeural).
                       # The other Indonesian voice is id-ID-ArdiNeural.
 rate = "+0%"          # Speed of confirmations. "+25%" is noticeably faster.
-volume = "+0%"
+volume = "+0%"        # Loudness of confirmations, from "-100%" to "+100%".
 chat_voice = ""       # Empty means the same voice as above.
 chat_rate = "+15%"    # Chat is usually wanted faster than system feedback.
+chat_volume = "+0%"   # Chat is often wanted quieter than confirmations, so it
+                      # sits under the stream instead of over it. "-30%".
+
+# Donations are read above the chat backlog and below the app's own voice, so
+# one is heard while it is still current rather than twenty messages later.
+donation_voice = ""   # Empty means the same voice as `voice` above -- not the
+                      # chat voice, so a donation does not sound like chat.
+                      # Set a different voice to make donations unmistakable.
+donation_rate = "+0%"
+donation_volume = "+0%"
+
 output_device = ""    # Part of the device name, e.g. "Headphones". Empty uses
                       # the Windows default -- but see the warning below.
 earcon_volume = 0.25  # Volume of the short tones (listening, ok, error).
@@ -48,13 +59,32 @@ silence_ms = 700        # How long a pause ends a command.
 
 [wake]
 enabled = true
-model = "hey_jarvis"  # Pretrained. A custom "hey mikki" model can replace this.
-threshold = 0.6       # Raise it if it triggers while you are talking to chat.
+model = "mikkilens"   # The name of a model in data/models, without the .onnx.
+                      # This one is MikkiLens's own -- trained on her name said
+                      # the Indonesian way, and carried inside the program, so
+                      # it is always there. The settings app lists what is
+                      # installed; a name with no model behind it loads nothing
+                      # and never fires, which feels exactly like a microphone
+                      # that is off.
+threshold = 0.8       # How sure it has to be, from 0 to 1. Chosen from a
+                      # measured curve rather than guessed: at 0.8 it answers
+                      # 84 of every 100 times the name is said into noise and
+                      # a room, and interrupts about once every four hours of
+                      # conversation it was not spoken in. At 0.6 it answers
+                      # 91 times and interrupts every 40 minutes. Mid-stream,
+                      # being ignored is the cheaper mistake.
+                      #
+                      # Raise it if it triggers while you are talking to chat;
+                      # lower it if she does not answer. The settings app shows
+                      # the live score beside this, which is the fastest way to
+                      # tune it against your own voice and your own room.
 cooldown_s = 2.0
 
 # The wake word needs three files in data/models: onnxruntime.dll,
-# melspectrogram.onnx and embedding_model.onnx, plus <model>.onnx for the word
-# itself. Without them the wake word says so at startup and switches itself
+# melspectrogram.onnx and embedding_model.onnx. Those are downloaded once, and
+# they are the same for every wake word there is. The word itself is not a
+# download -- mikkilens.onnx is written out of the program on first use.
+# Without the other three the wake word says so at startup and switches itself
 # off; the hotkey keeps working either way, and is the more reliable trigger.
 
 [hotkey]
@@ -98,25 +128,56 @@ push_to_talk = true                   # false = press once to start, once to sto
 backend = "auto"       # "auto" prefers a local whisper.cpp server, then its
                        # one-shot CLI, then base_url below. "whisperserver",
                        # "whispercpp" or "openai" force one.
-model_size = "base"    # tiny / base / small / medium / large-v3.
+model_size = "small"   # tiny / base / small / medium / large-v3-turbo.
                        #
-                       # Measured on a 20-core CPU with 8 threads, for a
-                       # one-and-a-half second command:
-                       #   base   0.7s   -- responsive, and accurate enough
-                       #   small  2.2s   -- more accurate, long enough that you
-                       #                    start repeating yourself
-                       # Short commands are matched fuzzily anyway, so "base"
-                       # is the better default. Use "small" if you often say
-                       # long titles, or if you have a GPU build of
-                       # whisper.cpp, where "small" costs almost nothing.
-device = "auto"
+                       # For a one-and-a-half second command, on a CPU with 8
+                       # threads and on an RTX 3070:
+                       #   base   0.7s CPU  / 0.1s GPU  -- misses words
+                       #   small  2.2s CPU  / 0.2s GPU  -- the default
+                       #   medium 6s   CPU  / 0.5s GPU  -- for long titles
+                       # "small" on the processor is slow enough that you
+                       # start repeating yourself, which is exactly why the
+                       # GPU build below is worth the download. Memory: small
+                       # is about 1 GB, and about 1.1 GB of video memory.
+device = "auto"        # "auto" uses the graphics card when there is a GPU
+                       # build of whisper.cpp and a driver for it, and the
+                       # processor otherwise. "cuda" asks for the card and
+                       # still falls back rather than leaving you deaf; "cpu"
+                       # never touches it -- useful while the card is busy
+                       # with the game you are streaming.
 compute_type = "auto"
-beam_size = 1          # 1 is fastest and fine for short commands.
+beam_size = 0          # 0 decides from where it runs: 5 on the graphics card,
+                       # where it is free and more accurate, and 1 on the
+                       # processor, where it is seconds you would spend
+                       # waiting. Set a number to pin it.
 
-# For local recognition, put a whisper.cpp build and a GGML model in
-# data/models: whisper-cli.exe (or main.exe) and ggml-small.bin. Any build
-# works, including the CUDA and Vulkan ones, so you can pick whichever suits
-# your GPU without rebuilding MikkiLens.
+# Local recognition needs a whisper.cpp build and a GGML model in data/models.
+# Neither ships inside MikkiLens -- the model alone is half a gigabyte, and
+# which build is right depends on the card in the machine -- so on a machine
+# that has neither they are fetched on the first run, in this order:
+#
+#   the processor build      8 MB   something that can run at all
+#   the speech model       488 MB   and now it can hear
+#   the wake word files     68 MB   if [wake] enabled is on
+#   the graphics build     670 MB   only where there is a driver to run it
+#
+# Each stage is said out loud as it starts, and each leaves the machine more
+# useful than the last, so an interrupted download is never the difference
+# between working and not. An interrupted one resumes rather than starting
+# over, and nothing is re-fetched that is already here.
+auto_install = true    # false leaves it entirely to you: MikkiLens then just
+                       # reports that no recognition is set up. The right
+                       # answer if you keep your own build in data/models, or
+                       # if half a gigabyte arriving unasked would not be
+                       # welcome on this connection.
+
+# Putting them there yourself works exactly as before, and is what auto_install
+# finds and leaves alone: whisper-server.exe (or whisper-cli.exe) and
+# ggml-small.bin. Any build works, including the CUDA and Vulkan ones, so you
+# can pick whichever suits your GPU without rebuilding MikkiLens. A GPU build
+# found in data/models/whisper is preferred over a processor-only one in
+# data/models, so both can sit there at once -- which is exactly what the
+# fourth stage above sets up.
 binary = ""            # Empty searches data/models and then PATH.
 model_path = ""        # Empty searches data/models for ggml-<model_size>.bin.
 
@@ -137,33 +198,79 @@ reconnect_max_s = 30.0
 
 [youtube]
 enabled = true
-transport = "auto"     # "auto" prefers the streaming endpoint, "poll" forces
-                       # polling. Polling uses far more of the daily quota.
+transport = "auto"     # How live chat is read.
+                       #   "auto"   the public chat page first -- no key, no
+                       #            sign-in, no quota -- then the Data API's
+                       #            streaming endpoint, then polling.
+                       #   "page"   the public page only.
+                       #   "api"    the Data API only, if the page is not to be
+                       #            relied on.
+                       #   "stream" / "poll" pin one Data API transport.
+                       # Polling uses far more of the daily quota than anything
+                       # else here; the page uses none at all.
 quota_budget = 10000
 quota_warn_percent = 80
 
-# There are two ways to reach YouTube, and you only need one.
+# Nothing about connecting is configured here, because nothing about it is
+# typed. Open the settings app, press Connect YouTube, agree in the browser
+# page that opens, and that is the whole of it. Press Disconnect to undo it;
+# the sign-in is removed from this machine.
 #
-# Signing in does everything, including changing the title by voice, but it
-# costs one browser consent screen that someone has to read to you, plus a
-# data/client_secret.json file.
+# Reading live chat needs even less than that: it comes from the same public
+# page OBS shows in its chat dock, so it works with no sign-in at all. What
+# connecting buys is the viewer count, the stream title, and changing the title
+# by voice.
 #
-# An API key does the readable half -- how many people are watching, what the
-# stream is called -- and is a single string you copy once from
-# console.cloud.google.com after enabling "YouTube Data API v3". No consent
-# screen, no JSON file. Paste it in the settings app, or set the environment
-# variable named below.
-api_key_env = "MIKKILENS_YOUTUBE_KEY"
+# The one thing to know: MikkiLens ships no Google credential and never will.
+# A secret in a public source tree is scraped within hours, and Google revokes
+# the client rather than the copy that leaked -- which would break the sign-in
+# for everyone at once, mid-stream. So the OAuth client is yours: download
+# desktop credentials from console.cloud.google.com with "YouTube Data API v3"
+# enabled, and save the JSON as data/client_secret.json. The settings page says
+# so plainly when it is missing, rather than offering a button that can only
+# fail.
 
-# With a key, MikkiLens needs to know which stream to look at. Paste either
-# your channel link or the link to the stream itself; both accept a full URL.
+# More than one channel
+# ---------------------
 #
-# The channel is searched for whatever is live, which costs a hundred quota
-# units a time, so the answer is reused for five minutes. Pinning video_id
-# skips the search entirely and costs one unit per check -- worth doing if you
-# stream from the same scheduled video.
-channel_id = ""        # e.g. "https://www.youtube.com/channel/UC..." or the UC... id
-video_id = ""          # e.g. "https://www.youtube.com/watch?v=..." or the id
+# A channel here is a pairing: one OBS profile, which holds that channel's
+# stream key, and one YouTube sign-in, which reads that channel's chat and
+# carries its title. Switching moves both at once. Moving only one is the
+# failure this exists to prevent -- switching only OBS puts the music review
+# out on the main channel, and switching only the sign-in reads the wrong
+# chat aloud over a broadcast going somewhere else.
+#
+# Set one profile up per channel in OBS itself (Profile menu, New), each with
+# its own stream key, and give each an obs_profile line below. Scene
+# collections are optional: leave obs_scene_collection empty when both channels
+# share one set of scenes and only the stream key differs.
+#
+# channel_id is filled in for you by connecting -- it is YouTube's own id for
+# the channel and not something to type. Press "Connect another channel" in the
+# settings app once per channel, choosing a different channel in the browser
+# each time, and the entry appears here.
+#
+# Then, by voice: "ganti channel ke musik" / "switch channel to music".
+#
+# OBS will not change profile while you are live, so switching says so and does
+# nothing rather than half-moving. End the stream first.
+#
+# active remembers where you were, so opening MikkiLens puts you back on the
+# same channel. It is rewritten on every switch.
+
+# active = "UC..."
+
+# [[youtube.channels]]
+# name = "main"                       # what you say to switch to it
+# channel_id = "UC..."                # filled in by connecting
+# obs_profile = "Main"                # the OBS profile holding its stream key
+# obs_scene_collection = "Main"       # optional
+
+# [[youtube.channels]]
+# name = "music"
+# channel_id = "UC..."
+# obs_profile = "Music Review"
+# obs_scene_collection = "Music Review"
 
 [chat]
 enabled = true
@@ -174,49 +281,143 @@ collapse_duplicates = true
 read_superchats_first = true
 max_message_chars = 200      # Longer messages are cut off.
 muted_users = []             # Names here are never read aloud.
+max_gift_recipients = 5      # When somebody gifts memberships in bulk, YouTube
+                             # sends one message per recipient. Read this many
+                             # names, then "and 45 others" once. 0 reads all.
+
+[tako]
+# Donations, so chat is not read over the top of them.
+#
+# Tako's alert overlay is a browser source in OBS: it shows the alert and reads
+# the donation out in its own voice. Nothing tells MikkiLens that is happening,
+# so without this she talks straight through every donation -- the one message
+# on your stream somebody paid to be heard.
+#
+# MikkiLens only listens. It never tells Tako an alert has been played: that is
+# what moves Tako's queue on, and it belongs to the browser source in OBS. If
+# MikkiLens claimed it, donations would stop appearing on your stream.
+enabled = false
+
+# The overlay_key from the alert overlay link in your Tako dashboard. It is the
+# part after "overlay_key=" in
+#     https://tako.id/overlay/alert?overlay_key=XXXXXXXX
+#
+# Anyone holding it can read your donations as they arrive. Leave it empty here
+# and put it in the environment variable below, or in data/secrets.toml, if you
+# would rather this file stayed safe to hand to someone for help.
+# Paste the whole link; the key alone still works for configs written before
+# links were accepted.
+link = ""
+overlay_key = ""
+overlay_key_env = "MIKKILENS_TAKO_OVERLAY_KEY"
+
+# Read the donation out in her voice instead of the overlay's.
+#
+# IMPORTANT: switch the overlay's own voice off in the site's dashboard when you
+# turn this on, or every donation is read twice at once. The reason to do it
+# here is that it uses her voice, her language and her output device, and it
+# queues with everything else she says rather than cutting across it.
+read_aloud = false
+
+# How long to stay quiet is taken from the alert duration you set in Tako, so
+# changing it there changes it here. These three adjust around that number.
+extra_seconds = 2.0        # Added to every alert. Chat starting again on the
+                           # exact frame the alert leaves sounds like an
+                           # interruption.
+max_hold_s = 90.0          # The ceiling on one alert, whatever Tako says. Chat
+                           # going quiet for the rest of a stream because a
+                           # number came back wrong is the failure this rules
+                           # out.
+tts_chars_per_second = 14.0 # An alert stays up until Tako has finished reading
+                           # the message, not for its set duration, so a long
+                           # donation needs longer. Raise this if chat comes
+                           # back too late, lower it if it comes back over the
+                           # tail of a long message.
+
+
+[trakteer]
+# The other donation overlay, for the same reason as [tako] above: so chat is
+# not read over the top of an alert.
+#
+# A Trakteer donation arrives whole rather than as a nudge to go and fetch it,
+# so there is no queue to race and nothing to acknowledge. The only thing read
+# over HTTP is how long you have set an alert to stay up.
+enabled = false
+
+# The whole notification overlay address from your Trakteer dashboard. Both
+# halves of it are needed -- the key and the hash -- so paste the entire link
+# rather than picking it apart:
+#     https://stream.trakteer.id/notification/index.html?key=trstream-XXXX&unit=Cendol&mod=3&hash=YYYY
+#
+# Anyone holding it can read your donations as they arrive, so it can be left
+# empty here and put in the environment variable below, or in data/secrets.toml.
+link = ""
+link_env = "MIKKILENS_TRAKTEER_LINK"
+
+# Read the donation out in her voice instead of the overlay's.
+#
+# IMPORTANT: switch the overlay's own voice off in the site's dashboard when you
+# turn this on, or every donation is read twice at once. The reason to do it
+# here is that it uses her voice, her language and her output device, and it
+# queues with everything else she says rather than cutting across it.
+read_aloud = false
+
+# How long to stay quiet comes from the alert duration set in your Trakteer
+# dashboard, so changing it there changes it here. A voice note or a shared
+# video runs for its own length instead, and those scale with how many units
+# were given -- ten Cendol is a much longer alert than one.
+extra_seconds = 2.0
+max_hold_s = 90.0
+tts_chars_per_second = 14.0   # Only used when you have Trakteer's own
+                              # text-to-speech switched on.
+
+[model]
+# The one model MikkiLens talks to. Any OpenAI-compatible endpoint, for example:
+#     https://api.openai.com/v1
+#     https://api.z.ai/api/paas/v4
+#     https://openrouter.ai/api/v1
+#     http://localhost:11434/v1   (Ollama, on your own machine, free)
+#
+# It answers everything: summarising chat, working out a command none of your
+# written phrases matched, and describing what is on screen. There used to be
+# three sections here, one per job, which meant three places to paste a key
+# into and three ways to have pasted it wrong -- for a distinction nobody was
+# actually making.
+#
+# Which does mean the model has to be one that can see. Pick a multimodal one:
+# gpt-4o-mini, glm-4.6v, gemma3:12b, llava. Press "Test the model" in the
+# settings app -- the test sends a real image, so a text-only model fails there
+# rather than the first time you ask about your screen mid-stream.
+base_url = ""
+model = ""                   # e.g. "gpt-4o-mini", "glm-4.6v", "llava"
+api_key_env = "MIKKILENS_MODEL_KEY"
+timeout_s = 30.0
 
 [vision]
-base_url = ""                # Any OpenAI-compatible endpoint, for example:
-                             #   https://api.openai.com/v1
-                             #   https://api.z.ai/api/paas/v4
-                             #   http://localhost:11434/v1   (Ollama, free)
-model = ""                   # e.g. "gpt-4o-mini", "glm-4.6v", "llava"
-api_key_env = "MIKKILENS_VISION_KEY"
+# How the screen is captured before it is sent. Which model looks at it is
+# [model] above.
 max_edge = 1568              # Screenshots are downscaled to this before sending.
-timeout_s = 30.0
 monitors = "all"             # "all", "primary", or a monitor number.
 max_answer_chars = 700       # Keeps spoken answers from running on forever.
 
 [matcher]
-# A small local model that MikkiLens asks when your words do not match any
-# written phrase -- where it would otherwise just say "saya tidak tahu perintah
-# itu". Everything that already matches keeps working exactly as before and
-# stays instant; only the failures cost about a second.
+# What to do when your words do not match any written phrase -- where MikkiLens
+# would otherwise just say "saya tidak tahu perintah itu".
 #
-# It is off until you point it at something. Unlike [llm] it never borrows the
-# [vision] provider, so switching it on can never start sending your speech to
-# a paid cloud API by accident.
+# With this on, an unmatched utterance is sent to the model in [model] and it
+# is asked which command you meant. Everything that already matches keeps
+# working exactly as before and stays instant; only the misses cost about a
+# second, and only the misses are ever sent anywhere.
 #
-# The easiest way is Ollama:
-#     ollama pull gemma3n:e2b
-# then set base_url = "http://localhost:11434/v1" and model = "gemma3n:e2b".
-# The bigger gemma3n:e4b understands more but takes longer -- worth trying if
-# e2b keeps missing, on a machine with room for it while OBS is encoding.
-enabled = true
-base_url = ""          # e.g. "http://localhost:11434/v1"
-model = ""             # e.g. "gemma3n:e2b"
-api_key_env = "MIKKILENS_MATCHER_KEY"   # not needed for a local model
-
 # The model is only ever allowed to pick a command that exists, and a command
-# marked confirm still asks before it acts -- so a wrong guess costs a question,
-# not a stopped stream. When it is unsure it is told to say so, and MikkiLens
-# then answers exactly as it did before.
-
-[llm]
-# Text model for "summarize my chat". Leave empty to reuse [vision].
-base_url = ""
-model = ""
-api_key_env = ""
+# marked confirm still asks before it acts -- so a wrong guess costs a
+# question, not a stopped stream. When it is unsure it is told to say so, and
+# MikkiLens then answers exactly as it did before.
+#
+# Switch it off if you would rather nothing you say leaves the machine unless
+# you asked a question outright. Pointing [model] at a local Ollama is the
+# other way to have both.
+enabled = true
 
 [ui]
 host = "127.0.0.1"

@@ -14,12 +14,14 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/exzork/mikkilens/packages/audio/assets"
 	"github.com/exzork/mikkilens/packages/audio/capture"
 	"github.com/exzork/mikkilens/packages/audio/devices"
 	"github.com/exzork/mikkilens/packages/audio/feedback"
@@ -28,8 +30,9 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/tts"
 	"github.com/exzork/mikkilens/packages/audio/wake"
 	"github.com/exzork/mikkilens/packages/chat"
-	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/controllers/obs"
+	"github.com/exzork/mikkilens/packages/controllers/tako"
+	"github.com/exzork/mikkilens/packages/controllers/trakteer"
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/config"
 	"github.com/exzork/mikkilens/packages/core/i18n"
@@ -50,25 +53,43 @@ type Engine struct {
 	router      *intent.Router
 	transcriber *stt.Transcriber
 
-	microphone *capture.Stream
-	removeWake func()
-	wake       *wake.Detector
-	hotkey     hotkey.Watcher
-	bindings   []hotkey.Watcher
-	obs        *obs.Controller
-	obsSeen    bool
-	youtube    *youtube.Controller
-	ingest     *chat.Ingest
-	reader     *chat.Reader
+	// installer fetches the whisper.cpp build, the speech model and the wake
+	// word files on a machine that has none of them. It lives here rather than
+	// in the recognition package because what it mostly does is talk: every
+	// stage is announced, and the status page reads its progress.
+	installer *assets.Installer
+
+	microphone  *capture.Stream
+	removeWake  func()
+	wake        *wake.Detector
+	wakeError   string
+	hotkey      hotkey.Watcher
+	hotkeyError string
+	bindings    []hotkey.Watcher
+	obs         *obs.Controller
+	obsSeen     bool
+
+	// switching serialises channel changes, and expectedProfile is the one
+	// MikkiLens asked OBS for. Both exist because switching a profile makes OBS
+	// announce the change back, and that announcement is indistinguishable from
+	// her picking the profile from the menu herself -- so without them every
+	// deliberate switch would immediately trigger a second one on top of it,
+	// racing the first and saying so twice.
+	switching       sync.Mutex
+	expectedProfile string
+	expectedAt      time.Time
+	youtube         *youtube.Controller
+	ingest          *chat.Ingest
+	tako            *tako.Watcher
+	takoWarned      bool
+	trakteer        *trakteer.Watcher
+	trakteerWarned  bool
+	reader          *chat.Reader
 
 	listening  sync.Mutex
 	listenBusy bool
 	release    chan struct{}
 	stopping   bool
-
-	// matcherQuarter is how much of a model download has already been
-	// announced, so progress is spoken at quarters rather than continuously.
-	matcherQuarter int
 
 	// OpenBrowser is how the engine opens a URL. The desktop app replaces it so
 	// the OAuth consent screen lands in her real browser rather than nowhere.
@@ -86,6 +107,7 @@ func New(settings config.Config, locale *i18n.Locale) *Engine {
 		store:       store,
 		bus:         bus,
 		transcriber: stt.New(settings.STT, settings.Language.STT),
+		installer:   assets.NewInstaller(),
 		release:     make(chan struct{}),
 	}
 	engine.commands = engine.loadCommands()
@@ -134,6 +156,25 @@ func (e *Engine) Wake() *wake.Detector {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.wake
+}
+
+// WakeError is why there is no wake word running, or "" when there is one.
+//
+// It is kept rather than only spoken at startup, because the settings page is
+// where she goes when the wake word does not answer -- and by then the
+// sentence that explained it has scrolled past.
+func (e *Engine) WakeError() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.wakeError
+}
+
+// HotkeyError is why there is no hotkey running, most often another
+// application already holding the combination.
+func (e *Engine) HotkeyError() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.hotkeyError
 }
 
 func (e *Engine) Hotkey() hotkey.Watcher {
@@ -240,6 +281,7 @@ func (e *Engine) registerBuiltinHandlers() {
 	e.router.RegisterAll(chatHandlers(e))
 	e.router.RegisterAll(visionHandlers(e))
 	e.router.RegisterAll(obsHandlers(e))
+	e.router.RegisterAll(channelHandlers(e))
 }
 
 func (e *Engine) handleHelp(map[string]string) error {
@@ -265,6 +307,9 @@ func (e *Engine) Start(ctx context.Context) {
 	loaded := make(chan struct{})
 	go func() {
 		defer close(loaded)
+		// Anything missing comes down first, because recognition that loads
+		// before the model arrives only reports that there is nothing to load.
+		e.installAssets(ctx)
 		e.loadRecognition(ctx)
 	}()
 
@@ -273,6 +318,8 @@ func (e *Engine) Start(ctx context.Context) {
 	e.startHotkey()
 	e.startBindings()
 	e.startOBS()
+	e.startTako()
+	e.startTrakteer()
 	// Same guarantee at the other end: whatever a previous run cached is about
 	// a broadcast that may well have finished while MikkiLens was closed.
 	if controller := e.YouTube(); controller != nil {
@@ -280,7 +327,6 @@ func (e *Engine) Start(ctx context.Context) {
 	}
 	devices.SetLeadIn(time.Duration(e.Config().Speech.LeadInMs) * time.Millisecond)
 	e.applyUnderstander(e.Config())
-	e.startBundledModel(e.Config())
 
 	e.startYouTube(ctx)
 
@@ -292,6 +338,147 @@ func (e *Engine) Start(ctx context.Context) {
 	}
 	e.bus.SayKey("app.ready", feedback.Result)
 }
+
+// installAssets fetches whatever this machine is still missing, and says so.
+//
+// It blocks until the download finishes, because the thing waiting on it is
+// recognition, and recognition without a model is not something to start and
+// retry later -- it is the whole application, unable to hear.
+//
+// What it is emphatically not is silent. She cannot see a progress bar, so
+// every stage is announced as it begins, and the one that matters most --
+// being able to hear at all -- is announced again when it lands, before the
+// two large optional downloads that follow it.
+func (e *Engine) installAssets(ctx context.Context) {
+	settings := e.Config()
+
+	// Only local recognition needs any of this. Somebody pointing recognition
+	// at their own endpoint has already answered this question.
+	speech := settings.STT.AutoInstall && wantsLocalRecognition(settings.STT)
+	wanted := assets.Missing(speech, settings.Wake.Enabled, settings.STT.ModelSize)
+	if wanted.Empty() {
+		return
+	}
+
+	locale := e.Locale()
+	e.bus.Say(locale.T("assets.starting", i18n.Args{
+		"size": megabytes(wanted.Bytes),
+	}), feedback.Result)
+
+	done := make(chan struct{})
+	err := e.installer.Install(ctx, wanted, settings.STT.ModelSize,
+		func(progress assets.Progress) {
+			e.announceStage(progress, wanted)
+			if progress.Failed != "" || (progress.Done && progress.Stage == lastOf(wanted)) {
+				select {
+				case <-done:
+				default:
+					close(done)
+				}
+			}
+		}, nil)
+	if err != nil {
+		slog.Error("could not start the download", "error", err)
+		return
+	}
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+
+	// The wake word is loaded before any of this finished, so it was loaded
+	// against files that were not there yet. Now that they are, try again.
+	if wanted.Has(assets.StageWake) && e.WakeError() != "" {
+		e.restartWakeWord()
+	}
+}
+
+// announceStage turns one installer report into a sentence.
+func (e *Engine) announceStage(progress assets.Progress, wanted assets.Wanted) {
+	locale := e.Locale()
+	switch {
+	case progress.Failed != "":
+		slog.Error("a download failed", "stage", progress.Stage, "error", progress.Failed)
+		e.bus.Say(locale.T("assets.failed", i18n.Args{
+			"what":   e.stageName(progress.Stage),
+			"reason": progress.Failed,
+		}), feedback.Error)
+
+	case progress.Done:
+		// Only the model is announced on the way out, and only because it is
+		// the moment MikkiLens can hear. Announcing all four would be four
+		// interruptions to say that a download she was told about has done
+		// what she was told it would do.
+		if progress.Stage == assets.StageModel {
+			e.bus.SayKey("assets.can_hear", feedback.Result)
+		}
+
+	default:
+		e.bus.Say(locale.T("assets.stage_starting", i18n.Args{
+			"what": e.stageName(progress.Stage),
+			"size": megabytes(assets.Bytes[progress.Stage]),
+		}), feedback.Result)
+	}
+}
+
+// stageName is what one download stage is called out loud.
+//
+// A switch rather than "assets.stage_" + stage, so all four keys are literals
+// inside a T() call. That is what the locale test scans for, and a key it
+// cannot see is a key that goes missing in one language and is discovered
+// aloud, mid-download, by the one person who cannot read the fallback.
+func (e *Engine) stageName(stage assets.Stage) string {
+	locale := e.Locale()
+	switch stage {
+	case assets.StageEngine:
+		return locale.T("assets.stage_engine")
+	case assets.StageModel:
+		return locale.T("assets.stage_model")
+	case assets.StageWake:
+		return locale.T("assets.stage_wake")
+	case assets.StageGPU:
+		return locale.T("assets.stage_gpu")
+	}
+	return string(stage)
+}
+
+// lastOf names the final stage, which is how the wait above knows it is over.
+func lastOf(wanted assets.Wanted) assets.Stage {
+	if len(wanted.Stages) == 0 {
+		return ""
+	}
+	return wanted.Stages[len(wanted.Stages)-1]
+}
+
+// wantsLocalRecognition reports whether the configuration would use a local
+// whisper.cpp build if there were one.
+func wantsLocalRecognition(settings config.STT) bool {
+	switch strings.ToLower(strings.TrimSpace(settings.Backend)) {
+	case "openai", "remote", "http":
+		return false
+	case "", "auto":
+		// "auto" prefers local, and only falls back to an endpoint when there
+		// is no local build -- which is exactly the gap being closed here. But
+		// somebody who has configured an endpoint and never had a local build
+		// has a working setup already, and half a gigabyte would be a strange
+		// thing to send them.
+		return settings.BaseURL == ""
+	default:
+		return true
+	}
+}
+
+// megabytes is a download size in words, rounded the way it would be said.
+func megabytes(bytes int64) string {
+	if bytes >= 1<<30 {
+		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(1<<30))
+	}
+	return fmt.Sprintf("%d MB", bytes/(1<<20))
+}
+
+// Installing reports the download in progress, for the status page.
+func (e *Engine) Installing() assets.Progress { return e.installer.Progress() }
 
 func (e *Engine) loadRecognition(ctx context.Context) {
 	if err := e.transcriber.Load(ctx); err != nil {
@@ -324,7 +511,12 @@ func (e *Engine) startMicrophone() {
 func (e *Engine) startWakeWord() {
 	settings := e.Config()
 	microphone := e.Microphone()
-	if !settings.Wake.Enabled || microphone == nil {
+	if !settings.Wake.Enabled {
+		e.setWakeError("")
+		return
+	}
+	if microphone == nil {
+		e.setWakeError("the microphone is not open, so there is nothing to listen to")
 		return
 	}
 
@@ -339,19 +531,50 @@ func (e *Engine) startWakeWord() {
 		// aloud, because a wake word that silently does nothing is worse than
 		// one she knows is off.
 		slog.Error("could not load the wake word", "error", err)
+		e.setWakeError(err.Error())
 		e.bus.SayKey("error.generic", feedback.Error, i18n.Args{"reason": err.Error()})
 		return
 	}
 
 	e.mu.Lock()
 	e.wake = detector
+	e.wakeError = ""
 	e.removeWake = microphone.AddListener(detector.Feed)
 	e.mu.Unlock()
+}
+
+func (e *Engine) setWakeError(reason string) {
+	e.mu.Lock()
+	e.wakeError = reason
+	e.mu.Unlock()
+}
+
+// restartWakeWord swaps in a detector built from the current settings.
+//
+// Changing the wake word or its threshold from the settings page used to do
+// nothing at all until the next restart, which reads as a wake word that is
+// simply broken: she changes it, says it, and nothing happens.
+func (e *Engine) restartWakeWord() {
+	e.mu.Lock()
+	removeWake, detector := e.removeWake, e.wake
+	e.removeWake, e.wake = nil, nil
+	e.mu.Unlock()
+
+	if removeWake != nil {
+		removeWake()
+	}
+	if detector != nil {
+		detector.Close()
+	}
+	e.startWakeWord()
 }
 
 func (e *Engine) startHotkey() {
 	settings := e.Config()
 	if !settings.Hotkey.Enabled {
+		e.mu.Lock()
+		e.hotkeyError = ""
+		e.mu.Unlock()
 		return
 	}
 
@@ -370,13 +593,34 @@ func (e *Engine) startHotkey() {
 	}
 	if err != nil {
 		slog.Error("could not set up the hotkey", "error", err)
+		e.mu.Lock()
+		e.hotkeyError = err.Error()
+		e.mu.Unlock()
 		e.bus.SayKey("error.generic", feedback.Error, i18n.Args{"reason": err.Error()})
 		return
 	}
 
 	e.mu.Lock()
 	e.hotkey = watcher
+	e.hotkeyError = ""
 	e.mu.Unlock()
+}
+
+// restartHotkey rebinds the key from the current settings.
+//
+// The old combination has to be given back to Windows before the new one is
+// asked for: RegisterHotKey refuses a combination someone already holds, and
+// the someone would otherwise be us.
+func (e *Engine) restartHotkey() {
+	e.mu.Lock()
+	watcher := e.hotkey
+	e.hotkey = nil
+	e.mu.Unlock()
+
+	if watcher != nil {
+		watcher.Stop()
+	}
+	e.startHotkey()
 }
 
 // startBindings gives every bound key its own watcher.
@@ -471,60 +715,155 @@ func (e *Engine) startYouTube(ctx context.Context) {
 		return
 	}
 
-	controller := youtube.New(settings.YouTube, settings.YouTubeAPIKey())
+	controller := youtube.New(settings.YouTube)
 	e.mu.Lock()
 	e.youtube = controller
 	e.mu.Unlock()
 
-	// Only the cached token is used here. The consent screen is a browser flow
-	// and must never appear unasked in the middle of a stream.
-	connected, err := controller.LoadSavedCredentials(ctx)
+	// A cached consent only, for the channel she was last on. Nothing here may
+	// open a browser: the consent screen appearing unasked over a live scene is
+	// exactly the surprise this application exists to avoid.
+	loaded, err := controller.Use(ctx, settings.YouTube.Active)
+	if !loaded && settings.YouTube.Active != "" {
+		// The remembered channel is gone -- signed out, or its consent expired
+		// while MikkiLens was closed. Falling back to whatever sign-in is left
+		// beats starting with none: one working channel is a stream she can
+		// run, and the announcement below says which one she is on.
+		loaded, err = controller.Use(ctx, "")
+	}
 	if err != nil {
-		// Having no credentials yet is where everyone starts, not a fault.
-		// Reporting it as one at every launch teaches her to ignore the log,
-		// which is the last thing this application can afford.
 		var expired *youtube.ExpiredCredentialsError
-		switch {
-		case errors.As(err, &expired):
-			// Silence here would be the worst outcome: she would find out by
-			// asking for the viewer count mid-stream and being told YouTube is
-			// not connected, with no idea why or what to do about it.
-			slog.Warn("the YouTube sign-in has expired", "next", "connect again in the settings app")
+		if errors.As(err, &expired) {
+			// A sign-in that worked and stopped has an action attached to it,
+			// so it is worth saying aloud. Never having signed in does not.
 			e.bus.SayKey("youtube.sign_in_expired", feedback.Error)
-		case youtube.HasClientSecret():
-			slog.Warn("could not restore the YouTube session", "error", err)
-		case settings.YouTubeAPIKey() != "":
-			// There is a key, which covers reading. Reporting the missing
-			// sign-in as a problem here would be reporting a choice she made.
-		default:
-			slog.Info("YouTube is not set up yet",
-				"next", "add data/client_secret.json, or just paste an API key "+
-					"and your channel link in the settings app")
+		} else {
+			slog.Info("YouTube is not connected", "reason", err)
 		}
 	}
-
-	if !connected {
-		// No sign-in. An API key still answers the two questions asked most
-		// often -- how many are watching, what is this stream called -- so
-		// fall back to it rather than reporting YouTube as simply off.
-		if err := controller.StartPublic(ctx); err != nil {
-			slog.Warn("the YouTube API key could not be used", "error", err)
-		}
-	}
-
-	switch controller.Access() {
-	case youtube.AccessNone:
+	if !loaded {
 		e.store.Update(state.Changes{"youtube": state.Disconnected})
 		return
-	case youtube.AccessPublic:
-		e.store.Update(state.Changes{"youtube": state.Connected})
-		e.bus.SayKey("youtube.connected_public", feedback.Result, nil)
-	default:
-		e.store.Update(state.Changes{"youtube": state.Connected})
-		e.bus.SayKey("youtube.connected", feedback.Result,
-			i18n.Args{"channel": e.channelName(ctx)})
 	}
+
+	e.store.Update(state.Changes{"youtube": state.Connected})
+	e.bus.SayKey("youtube.connected", feedback.Result,
+		i18n.Args{"channel": e.channelName(ctx)})
+	e.rememberActiveChannel(controller.ActiveChannelID())
 	e.startChat()
+}
+
+// ConnectYouTube is the Connect button: the consent screen, once.
+//
+// It blocks for as long as she is in the browser, which is why the API hands
+// it a request-scoped context and nothing else waits on it. Pressing it while
+// already signed in does nothing rather than asking her to agree again.
+func (e *Engine) ConnectYouTube(ctx context.Context) error {
+	if err := e.setYouTubeEnabled(true); err != nil {
+		return err
+	}
+	if e.YouTube() == nil {
+		e.startYouTube(ctx)
+	}
+
+	controller := e.YouTube()
+	if controller == nil {
+		return &youtube.Error{Reason: "YouTube is switched off in the settings"}
+	}
+	if controller.Authenticated() {
+		return nil
+	}
+	return e.connect(ctx, controller)
+}
+
+// ConnectChannel connects another channel, whether or not one is connected
+// already. This is the button for the second channel and the third.
+//
+// Separate from ConnectYouTube because the two answer different questions.
+// "Connect YouTube" means "I have no sign-in and want one", and pressing it
+// twice must not drag her back through a browser. This means "I have one and
+// want another", which is a thing she deliberately asks for.
+func (e *Engine) ConnectChannel(ctx context.Context) error {
+	if err := e.setYouTubeEnabled(true); err != nil {
+		return err
+	}
+	if e.YouTube() == nil {
+		e.startYouTube(ctx)
+	}
+
+	controller := e.YouTube()
+	if controller == nil {
+		return &youtube.Error{Reason: "YouTube is switched off in the settings"}
+	}
+	return e.connect(ctx, controller)
+}
+
+// connect runs the consent flow and files the result as one of her channels.
+func (e *Engine) connect(ctx context.Context, controller *youtube.Controller) error {
+	if err := controller.Authorize(ctx, e.openBrowser); err != nil {
+		return err
+	}
+	// Record which channel this turned out to be, and bind it to the OBS
+	// profile loaded now when nothing else has claimed one. Doing it here, off
+	// the back of a consent that just succeeded, is what saves her from having
+	// to type a channel id into a settings page she cannot read.
+	e.RegisterChannel(controller.ActiveAccount())
+	e.OnYouTubeConnected(ctx)
+	return nil
+}
+
+// DisconnectYouTube is the other button: forget the sign-in and stop reading.
+//
+// The token goes from disk as well as from memory, and youtube.enabled is
+// written off, so this survives a restart. A disconnect that undid itself the
+// next time she opened MikkiLens would be worse than no button at all.
+func (e *Engine) DisconnectYouTube() error {
+	// Every channel, not only the active one. This is the settings page's
+	// disconnect, where "YouTube" means all of it -- leaving the other channel
+	// signed in behind a button that says it disconnected YouTube would be a
+	// button that lies about what it did.
+	if controller := e.YouTube(); controller != nil {
+		controller.SignOutEverywhere()
+	}
+	e.OnYouTubeDisconnected()
+
+	e.mu.Lock()
+	e.youtube = nil
+	e.mu.Unlock()
+
+	return e.setYouTubeEnabled(false)
+}
+
+// setYouTubeEnabled records the choice and saves it.
+//
+// Deliberately not routed through ApplyConfig. That notices a changed [youtube]
+// section and starts a refresh of its own on another goroutine, which would
+// race the connecting or disconnecting this was called in the middle of.
+func (e *Engine) setYouTubeEnabled(enabled bool) error {
+	e.mu.Lock()
+	if e.settings.YouTube.Enabled == enabled {
+		e.mu.Unlock()
+		return nil
+	}
+	e.settings.YouTube.Enabled = enabled
+	settings := e.settings
+	e.mu.Unlock()
+
+	_, err := settings.Save("")
+	return err
+}
+
+// openBrowser sends a URL to her real browser, however this build was started.
+func (e *Engine) openBrowser(url string) {
+	e.mu.RLock()
+	open := e.OpenBrowser
+	e.mu.RUnlock()
+
+	if open == nil {
+		slog.Warn("no way to open a browser; the sign-in page cannot be shown", "url", url)
+		return
+	}
+	open(url)
 }
 
 func (e *Engine) channelName(ctx context.Context) string {
@@ -539,7 +878,7 @@ func (e *Engine) channelName(ctx context.Context) string {
 	return name
 }
 
-// OnYouTubeConnected is called by the settings app once consent finishes.
+// OnYouTubeConnected announces a sign-in that has just become available.
 func (e *Engine) OnYouTubeConnected(ctx context.Context) {
 	// A sign-in can be a different account entirely, so nothing learned before
 	// it still applies.
@@ -555,17 +894,18 @@ func (e *Engine) OnYouTubeConnected(ctx context.Context) {
 	}
 }
 
-// RefreshYouTube picks up a newly saved API key or channel without a restart.
+// RefreshYouTube rebuilds the controller after a settings change, without a
+// restart.
 //
 // Telling someone to restart the application after saving a setting is a bad
 // answer generally, and a worse one here: she cannot see whether the restart
 // worked, so the next thing she hears has to be the answer either way.
 //
-// A live sign-in is left alone. It already does everything a key does and
-// more, and rebuilding it would drop the chat connection to gain nothing.
+// A live sign-in is left alone. Rebuilding it would drop the chat connection
+// to arrive back where it started.
 func (e *Engine) RefreshYouTube(ctx context.Context) {
 	controller := e.YouTube()
-	if controller != nil && controller.Access() == youtube.AccessAccount {
+	if controller != nil && controller.Authenticated() {
 		return
 	}
 
@@ -621,6 +961,195 @@ func (e *Engine) startChat() {
 		reading = state.ChatPlaying
 	}
 	e.store.Update(state.Changes{"chat_reading": reading})
+}
+
+// startTako connects the donation overlay, so chat goes quiet while an alert
+// is on screen rather than talking over the one message somebody paid for.
+func (e *Engine) startTako() {
+	settings := e.Config()
+	source := settings.TakoOverlaySource()
+	if !settings.Tako.Enabled || source == "" {
+		return
+	}
+
+	key, err := tako.ParseLink(source)
+	if err != nil {
+		slog.Error("could not read the Tako overlay link", "error", err)
+		e.onTakoStatus("rejected", err.Error())
+		return
+	}
+
+	watcher := tako.New(tako.Options{
+		Settings: settings.Tako,
+		Key:      key,
+		OnHold: func(until time.Time, donation tako.Donation) {
+			// The hold goes on either way. Reading the donation out is the
+			// part that is optional; not talking over the alert is not.
+			e.bus.HoldChat(until)
+			e.readDonationAloud(e.Config().Tako.ReadAloud, "tako", i18n.Args{
+				"donor":  donation.Donor,
+				"amount": tako.FormatAmount(donation.Amount, donation.Currency),
+			}, donation.Message)
+		},
+		OnStatus: e.onTakoStatus,
+	})
+
+	e.mu.Lock()
+	e.tako = watcher
+	e.mu.Unlock()
+
+	watcher.Start()
+}
+
+// readDonationAloud says a donation in her own voice, when the site's own
+// voice has been turned off in favour of hers.
+//
+// It speaks through the hold rather than waiting for it: the hold is there so
+// nothing talks over the alert, and this is the thing reading the alert out.
+// Chat stays quiet around it either way.
+//
+// Doing it here rather than leaving it to the overlay is what gets her voice,
+// her language and her output device, and what puts the donation in the same
+// queue as everything else she says instead of cutting across it. The cost is
+// that the site's own voice has to be switched off in its dashboard, or the
+// donation is read twice at once.
+func (e *Engine) readDonationAloud(enabled bool, site string, args i18n.Args, message string) {
+	if !enabled {
+		return
+	}
+
+	locale := e.Locale()
+	key := site + ".donation_no_message"
+	if trimmed := strings.TrimSpace(message); trimmed != "" {
+		args["text"] = trimmed
+		key = site + ".donation"
+	}
+	e.bus.SayDonation(locale.T(key, args), nil)
+}
+
+func (e *Engine) stopTako() {
+	e.mu.Lock()
+	watcher := e.tako
+	e.tako, e.takoWarned = nil, false
+	e.mu.Unlock()
+
+	if watcher != nil {
+		watcher.Stop()
+	}
+	// Whatever quiet the last donation booked dies with the watcher. Leaving
+	// it would mean chat staying silent with nothing left to explain it.
+	e.bus.ReleaseChat()
+}
+
+// Tako is the donation overlay watcher, or nil when it is not configured.
+func (e *Engine) Tako() *tako.Watcher {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.tako
+}
+
+func (e *Engine) onTakoStatus(status, detail string) {
+	slog.Debug("Tako status", "status", status, "detail", detail)
+	if status != "rejected" {
+		return
+	}
+
+	// Said once. An overlay key that Tako does not recognise is a condition
+	// that lasts the whole stream, and the reason it is worth saying at all is
+	// that its symptom -- MikkiLens reading chat straight through a donation --
+	// looks exactly like this feature having never been switched on.
+	e.mu.Lock()
+	warned := e.takoWarned
+	e.takoWarned = true
+	e.mu.Unlock()
+
+	if !warned {
+		e.bus.SayKey("tako.unreachable", feedback.Error)
+	}
+}
+
+// startTrakteer connects the other donation overlay. Same reason as Tako, and
+// the two are independent: a hold from either silences chat, and whichever
+// booked the later moment wins, because two alerts on screen at once are shown
+// side by side rather than one after the other.
+func (e *Engine) startTrakteer() {
+	settings := e.Config()
+	if !settings.Trakteer.Enabled {
+		return
+	}
+	link := settings.TrakteerLink()
+	if link == "" {
+		return
+	}
+
+	parsed, err := trakteer.ParseLink(link)
+	if err != nil {
+		// A link that cannot be read is a setting that is wrong and will stay
+		// wrong, so it is said aloud on the same reasoning as a rejected key.
+		slog.Error("could not read the Trakteer overlay link", "error", err)
+		e.onTrakteerStatus("rejected", err.Error())
+		return
+	}
+
+	watcher := trakteer.New(trakteer.Options{
+		Settings: settings.Trakteer,
+		Link:     parsed,
+		OnHold: func(until time.Time, donation trakteer.Donation) {
+			e.bus.HoldChat(until)
+			e.readDonationAloud(e.Config().Trakteer.ReadAloud, "trakteer", i18n.Args{
+				"donor": donation.Donor,
+				"count": int(donation.Quantity),
+				"unit":  donation.Unit,
+				"price": donation.Price,
+			}, donation.Message)
+		},
+		OnStatus: e.onTrakteerStatus,
+	})
+
+	e.mu.Lock()
+	e.trakteer = watcher
+	e.mu.Unlock()
+
+	watcher.Start()
+}
+
+func (e *Engine) stopTrakteer() {
+	e.mu.Lock()
+	watcher := e.trakteer
+	e.trakteer, e.trakteerWarned = nil, false
+	e.mu.Unlock()
+
+	if watcher != nil {
+		watcher.Stop()
+	}
+	// Only if nothing else is holding: releasing here while a Tako alert is
+	// still on screen would put chat back over the top of it.
+	if e.Tako() == nil {
+		e.bus.ReleaseChat()
+	}
+}
+
+// Trakteer is the donation overlay watcher, or nil when it is not configured.
+func (e *Engine) Trakteer() *trakteer.Watcher {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.trakteer
+}
+
+func (e *Engine) onTrakteerStatus(status, detail string) {
+	slog.Debug("Trakteer status", "status", status, "detail", detail)
+	if status != "rejected" {
+		return
+	}
+
+	e.mu.Lock()
+	warned := e.trakteerWarned
+	e.trakteerWarned = true
+	e.mu.Unlock()
+
+	if !warned {
+		e.bus.SayKey("trakteer.unreachable", feedback.Error)
+	}
 }
 
 func (e *Engine) onChatStatus(status, detail string) {
@@ -724,6 +1253,22 @@ func (e *Engine) onOBSEvent(event obs.Event) {
 		if name, err := controller.MicSourceName(); err == nil && name == event.InputName {
 			e.store.Update(state.Changes{"mic_muted": event.Muted})
 		}
+	case "profile_changed":
+		// The profile is where the stream key lives, so this is OBS reporting
+		// which channel she is now set up to broadcast to -- and the sign-in
+		// has to follow it, or chat and titles end up on the other channel.
+		// On its own goroutine because a switch reloads the sign-in and
+		// restarts chat, and this runs on the event stream, which must not
+		// block: everything else OBS has to say is queued behind it.
+		e.store.Update(state.Changes{"obs_profile": event.ProfileName})
+		go e.followProfile(event.ProfileName)
+	case "collection_reloading":
+		// Every scene and source is about to be destroyed and rebuilt, so what
+		// is known about them is already wrong.
+		e.store.Update(state.Changes{"current_scene": "", "scenes": []string{}})
+	case "collection_changed":
+		e.store.Update(state.Changes{"obs_scene_collection": event.CollectionName})
+		go e.refreshScene()
 	}
 }
 
@@ -736,10 +1281,8 @@ func (e *Engine) Stop() {
 	if controller := e.YouTube(); controller != nil {
 		controller.InvalidateBroadcast()
 	}
-	// The model server is a child process: leaving it running would hold
-	// gigabytes and a port after MikkiLens has gone.
-	llm.Bundled().Stop()
-
+	e.stopTako()
+	e.stopTrakteer()
 	e.mu.Lock()
 	e.stopping = true
 	reader, ingest := e.reader, e.ingest
@@ -1071,9 +1614,8 @@ func (e *Engine) ApplyConfig(updated config.Config) error {
 		devices.SetLeadIn(time.Duration(updated.Speech.LeadInMs) * time.Millisecond)
 	}
 
-	if updated.Matcher != previous.Matcher {
+	if updated.Matcher != previous.Matcher || updated.Model != previous.Model {
 		e.applyUnderstander(updated)
-		e.startBundledModel(updated)
 	}
 
 	if updated.Language.STT != previous.Language.STT {
@@ -1089,6 +1631,16 @@ func (e *Engine) ApplyConfig(updated config.Config) error {
 		e.restartMicrophone()
 	}
 
+	// Both of these are how she gets MikkiLens's attention, and both used to
+	// need a restart to take effect -- which, from the settings page, looks
+	// exactly like the setting not working.
+	if updated.Wake != previous.Wake {
+		e.restartWakeWord()
+	}
+	if updated.Hotkey != previous.Hotkey {
+		e.restartHotkey()
+	}
+
 	if controller := e.OBS(); controller != nil {
 		if updated.OBS.Host != previous.OBS.Host ||
 			updated.OBS.Port != previous.OBS.Port ||
@@ -1099,8 +1651,29 @@ func (e *Engine) ApplyConfig(updated config.Config) error {
 		controller.SetMicSource(updated.OBS.MicSource)
 	}
 
-	if updated.YouTube != previous.YouTube {
+	if !updated.YouTube.SameConnection(previous.YouTube) {
 		go e.RefreshYouTube(context.Background())
+	}
+
+	// Changing which overlay is watched means a new connection; changing how
+	// long to stay quiet for does not, and reconnecting for it would drop a
+	// hold that is running.
+	if updated.Tako.Enabled != previous.Tako.Enabled ||
+		updated.Tako.OverlayKey != previous.Tako.OverlayKey ||
+		updated.Tako.OverlayKeyEnv != previous.Tako.OverlayKeyEnv {
+		e.stopTako()
+		e.startTako()
+	} else if watcher := e.Tako(); watcher != nil {
+		watcher.SetConfig(updated.Tako)
+	}
+
+	if updated.Trakteer.Enabled != previous.Trakteer.Enabled ||
+		updated.Trakteer.Link != previous.Trakteer.Link ||
+		updated.Trakteer.LinkEnv != previous.Trakteer.LinkEnv {
+		e.stopTrakteer()
+		e.startTrakteer()
+	} else if watcher := e.Trakteer(); watcher != nil {
+		watcher.SetConfig(updated.Trakteer)
 	}
 
 	if reader := e.ChatReader(); reader != nil {

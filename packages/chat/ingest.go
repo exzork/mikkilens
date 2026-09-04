@@ -51,7 +51,57 @@ type Message struct {
 	Amount      string  `json:"amount"`
 	IsOwner     bool    `json:"is_owner"`
 	IsModerator bool    `json:"is_moderator"`
+
+	// AuthorChannelID is who said it, as YouTube identifies them. It is kept
+	// because a gifted membership names its giver by id and nothing else.
+	AuthorChannelID string `json:"author_channel_id"`
+
+	// A gifted membership arrives as two kinds of event: one from the giver
+	// saying how many they bought, and then one per recipient. The count is
+	// the whole point of the first -- one is a kindness and fifty is an event,
+	// and reading them the same way loses the difference.
+	IsGift         bool   `json:"is_gift"`
+	IsGiftReceived bool   `json:"is_gift_received"`
+	GiftCount      int    `json:"gift_count"`
+	GiftLevel      string `json:"gift_level"`
+
+	// GifterChannelID is who paid for a received membership, and GifterName is
+	// that id resolved against the giving message. The name is empty when the
+	// giving message was never seen -- joining a stream halfway through, most
+	// often -- and the sentence is written to still make sense without it.
+	GifterChannelID string `json:"gifter_channel_id"`
+	GifterName      string `json:"gifter_name"`
+
+	// GiftIndex is this recipient's place in the batch and GiftTotal is how
+	// many were bought. Together they are what lets a run of fifty be read as
+	// a few names and a count.
+	GiftIndex int `json:"gift_index"`
+	GiftTotal int `json:"gift_total"`
+
+	// MemberLevel is the tier the channel sells, named by whoever set it up,
+	// and MemberMonths is how long they have kept it. Both are worth saying:
+	// the level is what somebody chose to pay for, and "member for two years"
+	// is a different thing to acknowledge than someone who joined today.
+	MemberLevel   string `json:"member_level"`
+	MemberMonths  int    `json:"member_months"`
+	IsMemberUpped bool   `json:"is_member_upgraded"`
 }
+
+// IsEvent reports whether this is an announcement rather than somebody typing.
+//
+// These carry no words of their own -- the event is the message -- so the
+// filters that drop wordless chat have to leave them alone or every membership
+// on the stream goes unheard.
+func (m Message) IsEvent() bool {
+	return m.IsSuperchat || m.IsMember || m.IsGift || m.IsGiftReceived
+}
+
+// IsPaid reports whether somebody spent money on this.
+//
+// It is what puts a message in the same tier as a Tako or Trakteer alert:
+// a purchase arrives once and matters then, where chat is a stream that will
+// still be there in a minute.
+func (m Message) IsPaid() bool { return m.IsSuperchat || m.IsGift }
 
 // IsEmoteOnly reports whether the message carries no readable words. Reading
 // out "🎉🎉🎉" as nothing at all is better than reading it as silence.
@@ -96,6 +146,8 @@ func ParseMessage(item *yt.LiveChatMessage) (Message, bool) {
 	amount := ""
 	isSuperchat := snippet.Type == "superChatEvent" || snippet.Type == "superStickerEvent"
 	isMember := snippet.Type == "newSponsorEvent" || snippet.Type == "memberMilestoneChatEvent"
+	isGift := snippet.Type == "membershipGiftingEvent"
+	isGiftReceived := snippet.Type == "giftMembershipReceivedEvent"
 
 	if isSuperchat {
 		switch {
@@ -108,32 +160,96 @@ func ParseMessage(item *yt.LiveChatMessage) (Message, bool) {
 			amount = snippet.SuperStickerDetails.AmountDisplayString
 		}
 	}
-	if text == "" && !isSuperchat && !isMember {
+
+	memberLevel, memberMonths, isUpgrade := "", 0, false
+	if snippet.NewSponsorDetails != nil {
+		memberLevel = snippet.NewSponsorDetails.MemberLevelName
+		isUpgrade = snippet.NewSponsorDetails.IsUpgrade
+	}
+	if snippet.MemberMilestoneChatDetails != nil {
+		memberLevel = snippet.MemberMilestoneChatDetails.MemberLevelName
+		memberMonths = int(snippet.MemberMilestoneChatDetails.MemberMonth)
+		if text == "" {
+			// A milestone can carry a comment, and it arrives here rather than
+			// in the ordinary message field.
+			text = snippet.MemberMilestoneChatDetails.UserComment
+		}
+	}
+
+	giftCount, giftLevel, gifterID := 0, "", ""
+	if isGift && snippet.MembershipGiftingDetails != nil {
+		giftCount = int(snippet.MembershipGiftingDetails.GiftMembershipsCount)
+		giftLevel = snippet.MembershipGiftingDetails.GiftMembershipsLevelName
+	}
+	if isGiftReceived && snippet.GiftMembershipReceivedDetails != nil {
+		// Only the gifter's channel id, never their name. The name comes from
+		// the gifting message that goes with it, which is why the ingest keeps
+		// a note of who gave what -- see resolveGifters.
+		gifterID = snippet.GiftMembershipReceivedDetails.GifterChannelId
+		giftLevel = snippet.GiftMembershipReceivedDetails.MemberLevelName
+	}
+
+	// These four carry no words of their own: the event is the message.
+	if text == "" && !isSuperchat && !isMember && !isGift && !isGiftReceived {
 		return Message{}, false
 	}
 
-	author := "seseorang"
+	author, authorID := "seseorang", ""
 	isOwner, isModerator := false, false
 	if item.AuthorDetails != nil {
 		if item.AuthorDetails.DisplayName != "" {
 			author = item.AuthorDetails.DisplayName
 		}
+		authorID = item.AuthorDetails.ChannelId
 		isOwner = item.AuthorDetails.IsChatOwner
 		isModerator = item.AuthorDetails.IsChatModerator
 	}
 
 	return Message{
-		ID:          item.Id,
-		Author:      author,
-		Text:        text,
-		PublishedAt: snippet.PublishedAt,
-		ReceivedAt:  float64(time.Now().UnixNano()) / 1e9,
-		IsSuperchat: isSuperchat,
-		IsMember:    isMember,
-		Amount:      amount,
-		IsOwner:     isOwner,
-		IsModerator: isModerator,
+		ID:              item.Id,
+		Author:          author,
+		AuthorChannelID: authorID,
+		Text:            text,
+		PublishedAt:     snippet.PublishedAt,
+		ReceivedAt:      float64(time.Now().UnixNano()) / 1e9,
+		IsSuperchat:     isSuperchat,
+		IsMember:        isMember,
+		Amount:          amount,
+		IsOwner:         isOwner,
+		IsModerator:     isModerator,
+		IsGift:          isGift,
+		IsGiftReceived:  isGiftReceived,
+		GiftCount:       giftCount,
+		GiftLevel:       giftLevel,
+		GifterChannelID: gifterID,
+		MemberLevel:     memberLevel,
+		MemberMonths:    memberMonths,
+		IsMemberUpped:   isUpgrade,
 	}, true
+}
+
+// Target names the stream whose chat is to be read.
+//
+// Two identifiers rather than one, because the transports do not agree on
+// which they need. The Data API works from a live chat id; the public page
+// works from the video id and never learns the chat id at all. Carrying both
+// lets the same loop feed either, and lets a fallback happen without going
+// back to YouTube to ask a second question.
+type Target struct {
+	VideoID    string
+	LiveChatID string
+}
+
+// cursorKey identifies this chat for the read cursor.
+//
+// The chat id is preferred because it is what the cursor has always been keyed
+// on, so an upgrade does not lose her place. The video id stands in when there
+// is no chat id, which is the ordinary case with no API key at all.
+func (t Target) cursorKey() string {
+	if t.LiveChatID != "" {
+		return t.LiveChatID
+	}
+	return t.VideoID
 }
 
 // Transport is one way of getting messages out of YouTube.
@@ -143,12 +259,12 @@ type Transport interface {
 	// ready the first time it is genuinely receiving -- not when it starts
 	// trying -- so that "chat is connected" is never announced about a
 	// connection that is one moment away from failing.
-	Run(ctx context.Context, liveChatID string, deliver func([]Message), ready func()) error
+	Run(ctx context.Context, target Target, deliver func([]Message), ready func()) error
 }
 
 // IngestOptions configure ingestion.
 type IngestOptions struct {
-	Transport string // "auto" | "stream" | "poll"
+	Transport string // "auto" | "page" | "api" | "stream" | "poll"
 
 	OnMessage      func(Message)
 	OnStatus       func(state, detail string)
@@ -167,6 +283,10 @@ type Ingest struct {
 	options  IngestOptions
 	messages []Message
 	seen     map[string]bool
+
+	// gifters is who gave a membership, by channel id, so a recipient message
+	// can name them.
+	gifters map[string]*gifterNote
 
 	transportInUse string
 	lastError      string
@@ -297,16 +417,27 @@ func (i *Ingest) LastError() string {
 }
 
 // Transports lists the transports to try, in order.
+//
+// The page comes first because it costs nothing: no key, no sign-in, no quota.
+// The two Data API transports sit behind it as the answer to the page changing
+// shape, which it may do without warning -- streaming ahead of polling, for
+// the same quota reasons as before.
 func (i *Ingest) Transports() []Transport {
+	page := &scrapeTransport{}
+	streamer := &streamTransport{youtube: i.youtube}
 	poller := &pollingTransport{youtube: i.youtube, onQuotaWarning: i.options.OnQuotaWarning}
 	switch i.options.Transport {
+	case "page":
+		return []Transport{page}
 	case "poll":
 		return []Transport{poller}
 	case "stream":
-		return []Transport{&streamTransport{youtube: i.youtube}}
+		return []Transport{streamer}
+	case "api":
+		// The Data API only, for when the page is not to be relied on.
+		return []Transport{streamer, poller}
 	default:
-		// Streaming first, for quota reasons; polling as the fallback.
-		return []Transport{&streamTransport{youtube: i.youtube}, poller}
+		return []Transport{page, streamer, poller}
 	}
 }
 
@@ -317,7 +448,7 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 	delay := 2 * time.Second
 
 	for ctx.Err() == nil {
-		liveChatID, err := i.youtube.LiveChatID(ctx)
+		videoID, liveChatID, err := i.youtube.ChatTarget(ctx)
 		if err != nil {
 			i.note(err.Error())
 			i.status("waiting", err.Error())
@@ -328,8 +459,9 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 			}
 			continue
 		}
+		target := Target{VideoID: videoID, LiveChatID: liveChatID}
 
-		i.read.Adopt(liveChatID)
+		i.read.Adopt(target.cursorKey())
 
 		unavailable := false
 
@@ -343,7 +475,7 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 			i.mu.Unlock()
 
 			name := transport.Name()
-			err := transport.Run(ctx, liveChatID, i.accept, func() {
+			err := transport.Run(ctx, target, i.accept, func() {
 				i.status("connected", name)
 			})
 			if ctx.Err() != nil {
@@ -438,6 +570,11 @@ func (i *Ingest) accept(messages []Message) {
 		if i.read.AlreadyRead(message) {
 			continue
 		}
+		// After the two checks above, so a message that arrives twice is not
+		// counted twice: the recipient's place in the batch is what decides
+		// whether their name is read or folded into "and the others".
+		i.noteGiftLocked(&message)
+
 		i.messages = append(i.messages, message)
 		fresh = append(fresh, message)
 	}
@@ -462,6 +599,50 @@ func (i *Ingest) accept(messages []Message) {
 	}
 	for _, message := range fresh {
 		callback(message)
+	}
+}
+
+// gifterNote is what is remembered about one person who gifted memberships:
+// their name, how many they bought, and how many of the recipient messages
+// have gone past so far.
+type gifterNote struct {
+	name  string
+	total int
+	seen  int
+}
+
+// noteGiftLocked joins a gifted membership up with the person who paid for it.
+//
+// YouTube names the giver only on the giving message and identifies them by
+// channel id everywhere else, so that message is noted as it goes past and the
+// recipients are matched against it. The giving message always arrives first,
+// which is what makes this work.
+//
+// Not knowing is expected rather than exceptional: connecting to a stream
+// halfway through a batch means the giving message was never seen. The name is
+// left empty then, and the sentence that gets read is written to work either
+// way rather than announcing a gift from nobody.
+func (i *Ingest) noteGiftLocked(message *Message) {
+	switch {
+	case message.IsGift && message.AuthorChannelID != "":
+		if i.gifters == nil {
+			i.gifters = map[string]*gifterNote{}
+		}
+		// Only ever one entry per giver, so this is bounded by how many people
+		// gift rather than by how long the stream runs.
+		i.gifters[message.AuthorChannelID] = &gifterNote{
+			name: message.Author, total: message.GiftCount,
+		}
+
+	case message.IsGiftReceived && message.GifterChannelID != "":
+		note := i.gifters[message.GifterChannelID]
+		if note == nil {
+			return
+		}
+		note.seen++
+		message.GifterName = note.name
+		message.GiftIndex = note.seen
+		message.GiftTotal = note.total
 	}
 }
 

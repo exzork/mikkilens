@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, Menu, shell, Tray, nativeImage } from 'ele
 import { join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { Daemon } from './daemon.js'
+import { isDev, watchRenderer } from './dev.js'
 import { homeDirectory, logFile, seedHome } from './home.js'
 import { Updates } from './updates.js'
 import { availableLanguages, catalog, fallbackLanguage, translate, type Catalog } from './i18n.js'
@@ -32,7 +33,9 @@ seedHome(home)
 // there makes the two files she actually wants much harder to find.
 app.setPath('userData', join(home, 'data', 'window'))
 
-const daemon = new Daemon(engineURL, home)
+// In dev the engine belongs to air, so this attaches and never spawns.
+const development = isDev()
+const daemon = new Daemon(engineURL, home, development)
 const updates = new Updates(engineURL, daemon, (key, values) => t(key, values), () => {
   // A waiting update changes both menus, so it can be reached from the tray
   // without opening the window.
@@ -103,6 +106,19 @@ async function main(): Promise<void> {
   createWindow()
   createTray()
   Menu.setApplicationMenu(buildMenu())
+
+  if (development) {
+    watchRenderer(
+      () => window,
+      () => {
+        // The menus and the tray live here, not in the page, so a reload does
+        // not touch them; they are rebuilt from the strings just reread.
+        strings = catalog(language)
+        Menu.setApplicationMenu(buildMenu())
+        applyTrayMenu()
+      },
+    )
+  }
 
   updates.start()
 

@@ -20,6 +20,17 @@ export type Catalog = Record<string, string>
 
 const cache = new Map<string, Catalog>()
 
+/**
+ * Forget what has been read, so the next look goes back to disk.
+ *
+ * Only the dev watcher calls this. Without it, editing a locale file reloads
+ * the page and changes nothing, because the catalogue it is handed is the one
+ * cached at startup -- which looks like the edit not having worked.
+ */
+export function clearCatalogCache(): void {
+  cache.clear()
+}
+
 function localesDirectory(): string {
   return join(__dirname, '..', 'locales')
 }

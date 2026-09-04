@@ -28,13 +28,14 @@ type step struct {
 
 // patterns maps a name to its sequence of tones.
 var patterns = map[string][]step{
-	"listening": {{880.0, 0.09}},                                 // single, bright
-	"ok":        {{660.0, 0.07}, {990.0, 0.10}},                  // rising pair
-	"error":     {{420.0, 0.14}, {280.0, 0.22}},                  // falling, low, long
-	"confirm":   {{520.0, 0.08}, {780.0, 0.08}, {520.0, 0.08}},   // up-down question
-	"chat":      {{1180.0, 0.045}},                               // soft blip
-	"superchat": {{880.0, 0.07}, {1100.0, 0.07}, {1320.0, 0.11}}, // rising triple
-	"thinking":  {{600.0, 0.06}, {600.0, 0.06}},                  // two flat, "working"
+	"listening": {{880.0, 0.09}},                                  // single, bright
+	"ok":        {{660.0, 0.07}, {990.0, 0.10}},                   // rising pair
+	"error":     {{420.0, 0.14}, {280.0, 0.22}},                   // falling, low, long
+	"confirm":   {{520.0, 0.08}, {780.0, 0.08}, {520.0, 0.08}},    // up-down question
+	"chat":      {{1180.0, 0.045}},                                // soft blip
+	"superchat": {{880.0, 0.07}, {1100.0, 0.07}, {1320.0, 0.11}},  // rising triple
+	"donation":  {{1320.0, 0.07}, {1660.0, 0.07}, {1980.0, 0.13}}, // brighter, higher
+	"thinking":  {{600.0, 0.06}, {600.0, 0.06}},                   // two flat, "working"
 }
 
 // relativeVolume keeps chat well below the others: it fires constantly, and an
@@ -43,6 +44,7 @@ var relativeVolume = map[string]float64{
 	"chat":      0.45,
 	"error":     1.0,
 	"superchat": 0.9,
+	"donation":  0.9,
 }
 
 type cacheKey struct {

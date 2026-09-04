@@ -46,15 +46,53 @@ export interface Snapshot {
   last_transcript?: string
   last_command?: string
   stt_backend?: string
+  /** The first-run download, absent once there is nothing left to fetch. */
+  installing?: {
+    stage: 'engine' | 'model' | 'wake' | 'gpu'
+    downloaded: number
+    total: number
+    percent: number
+    bytes_per_second: number
+    done: boolean
+    failed?: string
+  } | null
   stt_loaded?: boolean
   wake_model?: string | null
   wake_score?: number
+  wake_error?: string
   hotkey?: string | null
+  hotkey_error?: string
   command_count?: number
   unhandled?: string[]
   mic_frames?: number
   mic_error?: string
   [key: string]: unknown
+}
+
+/**
+ * Everything the Language panel needs to make a wake word work: what is
+ * installed, what is running, and what the microphone and the detector are
+ * hearing at this moment.
+ */
+export interface WakeStatus {
+  enabled: boolean
+  model: string
+  threshold: number
+  cooldown_s: number
+  installed: string[]
+  /** Why the wake word is not running, when it is not. */
+  error?: string
+  /** The ONNX runtime is missing, so no wake word can run at all. */
+  runtime_error?: string
+  loaded?: boolean
+  running_model?: string
+  /** True while a command is being recorded, when it deliberately stops. */
+  paused?: boolean
+  score?: number
+  mic_level?: number
+  mic_frames?: number
+  mic_error?: string
+  mic_running?: boolean
 }
 
 export interface DeviceInfo {
@@ -116,71 +154,82 @@ export interface AppConfig {
     volume: string
     chat_voice: string
     chat_rate: string
+    chat_volume: string
+    donation_voice: string
+    donation_rate: string
+    donation_volume: string
     output_device: string
     earcon_volume: number
     confirm_timeout_s: number
   }
   audio: { input_device: string; [key: string]: unknown }
+  stt: { backend: string; model_size: string; device: string; [key: string]: unknown }
   wake: { enabled: boolean; model: string; threshold: number; cooldown_s: number }
   hotkey: { enabled: boolean; combination: string; push_to_talk: boolean }
   obs: { host: string; port: number; password: string; mic_source: string; [key: string]: unknown }
-  vision: { base_url: string; model: string; api_key_env: string; [key: string]: unknown }
-  youtube: {
-    api_key_env: string
-    channel_id: string
-    video_id: string
-    [key: string]: unknown
-  }
+  /** The one OpenAI-compatible endpoint, used for text and for images alike. */
+  model: { base_url: string; model: string; api_key_env: string; [key: string]: unknown }
+  vision: { max_edge: number; monitors: string; [key: string]: unknown }
+  matcher: { enabled: boolean }
+  youtube: { enabled: boolean; [key: string]: unknown }
+  chat: { max_gift_recipients: number; [key: string]: unknown }
+  /** Donations, watched so chat is not read over the top of an alert. */
+  tako: { enabled: boolean; link: string; read_aloud: boolean; [key: string]: unknown }
+  trakteer: { enabled: boolean; link: string; read_aloud: boolean; [key: string]: unknown }
   _languages?: string[]
   [key: string]: unknown
 }
 
-export interface MatcherModel {
-  name: string
-  file: string
-  bytes: number
-  vision: boolean
-  summary: string
-}
-
-export interface MatcherProgress {
-  stage: string
-  downloaded: number
-  total: number
-  percent: number
-  detail: string
-  bytes_per_second: number
-}
-
-export interface MatcherStatus {
-  enabled: boolean
-  models: MatcherModel[]
-  installed_model: string
-  runtime_installed: boolean
-  loading: boolean
-  ready: boolean
-  vision: boolean
-  vision_is_local: boolean
-  downloading: boolean
-  progress: MatcherProgress
-  external_base_url?: string
-  external_model?: string
-}
-
 export interface YouTubeStatus {
+  /** Whether YouTube is switched on at all; Disconnect switches it off. */
   enabled: boolean
   connected: boolean
-  /** "none" | "public" | "account" -- how much MikkiLens can currently do. */
+  /** "none" | "account" -- whether the sign-in is there. */
   access?: string
-  has_api_key?: boolean
-  channel_id?: string
-  video_id?: string
-  api_key_env?: string
-  has_client_secret?: boolean
-  /** "file" | "none" -- whether data/client_secret.json holds an OAuth client. */
-  client_source?: string
+  /**
+   * Whether there is an OAuth client to sign in with (data/client_secret.json).
+   * Without one, Connect cannot work and the page says why instead.
+   */
+  has_client?: boolean
   channel?: string
   quota_used?: number
   quota_percent?: number
   chat_transport?: string
+}
+
+/**
+ * One of her channels: an OBS profile and a YouTube sign-in, paired.
+ *
+ * The pairing is the whole point. `obs_profile` names the OBS profile holding
+ * this channel's stream key, and `channel_id` names the sign-in that reads its
+ * chat -- switching moves both, so a music review cannot go out on the main
+ * channel with the main channel's chat read over it.
+ */
+export interface ChannelInfo {
+  /** What she calls it, and what she says to switch to it. */
+  name: string
+  /** YouTube's own id. Filled in by connecting; never typed. */
+  channel_id: string
+  obs_profile: string
+  obs_scene_collection: string
+  /** The channel's title on YouTube, when a sign-in is stored for it. */
+  channel_title?: string
+  /** Whether a sign-in for it is actually on disk. */
+  connected: boolean
+  /** Whether it is the channel MikkiLens is on right now. */
+  active: boolean
+}
+
+export interface ChannelsPayload {
+  channels?: ChannelInfo[]
+}
+
+/** What OBS has to offer, so a profile can be picked rather than typed. */
+export interface OBSProfiles {
+  connected: boolean
+  profiles?: string[]
+  scene_collections?: string[]
+  current_profile?: string
+  current_scene_collection?: string
+  error?: string
 }

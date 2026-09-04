@@ -214,6 +214,10 @@ func commandRun(arguments []string, languageOverride string) int {
 	}
 
 	app := engine.New(settings, locale)
+	// The YouTube consent screen has to land in her real browser. Nothing else
+	// in the engine opens a window, so this is handed in rather than reached
+	// for: a build with no desktop simply has nowhere to send it.
+	app.OpenBrowser = httpapi.OpenBrowser
 	if *echo {
 		// Phase-one verification: repeat back whatever was heard, so the whole
 		// microphone to recognition to dispatch path can be checked by ear.

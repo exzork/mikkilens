@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 /**
@@ -19,6 +19,26 @@ import { dirname, join } from 'node:path'
 
 /** Files the engine expects beside config.toml, seeded on a fresh install. */
 const seeded = ['commands.en.toml', 'commands.id.toml', 'config.example.toml']
+
+/**
+ * What the wake word needs, seeded into data/models on a fresh install.
+ *
+ * The engine can fetch these itself, and still does when they are missing. But
+ * first run is the worst possible moment to need a network: the wake word is
+ * how she starts talking to MikkiLens without touching anything, so a machine
+ * that installed fine but happened to be offline comes up with "onnxruntime.dll
+ * was not found" and no voice. Eighteen megabytes inside the installer buys a
+ * wake word that works before the machine has ever reached the internet.
+ *
+ * The speech models are not here on purpose -- those are hundreds of megabytes
+ * and which one suits her machine is a question only she can answer.
+ */
+const seededModels = [
+  'onnxruntime.dll',
+  'onnxruntime_providers_shared.dll',
+  'melspectrogram.onnx',
+  'embedding_model.onnx',
+]
 
 /** Markers that identify the repository when running from source. */
 const sourceMarkers = ['config.toml', 'config.example.toml', 'go.mod']
@@ -42,12 +62,12 @@ let resolved: string | null = null
  * `npm run dev` do not quietly read two different configurations.
  *
  * Packaged, an executable sitting inside an installation uses that
- * installation. This matters more than it looks: the speech model and
- * onnxruntime.dll are several gigabytes and are hers to supply, so they are
- * never inside the app. An executable dropped next to an installation that
- * already has them has to find them, or it starts an engine that cannot hear
- * anything -- which is the whole product, failing silently, on a machine where
- * everything it needed was right there.
+ * installation. This matters more than it looks: the speech models are
+ * hundreds of megabytes and are hers to supply, so they are never inside the
+ * app. An executable dropped next to an installation that already has them has
+ * to find them, or it starts an engine that cannot hear anything -- which is
+ * the whole product, failing silently, on a machine where everything it needed
+ * was right there.
  *
  * Failing that it is %APPDATA%\MikkiLens, which survives reinstalling and
  * updating.
@@ -107,20 +127,44 @@ export function seedHome(home: string): void {
     return // running from the repository: the files are already there
   }
   for (const name of seeded) {
-    const destination = join(home, name)
-    if (existsSync(destination)) {
-      continue
-    }
-    const source = join(process.resourcesPath, name)
-    if (!existsSync(source)) {
-      continue
-    }
+    seedOne(join(process.resourcesPath, name), join(home, name), name)
+  }
+
+  const models = join(home, 'data', 'models')
+  mkdirSync(models, { recursive: true })
+  for (const name of seededModels) {
+    seedOne(join(process.resourcesPath, 'wake', name), join(models, name), name)
+  }
+}
+
+/**
+ * Copy one seeded file, if it is not already there.
+ *
+ * Never overwrites. Her command files are hers to edit, and an update that
+ * replaced the phrases she had changed would take her voice control away
+ * without saying so; the same goes for a runtime she swapped by hand.
+ *
+ * Copied beside the target and renamed, because a half-written onnxruntime.dll
+ * is worse than a missing one: it is found, loaded, and fails at the moment she
+ * says the wake word, with an error about a corrupt library rather than about
+ * an install that was interrupted.
+ */
+function seedOne(source: string, destination: string, name: string): void {
+  if (existsSync(destination) || !existsSync(source)) {
+    return
+  }
+  const temporary = `${destination}.part`
+  try {
+    copyFileSync(source, temporary)
+    renameSync(temporary, destination)
+  } catch (error) {
+    // Missing files leave her with the built-in phrases and the hotkey rather
+    // than with nothing, so this is worth a line in the log and no more.
+    console.warn(`could not seed ${name}`, error)
     try {
-      copyFileSync(source, destination)
-    } catch (error) {
-      // A missing command file leaves her with the built-in phrases rather
-      // than with nothing, so this is worth a line in the log and no more.
-      console.warn(`could not seed ${name}`, error)
+      rmSync(temporary, { force: true })
+    } catch {
+      // Nothing useful to do about a leftover .part file.
     }
   }
 }

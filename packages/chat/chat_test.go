@@ -482,10 +482,24 @@ func TestSuperChatsAreReadBeforeOrdinaryMessages(t *testing.T) {
 
 // -- transport selection ------------------------------------------------------
 
-// TestAutoPrefersStreamingAndKeepsPollingAsAFallback matters for quota:
-// polling a four hour stream would exhaust the daily allowance on its own.
-func TestAutoPrefersStreamingAndKeepsPollingAsAFallback(t *testing.T) {
+// TestAutoPrefersThePageAndKeepsTheAPIAsAFallback matters for quota: the page
+// costs nothing at all, and polling a four hour stream on the Data API would
+// exhaust the daily allowance on its own. The order is the whole design.
+func TestAutoPrefersThePageAndKeepsTheAPIAsAFallback(t *testing.T) {
 	ingest := chat.NewIngest(nil, chat.IngestOptions{Transport: "auto"})
+	names := []string{}
+	for _, transport := range ingest.Transports() {
+		names = append(names, transport.Name())
+	}
+	if strings.Join(names, ",") != "page,stream,poll" {
+		t.Errorf("transports = %v, want page then stream then poll", names)
+	}
+}
+
+// Pinning "api" is the answer to the page changing shape, so it must genuinely
+// leave the page out rather than merely demoting it.
+func TestForcingTheAPILeavesThePageOut(t *testing.T) {
+	ingest := chat.NewIngest(nil, chat.IngestOptions{Transport: "api"})
 	names := []string{}
 	for _, transport := range ingest.Transports() {
 		names = append(names, transport.Name())
@@ -516,4 +530,273 @@ func anyContains(values []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// -- memberships and gifts -----------------------------------------------------
+
+// What YouTube sends for these carries no words of its own: the event is the
+// message. Everything here is about turning that into a sentence that says who
+// did what, and about the filters that were quietly swallowing them.
+
+func liveItem(kind string, adjust func(*yt.LiveChatMessageSnippet)) *yt.LiveChatMessage {
+	snippet := &yt.LiveChatMessageSnippet{Type: kind, PublishedAt: "2026-09-01T00:00:00Z"}
+	if adjust != nil {
+		adjust(snippet)
+	}
+	return &yt.LiveChatMessage{
+		Id:            "x1",
+		Snippet:       snippet,
+		AuthorDetails: &yt.LiveChatMessageAuthorDetails{DisplayName: "Budi", ChannelId: "UC-budi"},
+	}
+}
+
+func TestAGiftedMembershipSaysWhoGaveItAndHowMany(t *testing.T) {
+	parsed, ok := chat.ParseMessage(liveItem("membershipGiftingEvent",
+		func(s *yt.LiveChatMessageSnippet) {
+			s.MembershipGiftingDetails = &yt.LiveChatMembershipGiftingDetails{
+				GiftMembershipsCount: 20, GiftMembershipsLevelName: "Sultan",
+			}
+		}))
+	if !ok {
+		t.Fatal("a gifted membership was dropped; it carries no text of its own")
+	}
+	if !parsed.IsGift || parsed.GiftCount != 20 || parsed.GiftLevel != "Sultan" {
+		t.Fatalf("parsed %+v", parsed)
+	}
+	if !parsed.IsPaid() {
+		t.Error("a gifted membership is a purchase and belongs in the paid tier")
+	}
+
+	_, _, reader := setup(t)
+	spoken := reader.Render(parsed)
+	for _, want := range []string{"Budi", "20", "Sultan"} {
+		if !strings.Contains(spoken, want) {
+			t.Errorf("%q is missing %q", spoken, want)
+		}
+	}
+}
+
+func TestAReceivedGiftSaysWhoItCameFrom(t *testing.T) {
+	ingest, _, reader := setup(t)
+
+	// The giving message is what carries the giver's name; the recipients name
+	// them only by channel id, so the two have to be joined up.
+	gift, _ := chat.ParseMessage(liveItem("membershipGiftingEvent",
+		func(s *yt.LiveChatMessageSnippet) {
+			s.MembershipGiftingDetails = &yt.LiveChatMembershipGiftingDetails{GiftMembershipsCount: 2}
+		}))
+
+	received := &yt.LiveChatMessage{
+		Id: "x2",
+		Snippet: &yt.LiveChatMessageSnippet{
+			Type: "giftMembershipReceivedEvent",
+			GiftMembershipReceivedDetails: &yt.LiveChatGiftMembershipReceivedDetails{
+				GifterChannelId: "UC-budi", MemberLevelName: "Sultan",
+			},
+		},
+		AuthorDetails: &yt.LiveChatMessageAuthorDetails{DisplayName: "Sari", ChannelId: "UC-sari"},
+	}
+	got, ok := chat.ParseMessage(received)
+	if !ok || !got.IsGiftReceived || got.GifterChannelID != "UC-budi" {
+		t.Fatalf("parsed %+v (ok=%v)", got, ok)
+	}
+
+	ingest.Accept([]chat.Message{gift, got})
+	stored := ingest.Snapshot()
+	if len(stored) != 2 {
+		t.Fatalf("expected both messages, got %d", len(stored))
+	}
+	if stored[1].GifterName != "Budi" {
+		t.Fatalf("the giver was not named: %+v", stored[1])
+	}
+
+	spoken := reader.Render(stored[1])
+	if !strings.Contains(spoken, "Sari") || !strings.Contains(spoken, "Budi") {
+		t.Errorf("%q should name both the recipient and the giver", spoken)
+	}
+}
+
+func TestAReceivedGiftStillReadsWhenTheGiverIsUnknown(t *testing.T) {
+	// Connecting halfway through a batch means the giving message was never
+	// seen. Saying the rest beats thanking nobody.
+	ingest, _, reader := setup(t)
+
+	orphan, _ := chat.ParseMessage(&yt.LiveChatMessage{
+		Id: "x3",
+		Snippet: &yt.LiveChatMessageSnippet{
+			Type: "giftMembershipReceivedEvent",
+			GiftMembershipReceivedDetails: &yt.LiveChatGiftMembershipReceivedDetails{
+				GifterChannelId: "UC-nobody",
+			},
+		},
+		AuthorDetails: &yt.LiveChatMessageAuthorDetails{DisplayName: "Sari"},
+	})
+	ingest.Accept([]chat.Message{orphan})
+
+	spoken := reader.Render(ingest.Snapshot()[0])
+	if !strings.Contains(spoken, "Sari") {
+		t.Errorf("%q should still name the recipient", spoken)
+	}
+	if strings.Contains(spoken, "UC-nobody") {
+		t.Errorf("%q leaked a channel id into the speech", spoken)
+	}
+}
+
+func TestANewMembershipSaysItsLevel(t *testing.T) {
+	parsed, ok := chat.ParseMessage(liveItem("newSponsorEvent",
+		func(s *yt.LiveChatMessageSnippet) {
+			s.NewSponsorDetails = &yt.LiveChatNewSponsorDetails{MemberLevelName: "Sultan"}
+		}))
+	if !ok {
+		t.Fatal("a new membership was dropped")
+	}
+
+	_, _, reader := setup(t)
+	if spoken := reader.Render(parsed); !strings.Contains(spoken, "Sultan") {
+		t.Errorf("%q should say which level they joined", spoken)
+	}
+}
+
+func TestAMilestoneSaysHowLongTheyHaveBeenAMember(t *testing.T) {
+	parsed, ok := chat.ParseMessage(liveItem("memberMilestoneChatEvent",
+		func(s *yt.LiveChatMessageSnippet) {
+			s.MemberMilestoneChatDetails = &yt.LiveChatMemberMilestoneChatDetails{
+				MemberLevelName: "Sultan", MemberMonth: 24, UserComment: "terus semangat",
+			}
+		}))
+	if !ok {
+		t.Fatal("a milestone was dropped")
+	}
+	if parsed.MemberMonths != 24 {
+		t.Errorf("months %d, want 24", parsed.MemberMonths)
+	}
+	// The comment rides in its own field rather than the ordinary one.
+	if parsed.Text != "terus semangat" {
+		t.Errorf("the milestone comment was lost: %q", parsed.Text)
+	}
+
+	_, _, reader := setup(t)
+	spoken := reader.Render(parsed)
+	for _, want := range []string{"Budi", "24", "Sultan", "terus semangat"} {
+		if !strings.Contains(spoken, want) {
+			t.Errorf("%q is missing %q", spoken, want)
+		}
+	}
+}
+
+func TestWordlessEventsSurviveTheEmoteOnlyFilter(t *testing.T) {
+	// These carry no text at all, so the emote-only filter counted every one
+	// of them as emotes and dropped them -- with skip_emote_only on by
+	// default, no membership on the stream was ever read out.
+	settings := config.Default().Chat
+	settings.SkipEmoteOnly = true
+
+	ingest, bus, reader := setup(t, settings)
+	reader.Start(true)
+
+	ingest.Accept([]chat.Message{
+		message(1, func(m *chat.Message) { m.Text = ""; m.IsMember = true; m.MemberLevel = "Sultan" }),
+		message(2, func(m *chat.Message) { m.Text = ""; m.IsGift = true; m.GiftCount = 5 }),
+		message(3, func(m *chat.Message) { m.Text = ""; m.IsGiftReceived = true }),
+	})
+	reader.Notify()
+
+	waitFor(t, "every wordless event to be read", func() bool { return len(bus.chat()) == 3 })
+}
+
+func TestARunOfGiftRecipientsIsNotCollapsed(t *testing.T) {
+	// Every recipient message has empty text, so collapse-duplicates saw them
+	// as the same message repeated and kept only the first.
+	settings := config.Default().Chat
+	settings.CollapseDuplicates = true
+
+	ingest, bus, reader := setup(t, settings)
+	reader.Start(true)
+
+	ingest.Accept([]chat.Message{
+		message(1, func(m *chat.Message) { m.Text = ""; m.IsGiftReceived = true; m.Author = "a" }),
+		message(2, func(m *chat.Message) { m.Text = ""; m.IsGiftReceived = true; m.Author = "b" }),
+		message(3, func(m *chat.Message) { m.Text = ""; m.IsGiftReceived = true; m.Author = "c" }),
+	})
+	reader.Notify()
+
+	waitFor(t, "every gift recipient to be read", func() bool { return len(bus.chat()) == 3 })
+}
+
+func TestABulkGiftReadsAFewNamesThenACount(t *testing.T) {
+	// Fifty gifts is fifty messages from YouTube. Reading every name is
+	// several minutes of names on a stream that has just had something worth
+	// reacting to happen on it.
+	settings := config.Default().Chat
+	settings.MaxGiftRecipients = 2
+
+	ingest, bus, reader := setup(t, settings)
+	reader.Start(true)
+
+	batch := []chat.Message{message(0, func(m *chat.Message) {
+		m.Text, m.Author, m.AuthorChannelID = "", "Budi", "UC-budi"
+		m.IsGift, m.GiftCount = true, 10
+	})}
+	for index := 1; index <= 10; index++ {
+		batch = append(batch, message(index, func(m *chat.Message) {
+			m.Text, m.IsGiftReceived, m.GifterChannelID = "", true, "UC-budi"
+		}))
+	}
+	ingest.Accept(batch)
+	reader.Notify()
+
+	// The announcement, two names, and one line standing in for the other
+	// eight. Nothing after that.
+	waitFor(t, "the gift batch to be read", func() bool { return len(bus.chat()) == 4 })
+
+	spoken := bus.chat()
+	if !strings.Contains(spoken[0], "10") {
+		t.Errorf("the announcement should say how many: %q", spoken[0])
+	}
+	if !strings.Contains(spoken[3], "8") {
+		t.Errorf("the last line should account for the other eight: %q", spoken[3])
+	}
+}
+
+func TestABulkGiftUnderTheCapReadsEveryName(t *testing.T) {
+	settings := config.Default().Chat
+	settings.MaxGiftRecipients = 5
+
+	ingest, bus, reader := setup(t, settings)
+	reader.Start(true)
+
+	batch := []chat.Message{message(0, func(m *chat.Message) {
+		m.Text, m.AuthorChannelID = "", "UC-budi"
+		m.IsGift, m.GiftCount = true, 2
+	})}
+	for index := 1; index <= 2; index++ {
+		batch = append(batch, message(index, func(m *chat.Message) {
+			m.Text, m.IsGiftReceived, m.GifterChannelID = "", true, "UC-budi"
+		}))
+	}
+	ingest.Accept(batch)
+	reader.Notify()
+
+	waitFor(t, "both recipients to be named", func() bool { return len(bus.chat()) == 3 })
+}
+
+func TestGiftsAreNotCappedWhenTheGivingMessageWasMissed(t *testing.T) {
+	// Connecting halfway through a batch means there is no index and no total
+	// to count against. Reading them all is the safe way to be wrong.
+	settings := config.Default().Chat
+	settings.MaxGiftRecipients = 1
+
+	ingest, bus, reader := setup(t, settings)
+	reader.Start(true)
+
+	batch := []chat.Message{}
+	for index := 1; index <= 4; index++ {
+		batch = append(batch, message(index, func(m *chat.Message) {
+			m.Text, m.IsGiftReceived, m.GifterChannelID = "", true, "UC-unknown"
+		}))
+	}
+	ingest.Accept(batch)
+	reader.Notify()
+
+	waitFor(t, "every orphaned recipient to be read", func() bool { return len(bus.chat()) == 4 })
 }
