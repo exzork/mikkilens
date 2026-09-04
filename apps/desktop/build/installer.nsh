@@ -181,6 +181,20 @@ Choose No to keep them, so reinstalling MikkiLens does not have to download them
     RMDir /r "$APPDATA\MikkiLens"
 
   dataDone:
+
+  ;
+  ; Finally, the installation folder itself.
+  ;
+  ; The uninstaller starts with SetOutPath $INSTDIR, which makes the folder its
+  ; working directory -- and Windows will not remove a directory that is some
+  ; running process's working directory. So the template's own RMDir quietly
+  ; fails and an empty MikkiLens folder is left sitting in Programs, looking
+  ; like an uninstall that did not finish. Stepping out of it first is all it
+  ; takes. RMDir without /r, so this can only ever remove an empty folder: if
+  ; anything of hers is still in there, it stays.
+  ;
+  SetOutPath $TEMP
+  RMDir "$INSTDIR"
 !macroend
 
 !endif
