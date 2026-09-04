@@ -1,0 +1,142 @@
+# Build the installer and leave it as a draft release.
+#
+# The last step is deliberately not automatic. electron-builder uploads to a
+# GitHub release that stays a *draft*, so nothing is visible to anyone until
+# somebody presses Publish. A build that went wrong is deleted with no one
+# having downloaded it, and the moment a release does go out is a decision
+# rather than a side effect of pushing.
+#
+# Two ways to start it:
+#
+#   Actions -> Build the installer -> Run workflow
+#       builds whatever is on the branch, at the version already in
+#       package.json.
+#
+#   git tag v0.3.0 && git push origin v0.3.0
+#       builds that version. The tag wins: package.json is rewritten to match
+#       it inside the runner, so the tag, the installer filename and the
+#       release all agree without anyone having to remember to bump a file.
+#
+# Either way the finished installer is also attached to the run itself as an
+# artifact, so it can be downloaded and tested without publishing anything.
+
+name: Build the installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+# Creating the draft release and uploading to it is a write to the repository.
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # go-version-file keeps this honest: the toolchain follows go.mod rather
+      # than a number here that nobody remembers to update.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # The wake word binds ONNX Runtime through cgo, so the build needs a C
+      # compiler. The Windows runners ship one; this fails early and clearly if
+      # that ever stops being true, rather than deep inside `go build`.
+      - name: Check the C toolchain
+        run: gcc --version
+
+      - name: Set the version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v',''
+          Write-Host "Building version $version"
+          npm version $version --no-git-tag-version --allow-same-version --workspaces --include-workspace-root
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The ONNX runtime and the two shared wake models, which go inside the
+      # installer. Cached because they are pinned: the key changes only when
+      # the script that pins them does.
+      - name: Cache the wake word files
+        uses: actions/cache@v4
+        with:
+          path: data/models
+          key: wake-${{ runner.os }}-${{ hashFiles('scripts/fetch-wake.mjs') }}
+
+      - name: Fetch the wake word files
+        run: npm run fetch:wake
+
+      # Electron and electron-builder's own tooling, which is otherwise
+      # re-downloaded on every run.
+      - name: Cache the Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Checks before the build, not after: an installer that was going to be
+      # published anyway is the wrong place to find out the tests fail. The
+      # wake word tests run for real here, because the files above are in place
+      # by now; the speech tests skip themselves, the models being far too
+      # large to fetch on every build.
+      - name: Check formatting
+        run: |
+          $unformatted = gofmt -l apps packages
+          if ($unformatted) {
+            Write-Host "These files need gofmt:"
+            $unformatted | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test the engine
+        run: go test ./...
+        env:
+          MIKKILENS_SILENT: '1'
+
+      - name: Test the window
+        run: npm run test:desktop
+
+      # Builds the engine, packages the app, and uploads to a draft release.
+      # GH_TOKEN is what electron-builder looks for; the publish target is the
+      # github provider already declared in apps/desktop/package.json.
+      - name: Build and draft the release
+        run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Also kept on the run itself, so a build can be downloaded and tried
+      # without touching releases at all.
+      - name: Keep the installer with this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: MikkiLens-installer
+          path: |
+            dist/app/MikkiLens-Setup-*.exe
+            dist/app/MikkiLens.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Say where it went
+        run: |
+          Write-Host ""
+          Write-Host "The installer is built."
+          Write-Host "Open Releases, check the draft, and press Publish when it looks right:"
+          Write-Host "  https://github.com/${{ github.repository }}/releases"

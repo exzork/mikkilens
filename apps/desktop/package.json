@@ -26,7 +26,8 @@
       {
         "provider": "github",
         "owner": "exzork",
-        "repo": "mikkilens"
+        "repo": "mikkilens",
+        "releaseType": "draft"
       }
     ],
     "npmRebuild": false,

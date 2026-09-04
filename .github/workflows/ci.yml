@@ -1,0 +1,78 @@
+# The quick check that runs on every push.
+#
+# Separate from the installer build on purpose. This is the one that should
+# answer in a couple of minutes on every commit, so it stops at the tests and
+# never packages anything or touches releases.
+#
+# It runs on Windows because that is the only platform MikkiLens is built for:
+# the audio capture is WASAPI, the wake word loads onnxruntime.dll, and a green
+# tick from a Linux runner would be saying nothing about the thing that ships.
+
+name: Checks
+
+on:
+  push:
+    branches:
+      - main
+    # Tags are covered by the installer build, which runs the same checks
+    # before it packages anything. No need to do them twice.
+    tags-ignore:
+      - '**'
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fetched so the wake word tests actually run rather than skipping
+      # themselves. Same cache the installer build uses.
+      - name: Cache the wake word files
+        uses: actions/cache@v4
+        with:
+          path: data/models
+          key: wake-${{ runner.os }}-${{ hashFiles('scripts/fetch-wake.mjs') }}
+
+      - name: Fetch the wake word files
+        run: npm run fetch:wake
+
+      - name: Check formatting
+        run: |
+          $unformatted = gofmt -l apps packages
+          if ($unformatted) {
+            Write-Host "These files need gofmt:"
+            $unformatted | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test the engine
+        run: go test ./...
+        env:
+          MIKKILENS_SILENT: '1'
+
+      - name: Test the window
+        run: npm run test:desktop
+
+      # The command files are part of the product and the engine refuses to
+      # start on a broken one, so a phrase that no longer parses should fail
+      # here rather than in front of her.
+      - name: Check the command files
+        run: go run ./apps/daemon do --list
