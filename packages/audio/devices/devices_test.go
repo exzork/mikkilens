@@ -87,7 +87,12 @@ func TestAnEmptySpecMeansTheSystemDefault(t *testing.T) {
 }
 
 func TestAnUnknownNameFallsBackRatherThanFailing(t *testing.T) {
-	if _, err := devices.List(devices.Output); err != nil {
+	// An empty list is not an error: a machine with the audio service running
+	// and nothing plugged into it enumerates successfully and returns nothing.
+	// Resolve does report that as an error, so checking only the error here
+	// let the test run on a machine with no sound card at all -- which is
+	// every build runner.
+	if found, err := devices.List(devices.Output); err != nil || len(found) == 0 {
 		t.Skip("no output devices in this environment")
 	}
 	// Falling back to the default is right: refusing to speak because a device
