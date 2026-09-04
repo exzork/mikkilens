@@ -70,8 +70,12 @@ const (
 var Bytes = map[Stage]int64{
 	StageEngine: 8_200_000,
 	StageModel:  487_600_000,
-	StageWake:   68_300_000,
-	StageGPU:    670_600_000,
+	// The 1.29 runtime archive is 76 MB, plus a little over two for the two
+	// shared models. Installed copies never reach this stage at all -- the
+	// files ship inside the installer -- so it is what somebody building from
+	// source hears.
+	StageWake: 78_300_000,
+	StageGPU:  670_600_000,
 }
 
 // modelsDir is where everything lands. A variable so tests can contain it.

@@ -10,6 +10,81 @@ layar sama sekali.
 
 ---
 
+## Pemasangan
+
+Unduh **`MikkiLens-Setup-<versi>.exe`** dari halaman
+[Releases](https://github.com/exzork/mikkilens/releases), jalankan, selesai.
+Satu berkas; tidak perlu memasang Go, Node, atau apa pun.
+
+Di halaman yang sama ada juga **`MikkiLens.exe`**: versi portabel yang jalan
+tanpa dipasang. Cocok untuk flashdisk, tapi tidak bisa memperbarui dirinya
+sendiri.
+
+Sesudah terpasang:
+
+1. Buka **MikkiLens** dari menu Start atau pintasan di desktop.
+2. Di halaman **Suara**, tekan tombol "Tes" pada tiap perangkat sampai kamu
+   dengar nadanya keluar dari perangkat yang kamu pakai, lalu pilih dan simpan.
+3. Di halaman **Koneksi**, tekan **Sambungkan YouTube**.
+
+Saat pertama dijalankan, model suaranya diunduh dulu — dan itu dikatakan, bukan
+didiamkan. Lihat [Pengenalan suara](#pengenalan-suara). Semua langkah di atas
+bisa dikerjakan sambil menunggu.
+
+**Kata pemicu tidak ikut menunggu.** Berkasnya sudah ada di dalam pemasangnya
+dan ditaruh di tempatnya saat pertama dijalankan, jadi bebas tangan sudah bisa
+dipakai bahkan sebelum komputernya pernah tersambung ke internet.
+
+Windows mungkin memperingatkan bahwa berkasnya tidak dikenal, karena belum
+ditandatangani. Pilih **Info lebih lanjut**, lalu **Tetap jalankan**.
+
+Pengaturanmu, perintahmu dan catatanmu tersimpan di `%APPDATA%\MikkiLens`,
+bukan di dalam aplikasi, jadi memperbarui MikkiLens tidak menghapus apa pun.
+
+### Mencopot pemasangan
+
+Lewat **Setelan Windows → Aplikasi**, seperti aplikasi lain. Yang ikut
+dibersihkan: mesin suaranya kalau sedang jalan, dan entri "jalan saat Windows
+menyala" kalau kamu pernah menyalakannya — tanpa itu, setiap kali masuk Windows
+akan ada error karena mencoba menjalankan sesuatu yang sudah tidak ada.
+
+Pengaturan dan model suaramu **ditanya dulu**, dan bawaannya disimpan: memasang
+ulang di atasnya jauh lebih cepat daripada mengunduh giga-gigaan lagi. Pilih
+**Ya** hanya kalau memang mau bersih sekalian.
+
+### Pembaruan
+
+MikkiLens memeriksa versi baru sendiri, lalu mengunduhnya diam-diam. Yang
+**tidak** dilakukannya sendiri adalah memasangnya.
+
+Begitu ada versi baru yang siap, MikkiLens **mengatakannya**. Pemasangan baru
+berjalan kalau kamu memilih **Pasang pembaruan** dari menu atau dari ikon di
+tray — dan kalau kamu sedang siaran, permintaannya ditunda dan itu pun
+dikatakan.
+
+Alasannya sederhana: mesin suaranya ada di dalam aplikasi ini. Memasang
+pembaruan berarti mematikan hal yang sedang mendengarkan mikrofonmu dan
+memegang siarannya. Itu tidak boleh terjadi karena sebuah pengatur waktu
+memutuskan sekarang saatnya.
+
+`MikkiLens.exe` yang portabel tidak bisa memperbarui dirinya sendiri — ia
+berjalan dari folder sementara yang dibuang setiap kali ditutup. Kamu tetap
+diberi tahu ada versi baru, tinggal unduh yang baru.
+
+### Dari kode sumber
+
+1. Pasang **Go 1.25** dan **Node 20** (atau lebih baru), lalu klik dua kali
+   **`install.bat`**.
+2. Jalankan **`setup.bat`**. Pengaturan awal dibacakan, jadi bisa diikuti
+   dengan telinga.
+3. Buka **`settings.bat`**, atur seperti di atas.
+4. Jalankan **`run.bat`**, atau biarkan `settings.bat` yang menyalakannya.
+
+Untuk membuat `MikkiLens.exe` sendiri, klik dua kali **`build-app.bat`**.
+Hasilnya ada di `dist\app`.
+
+Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
+
 ## Yang bisa dilakukan
 
 | Kamu ucapkan | Yang terjadi |
@@ -110,62 +185,10 @@ didiamkan: tombol yang diam tidak bisa dibedakan dari tombol yang rusak.
 | Blip pendek pelan | Chat masuk |
 | Tiga nada naik | Super chat |
 
-## Pemasangan
+## Pengaturan
 
-Cara paling gampang: pakai **`MikkiLens.exe`**. Satu berkas, klik dua kali,
-mesinnya dan jendelanya menyala berbarengan. Tidak perlu memasang Go, Node,
-atau apa pun.
-
-1. Jalankan **`MikkiLens.exe`** (atau pasang lewat `MikkiLens-Setup.exe`, yang
-   menaruh pintasan di desktop).
-2. Di halaman **Suara**, tekan tombol "Tes" pada tiap perangkat sampai kamu
-   dengar nadanya keluar dari perangkat yang kamu pakai, lalu pilih dan simpan.
-3. Di halaman **Koneksi**, tekan **Sambungkan YouTube**, lalu isi alamat
-   modelnya.
-
-Saat pertama dijalankan, model suaranya diunduh dulu — dan itu dikatakan, bukan
-didiamkan. Lihat [Pengenalan suara](#pengenalan-suara). Semua langkah di atas
-bisa dikerjakan sambil menunggu.
-
-Windows mungkin memperingatkan bahwa berkasnya tidak dikenal, karena belum
-ditandatangani. Pilih **Info lebih lanjut**, lalu **Tetap jalankan**.
-
-Pengaturanmu, perintahmu dan catatanmu tersimpan di
-`%APPDATA%\MikkiLens`, bukan di dalam aplikasi, jadi memperbarui MikkiLens
-tidak menghapus apa pun.
-
-### Pembaruan
-
-MikkiLens memeriksa versi baru sendiri, lalu mengunduhnya diam-diam. Yang
-**tidak** dilakukannya sendiri adalah memasangnya.
-
-Begitu ada versi baru yang siap, MikkiLens **mengatakannya**. Pemasangan baru
-berjalan kalau kamu memilih **Pasang pembaruan** dari menu atau dari ikon di
-tray — dan kalau kamu sedang siaran, permintaannya ditunda dan itu pun
-dikatakan.
-
-Alasannya sederhana: mesin suaranya ada di dalam aplikasi ini. Memasang
-pembaruan berarti mematikan hal yang sedang mendengarkan mikrofonmu dan
-memegang siarannya. Itu tidak boleh terjadi karena sebuah pengatur waktu
-memutuskan sekarang saatnya.
-
-`MikkiLens.exe` yang portabel tidak bisa memperbarui dirinya sendiri — ia
-berjalan dari folder sementara yang dibuang setiap kali ditutup. Kamu tetap
-diberi tahu ada versi baru, tinggal unduh yang baru.
-
-### Dari kode sumber
-
-1. Pasang **Go 1.25** dan **Node 20** (atau lebih baru), lalu klik dua kali
-   **`install.bat`**.
-2. Jalankan **`setup.bat`**. Pengaturan awal dibacakan, jadi bisa diikuti
-   dengan telinga.
-3. Buka **`settings.bat`**, atur seperti di atas.
-4. Jalankan **`run.bat`**, atau biarkan `settings.bat` yang menyalakannya.
-
-Untuk membuat `MikkiLens.exe` sendiri, klik dua kali **`build-app.bat`**.
-Hasilnya ada di `distpp`.
-
-Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
+Yang di bawah ini cuma perlu dibuka kalau kamu mau mengubah sesuatu, atau
+kalau ada yang tidak beres. Pemasangan biasa tidak perlu satu pun.
 
 ### Pengenalan suara
 
@@ -177,7 +200,7 @@ kalau belum ada, **diunduh sendiri saat pertama dijalankan**, berurutan:
 |---|---|---|
 | Build prosesor | 8 MB | ada yang bisa dijalankan |
 | Model suara | 488 MB | **sudah bisa mendengar** |
-| Berkas kata pemicu | 68 MB | bebas tangan — kalau `[wake] enabled` menyala |
+| Berkas kata pemicu | 78 MB | bebas tangan — **hanya dari kode sumber**, lihat di bawah |
 | Build kartu grafis | 670 MB | menjawab lima kali lebih cepat — kalau ada drivernya |
 
 Setiap tahap **diucapkan** saat mulai, dan urutannya disengaja: tiap tahap
@@ -215,13 +238,24 @@ Kalau kamu lebih suka mengirim suara ke server, isi `[stt] base_url` di
 
 Kata pemicu perlu empat berkas di `data\models`: `onnxruntime.dll`,
 `melspectrogram.onnx`, `embedding_model.onnx`, dan `<nama_model>.onnx`.
-Keempatnya ikut diunduh sendiri saat pertama dijalankan, selama
-`[wake] enabled` menyala — empat-empatnya sekaligus, karena tiga dari empat
-sama saja dengan tidak ada: yang kamu dapat adalah kata pemicu yang tidak
-pernah menyala, dan itu terasa persis seperti mikrofon yang mati.
 
-Kalau salah satunya tetap tidak ada, MikkiLens mengatakannya saat mulai lalu
-mematikan kata pemicu. Tombol pintasan tetap jalan, dan memang lebih andal.
+**Kalau kamu memasang lewat `MikkiLens-Setup.exe`, keempatnya sudah ikut.**
+Ditaruh di tempatnya saat pertama dijalankan, tanpa jaringan sama sekali. Itu
+disengaja: kata pemicu adalah cara memanggil MikkiLens tanpa menyentuh apa pun,
+jadi komputer yang baru selesai dipasang tapi kebetulan sedang tidak online
+tidak seharusnya menyala tanpa suara.
+
+Berkas yang sudah kamu ganti sendiri tidak pernah ditimpa.
+
+Dari kode sumber, `npm run fetch:wake` mengambilnya — dan `npm run package`
+menjalankannya sendiri, jadi pemasang yang kamu buat juga ikut membawanya.
+Kalau tetap ada yang hilang, MikkiLens mengunduhnya sendiri saat pertama
+dijalankan selama `[wake] enabled` menyala. Kalau sesudah itu masih tidak ada,
+dia mengatakannya lalu mematikan kata pemicu — tombol pintasan tetap jalan, dan
+memang lebih andal.
+
+Tiga dari empat sama saja dengan tidak ada: yang kamu dapat adalah kata pemicu
+yang tidak pernah menyala, dan itu terasa persis seperti mikrofon yang mati.
 
 Di aplikasi Pengaturan, tab **Bahasa**, kata pemicu dipilih dari daftar yang
 benar-benar terpasang, dan di bawahnya ada dua batang: satu untuk mikrofon,
@@ -335,6 +369,24 @@ sekali tanya, jadi siaran 8 jam dengan jeda 5 detik menghabiskan sekitar 28.800
 unit — hampir tiga kali jatah harian, untuk satu orang saja. Halaman publik
 berharga nol.
 
+### Donasi
+
+Donasi dari **Tako** dan **Trakteer** dibacakan, dan — yang lebih penting —
+**chat berhenti selama alert donasi tampil di layar**, jadi tidak ada yang
+menimpanya. Tanpa itu MikkiLens bicara terus di atas satu-satunya pesan yang
+paling ingin didengar orang yang mengirimnya.
+
+Yang dibutuhkan cuma tautan overlay yang sudah kamu tempel di OBS, disalin ke
+halaman **Koneksi**. MikkiLens hanya ikut mendengarkan; alert-nya tetap muncul
+dan tetap berbunyi seperti biasa.
+
+Kalau kamu menyalakan **Bacakan donasinya**, matikan suara overlay-nya sendiri
+di dashboard Tako atau Trakteer — kalau tidak, setiap donasi dibacakan dua kali
+sekaligus. Ini juga ditulis di halaman itu.
+
+Donasi punya suaranya sendiri (`donation_voice` di `config.toml`), terpisah dari
+suara chat, supaya donasi tidak terdengar seperti chat biasa.
+
 ## Mengubah perintah
 
 Perintah suara ada di **`commands.id.toml`**. Berkas itu milikmu.
@@ -388,6 +440,8 @@ dist\mikkilensd.exe say "halo"      tes suara
 dist\mikkilensd.exe earcons         dengarkan semua nada
 dist\mikkilensd.exe warmup          muat model lebih dulu
 dist\mikkilensd.exe enable-obs      nyalakan WebSocket OBS dan salin sandinya
+dist\mikkilensd.exe do go_live      jalankan satu perintah tanpa bicara
+dist\mikkilensd.exe do --list       sebutkan semua nama perintah
 ```
 
 Setel `MIKKILENS_SILENT=1` untuk mematikan semua suara keluar tanpa mengubah
@@ -423,8 +477,9 @@ apps/
 packages/
   core/         paths, fuzzy matching, locales, config, state, command grammar
   audio/        devices, earcons, text to speech, capture, recognition,
-                wake word, global hotkey
-  controllers/  OBS, YouTube, the OpenAI-compatible client, screen description
+                wake word, global hotkey, and the first-run asset downloads
+  controllers/  OBS, YouTube, the OpenAI-compatible client, screen description,
+                and the Tako and Trakteer donation overlays
   chat/         live chat ingestion and the reader cursor
   engine/       the running application: wiring, handlers, the setup wizard
   httpapi/      the local API the desktop app talks to
@@ -683,12 +738,17 @@ flags.
 make install     fetch every dependency
 make             build the engine and the settings app
 make app         the one-click executable, engine and window in one file
+make stt         fetch the speech model and the whisper.cpp build
+make wake        fetch the ONNX runtime the installer carries
 make test        go test ./... and the TypeScript type check
 make lint        gofmt and go vet
 ```
 
+`make wake` is run for you by `make app`, so a packaged installer always
+carries the wake word whether or not you remembered.
+
 `make app` (or `build-app.bat`, or `npm run package`) writes two files to
-`distpp`: `MikkiLens.exe`, which runs with nothing to install, and
+`dist\app`: `MikkiLens.exe`, which runs with nothing to install, and
 `MikkiLens-Setup-<version>.exe`, which installs it with a desktop shortcut.
 Both carry the engine inside them and start it themselves, so neither needs Go
 or Node on the machine it runs on. Neither is code-signed, so Windows shows a
@@ -705,12 +765,49 @@ where home is and passes it to the engine as `MIKKILENS_HOME`, in this order:
    `config.toml` or a command file.
 4. `%APPDATA%\MikkiLens`.
 
-Rule 3 is the one that matters. The speech model, `whisper-cli.exe` and
-`onnxruntime.dll` come to several gigabytes and are hers to choose, so they are
-never inside the app. Without it, an executable dropped beside an installation
-that already has them starts an engine that cannot hear anything -- the whole
-product failing quietly, on a machine where everything it needed was one folder
-up. It is also what makes a copy on a USB stick use the stick.
+Rule 3 is the one that matters. The speech model and `whisper-cli.exe` come to
+several gigabytes and are hers to choose, so they are never inside the app.
+Without it, an executable dropped beside an installation that already has them
+starts an engine that cannot hear anything -- the whole product failing quietly,
+on a machine where everything it needed was one folder up. It is also what makes
+a copy on a USB stick use the stick.
+
+The wake word files are the exception, and go the other way. They come to
+eighteen megabytes rather than gigabytes, and the wake word is how she starts
+talking to MikkiLens without touching anything -- so a machine that installed
+fine while offline coming up with no voice at all is the worse trade. They ride
+inside the installer and are seeded into `data\models` on first run, never
+overwriting a file she has replaced by hand.
+
+### Releasing
+
+Two GitHub Actions workflows, both on Windows runners, because that is the only
+platform this is built for: the capture is WASAPI and the wake word loads
+`onnxruntime.dll`, so a green tick from a Linux runner would be saying nothing
+about the thing that ships.
+
+`Checks` runs on every push and pull request and stops at the tests, so it
+answers in a couple of minutes. It fetches the wake word files first, which
+makes those tests run for real rather than skip themselves.
+
+`Build the installer` runs from the Actions tab, or from a tag:
+
+```
+git tag v0.3.0 && git push origin v0.3.0
+```
+
+The tag wins: `package.json` is rewritten to match it inside the runner, so the
+tag, the installer filename and the release all agree without anyone having to
+remember to bump a file first.
+
+What it deliberately does not do is publish. electron-builder uploads to a
+GitHub release that stays a **draft** until somebody presses Publish -- a build
+that went wrong is deleted with nobody having downloaded it, and a release going
+out stays a decision rather than a side effect of pushing a tag. The finished
+installer is attached to the run itself as well, so it can be downloaded and
+tried without publishing anything.
+
+Nothing is code-signed, so Windows shows a SmartScreen warning either way.
 
 `go test ./...` needs no live stream, no API key and no audio hardware; the
 device tests report what they found and skip when there is nothing to find.
