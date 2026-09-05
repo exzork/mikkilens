@@ -129,6 +129,9 @@ phrases = [
 
 # --------------------------------------------------------------- sistem ----
 
+[commands.current_time]
+phrases = ["jam berapa sekarang", "sekarang jam berapa", "jam berapa", "waktu sekarang"]
+
 [commands.status]
 phrases = ["status", "bagaimana keadaannya", "laporan status"]
 

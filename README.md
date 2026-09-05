@@ -101,6 +101,7 @@ Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
 | "susul chat" | Lompat ke chat terbaru |
 | "rangkum chat" | Ringkasan chat dibacakan |
 | "apa yang ada di layar" | Layar dijelaskan lewat model penglihatan |
+| "jam berapa sekarang" | Waktu di komputer dibacakan |
 | "status" | Semua keadaan dibacakan sekaligus |
 | "apa saja perintahnya" | Daftar perintah dibacakan |
 

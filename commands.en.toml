@@ -124,6 +124,9 @@ phrases = [
 
 # ---------------------------------------------------------------- system ----
 
+[commands.current_time]
+phrases = ["what time is it", "what is the time", "tell me the time", "the time please"]
+
 [commands.status]
 phrases = ["status", "give me a status report", "how are things"]
 

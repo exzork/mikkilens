@@ -107,6 +107,11 @@ unreachable = "I cannot reach the Trakteer donation overlay, so I will not know 
 donation = "{donor} gave {count} {unit}, {price}. {text}"
 donation_no_message = "{donor} gave {count} {unit}, {price}."
 
+[clock]
+# Twenty-four hour: it matches the schedule and the broadcast tools, and it
+# cannot be the wrong half of the day the way "2:35" can.
+now = "It is {time}."
+
 [vision]
 looking = "Looking at your screen."
 failed = "Could not read the screen: {reason}"

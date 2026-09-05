@@ -109,6 +109,11 @@ unreachable = "Saya tidak bisa menghubungi overlay donasi Trakteer, jadi saya ti
 donation = "{donor} memberi {count} {unit}, {price}. {text}"
 donation_no_message = "{donor} memberi {count} {unit}, {price}."
 
+[clock]
+# Dua puluh empat jam: sama seperti jadwal dan alat siaran, dan tidak bisa
+# tertukar pagi atau sore seperti "2:35".
+now = "Sekarang jam {time}."
+
 [vision]
 looking = "Sedang melihat layar kamu."
 failed = "Gagal membaca layar: {reason}"
