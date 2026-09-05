@@ -54,6 +54,12 @@ type playback struct {
 	stopped atomic.Bool
 	paused  atomic.Bool
 
+	// heldForList is a pause that reading a list of songs took, rather than
+	// one she asked for. It is what says the song is owed back when the
+	// reading ends -- and what makes "jeda lagunya" during a reading mean
+	// something, by turning that pause into hers.
+	heldForList atomic.Bool
+
 	// volume and ducked are the two halves of how loud the music is.
 	volume atomic.Uint64 // float64 bits: what she set
 	duck   atomic.Uint64 // float64 bits: what it drops to while MikkiLens talks
@@ -122,6 +128,7 @@ func (e *Engine) startSong(song music.Song) {
 	settings := e.Config()
 	e.playing.stopped.Store(false)
 	e.playing.paused.Store(false)
+	e.playing.heldForList.Store(false)
 	e.playing.ducked.Store(false)
 	e.applyMusicVolume(settings)
 
@@ -190,6 +197,7 @@ func (e *Engine) finishSong() {
 	e.playing.mu.Unlock()
 
 	e.playing.paused.Store(false)
+	e.playing.heldForList.Store(false)
 	e.playing.ducked.Store(false)
 	e.store.Update(state.Changes{"now_playing": ""})
 }
@@ -234,6 +242,7 @@ func (e *Engine) stopSong(announce bool) {
 
 	e.playing.stopped.Store(true)
 	e.playing.paused.Store(false)
+	e.playing.heldForList.Store(false)
 	if stream != nil {
 		// Closing is what unblocks the render: it ends the decoder, the source
 		// reports the end, and the device stops within a block.
@@ -252,11 +261,51 @@ func (e *Engine) PauseMusic() {
 		return
 	}
 	if e.playing.paused.Load() {
-		e.bus.SayKey("music.already_paused", feedback.Result)
+		// A song held for a list being read is, to her, still playing: it
+		// comes back on its own the moment the reading ends. So this is a
+		// pause she is asking for, and taking it from the reading is what
+		// makes it stay.
+		if !e.playing.heldForList.Swap(false) {
+			e.bus.SayKey("music.already_paused", feedback.Result)
+			return
+		}
+		e.bus.SayKey("music.paused", feedback.Result)
 		return
 	}
 	e.playing.paused.Store(true)
 	e.bus.SayKey("music.paused", feedback.Result)
+}
+
+// pauseForList holds the song for as long as a list of results is being read.
+//
+// Ducking is the right answer for a sentence and the wrong one for a list. The
+// reading is half a dozen utterances with a synthesis round trip between them,
+// so the music comes back up in every gap and swells under the numbers she is
+// trying to hold in her head -- and she is choosing a song, which means the one
+// playing is the thing she is about to replace.
+//
+// Silent, and it leaves a pause she asked for alone: this is not a decision,
+// it is the reading getting out of its own way.
+func (e *Engine) pauseForList() {
+	if _, live := e.NowPlaying(); !live {
+		return
+	}
+	if e.playing.paused.Load() {
+		return
+	}
+	e.playing.paused.Store(true)
+	e.playing.heldForList.Store(true)
+}
+
+// resumeAfterList gives the song back, if reading a list is what took it.
+func (e *Engine) resumeAfterList() {
+	if !e.playing.heldForList.Swap(false) {
+		return
+	}
+	if _, live := e.NowPlaying(); !live {
+		return
+	}
+	e.playing.paused.Store(false)
 }
 
 // ResumeMusic starts it again from where it stopped.
@@ -269,6 +318,7 @@ func (e *Engine) ResumeMusic() {
 		e.bus.SayKey("music.already_playing", feedback.Result)
 		return
 	}
+	e.playing.heldForList.Store(false)
 	e.playing.paused.Store(false)
 	e.bus.SayKey("music.resumed", feedback.Result)
 }

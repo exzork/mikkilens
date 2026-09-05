@@ -410,6 +410,81 @@ func TestAVolumeOfZeroPlaysSilenceOfTheSameLength(t *testing.T) {
 	}
 }
 
+// -- calling a group off ------------------------------------------------------
+
+// She presses 1 while the second result is still being synthesized, which is
+// most of the second between two lines of a list.
+//
+// Stopping the player cannot catch that: it is told to stop before it has
+// started, and starting clears it. So the line would be spoken in full, over
+// the song she had already chosen -- which, to her, is a list that carried on
+// after she picked from it.
+func TestAGroupCalledOffWhileItIsSynthesizedIsNotSpoken(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	blocking := func(ctx context.Context, text string, options tts.Options) (tts.Audio, error) {
+		once.Do(func() { close(started) })
+		<-release
+		return loudSynthesize(ctx, text, options)
+	}
+
+	settings := config.Default()
+	settings.Speech.EarconVolume = 0
+
+	player := newFakePlayer(0.01)
+	bus := feedback.NewWith(settings, i18n.Load("id"), player, blocking)
+	t.Cleanup(bus.Stop)
+
+	for _, line := range []string{"one. Monokrom", "two. Hati-hati di jalan", "say a number"} {
+		bus.Enqueue(feedback.Utterance{
+			Text: line, Priority: feedback.Result, Group: "music.results",
+		})
+	}
+	bus.Start()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("nothing was ever synthesized")
+	}
+
+	if dropped := bus.ClearGroup("music.results"); dropped != 2 {
+		t.Errorf("dropped %d of the queued lines, want 2", dropped)
+	}
+	close(release)
+	drain(t, bus)
+
+	if played := player.playedTexts(); len(played) > 0 {
+		t.Errorf("played %v after the list was called off", played)
+	}
+	if bus.PendingGroup("music.results") {
+		t.Error("the group is still pending after being called off")
+	}
+}
+
+// What "the list has finished being read" means, which is what decides when
+// the song it was holding comes back.
+func TestPendingGroupCoversWhatIsQueuedAndWhatIsBeingSpoken(t *testing.T) {
+	bus, _ := newBus(t, 0.01)
+
+	bus.Enqueue(feedback.Utterance{
+		Text: "one. Monokrom", Priority: feedback.Result, Group: "music.results",
+	})
+	if !bus.PendingGroup("music.results") {
+		t.Error("a queued line does not count as pending")
+	}
+	if bus.PendingGroup("") || bus.PendingGroup("something else") {
+		t.Error("an unrelated group is pending")
+	}
+
+	bus.Start()
+	drain(t, bus)
+
+	if bus.PendingGroup("music.results") {
+		t.Error("the group is still pending once it has all been said")
+	}
+}
+
 // -- refusals and history -----------------------------------------------------
 
 func TestEmptyTextIsRefusedRatherThanQueued(t *testing.T) {

@@ -213,6 +213,11 @@ durasinya. Lalu tinggal pilih:
 - tekan **1** sampai **5** di kotak itu, atau
 - ucapkan **"putar nomor dua"**.
 
+Selama daftarnya dibacakan, lagu yang sedang jalan **dijeda**, lalu dilanjutkan
+sendiri begitu pembacaannya selesai. Bukan dikecilkan: pembacaan itu beberapa
+kalimat dengan jeda di antaranya, dan musik yang naik-turun di tiap jeda justru
+membuat nomornya susah disimak.
+
 Lagunya **diputar di dalam MikkiLens**, bukan dibuka di peramban. Itu yang
 membuat "hentikan lagunya", "jeda lagunya", dan "lagu apa ini" ada artinya —
 dan yang membuat musiknya otomatis mengecil setiap kali MikkiLens bicara, lalu
@@ -223,8 +228,8 @@ Tidak ada berkas yang diunduh: lagunya dialirkan sambil diputar, dan menekan
 "hentikan" benar-benar menghentikannya.
 
 Menekan angka **saat hasilnya masih dibacakan** langsung memotong pembacaannya
-dan memulai lagunya. Tidak perlu menunggu daftar itu selesai — kamu sudah
-memilih.
+dan memulai lagunya — termasuk kalau kalimat berikutnya sudah mulai disiapkan.
+Tidak perlu menunggu daftar itu selesai: kamu sudah memilih.
 
 Kenapa diketik, bukan diucapkan? Judul lagu dan nama penyanyi adalah hal yang
 paling sering salah didengar. "Sisitipsi Buih Jadi Permadani" bukan kalimat

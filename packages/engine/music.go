@@ -291,6 +291,10 @@ const resultsGroup = "music.results"
 func (e *Engine) readResults(songs []music.Song) {
 	locale := e.Locale()
 
+	// The song steps aside for the whole reading rather than ducking under
+	// each line of it. See pauseForList.
+	e.pauseForList()
+
 	e.say(locale.T("music.found", i18n.Args{"count": len(songs)}))
 	for index, song := range songs {
 		e.say(e.describe(index+1, song))
@@ -309,7 +313,22 @@ func (e *Engine) readResults(songs []music.Song) {
 func (e *Engine) say(text string) {
 	e.bus.Enqueue(feedback.Utterance{
 		Text: text, Priority: feedback.Result, Group: resultsGroup,
+		OnSpoken: func(bool) { e.resumeIfTheListIsRead() },
 	})
+}
+
+// resumeIfTheListIsRead gives the song back once the last line has been said.
+//
+// Asked at the end of every line rather than only the last, because which line
+// is last is not something the reading gets to decide: an error preempts one,
+// a second search queues more behind it, and she can call the whole thing off
+// halfway through. The one that finds nothing left behind it is the end of the
+// reading, whichever one that turns out to be.
+func (e *Engine) resumeIfTheListIsRead() {
+	if e.bus.PendingGroup(resultsGroup) {
+		return
+	}
+	e.resumeAfterList()
 }
 
 // describe is one result as a sentence.
@@ -366,10 +385,15 @@ func (e *Engine) PlaySong(number int) (music.Song, error) {
 
 	songs, ok := e.songs.current()
 	if !ok {
+		// Nothing is going to be played, so the song that stepped aside for
+		// the reading is owed back. Cancelling the rest of a list left it
+		// nothing to answer to on its own.
+		e.resumeAfterList()
 		e.bus.SayKey("music.nothing_to_play", feedback.Result)
 		return music.Song{}, &music.Error{Reason: "there are no results to play"}
 	}
 	if number < 1 || number > len(songs) {
+		e.resumeAfterList()
 		e.bus.SayKey("music.no_such_result", feedback.Error,
 			i18n.Args{"number": number, "count": len(songs)})
 		return music.Song{}, &music.Error{Reason: "there is no result with that number"}

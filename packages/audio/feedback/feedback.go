@@ -125,6 +125,16 @@ type Bus struct {
 	player     Player
 	synthesize Synthesizer
 
+	// calledOff counts how many times each group has been cleared.
+	//
+	// Stopping the player cannot cut off an utterance that is still being
+	// synthesized: it is told to stop before it has started, and starting
+	// clears that. A second of synthesis is exactly the window she picks a
+	// song in, so the count is taken when an utterance leaves the queue and
+	// checked again before it is played -- a group cleared in between means
+	// this one is no longer wanted.
+	calledOff map[string]int
+
 	// onSpeaking is told when the speakers start and stop carrying speech, so
 	// the wake word can be switched off while MikkiLens is talking: her name is
 	// the trigger, and it comes back through the microphone like anyone else
@@ -435,6 +445,11 @@ func (b *Bus) ClearGroup(group string) int {
 	b.queue = kept
 	heap.Init(&b.queue)
 
+	if b.calledOff == nil {
+		b.calledOff = map[string]int{}
+	}
+	b.calledOff[group]++
+
 	interrupt := b.current != nil && b.current.Group == group
 	if len(b.queue) == 0 && b.current == nil {
 		b.markIdleLocked()
@@ -447,6 +462,30 @@ func (b *Bus) ClearGroup(group string) int {
 		b.player.Stop()
 	}
 	return dropped
+}
+
+// PendingGroup reports whether anything from one group is still queued or
+// being spoken.
+//
+// What "the list has finished being read" means, asked once per line as each
+// one ends: the last of them to find nothing left behind it is the one that
+// gives the music back.
+func (b *Bus) PendingGroup(group string) bool {
+	if group == "" {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.current != nil && b.current.Group == group {
+		return true
+	}
+	for _, entry := range b.queue {
+		if entry.what.Group == group {
+			return true
+		}
+	}
+	return false
 }
 
 // SpeakingGroup is the group of the utterance being spoken, or "" for none.
@@ -689,9 +728,12 @@ func (b *Bus) run() {
 		entry := heap.Pop(&b.queue).(queued)
 		utterance := entry.what
 		b.current = &utterance
+		// Taken under the same lock that a clearing would need, so a group
+		// cleared from here on is one this utterance can see.
+		wanted := b.calledOff[utterance.Group]
 		b.mu.Unlock()
 
-		completed := b.speak(utterance)
+		completed := b.speak(utterance, wanted)
 
 		b.mu.Lock()
 		b.current = nil
@@ -711,7 +753,7 @@ func (b *Bus) run() {
 	}
 }
 
-func (b *Bus) speak(utterance Utterance) bool {
+func (b *Bus) speak(utterance Utterance, wanted int) bool {
 	settings, locale := b.Config(), b.Locale()
 
 	voice := utterance.Voice
@@ -740,6 +782,13 @@ func (b *Bus) speak(utterance Utterance) bool {
 		// Not requeued: retrying would fail in exactly the same way, and a
 		// message that never stops being retried blocks everything behind it.
 		return true
+	}
+
+	// Called off while it was being synthesized: she picked a song, and the
+	// rest of the list went with it. Reported as not completed, and group
+	// members never requeue, so this is where it ends.
+	if b.wasCalledOff(utterance.Group, wanted) {
+		return false
 	}
 
 	// A hold that arrived while this was being synthesized has to be caught
@@ -776,6 +825,17 @@ func (b *Bus) speak(utterance Utterance) bool {
 		return true
 	}
 	return completed
+}
+
+// wasCalledOff reports whether the utterance's group has been cleared since it
+// left the queue.
+func (b *Bus) wasCalledOff(group string, wanted int) bool {
+	if group == "" {
+		return false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.calledOff[group] != wanted
 }
 
 func (b *Bus) record(utterance Utterance, completed bool) {

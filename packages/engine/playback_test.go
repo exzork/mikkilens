@@ -1,10 +1,17 @@
 package engine
 
 import (
+	"context"
 	"math"
 	"testing"
 
 	"github.com/exzork/mikkilens/packages/audio/assets"
+	"github.com/exzork/mikkilens/packages/audio/devices"
+	"github.com/exzork/mikkilens/packages/audio/feedback"
+	"github.com/exzork/mikkilens/packages/audio/tts"
+	"github.com/exzork/mikkilens/packages/controllers/music"
+	"github.com/exzork/mikkilens/packages/core/config"
+	"github.com/exzork/mikkilens/packages/core/i18n"
 	"github.com/exzork/mikkilens/packages/core/intent"
 )
 
@@ -88,6 +95,92 @@ func TestTheMusicGainIsThePercentageOfFull(t *testing.T) {
 			t.Errorf("gain(%d) = %v, want %v", test.percent, got, test.want)
 		}
 	}
+}
+
+// -- getting out of the way of a list -----------------------------------------
+
+// Reading a list holds the song rather than ducking under it.
+//
+// Ducking is right for a sentence and wrong for a list: the reading is half a
+// dozen utterances with a synthesis round trip between them, so the music comes
+// back up in every gap and swells under the numbers she is trying to hold in
+// her head.
+func TestReadingAListHoldsTheSongAndGivesItBack(t *testing.T) {
+	engine := playingSomething()
+
+	engine.pauseForList()
+	if !engine.playing.Paused() {
+		t.Fatal("the song kept playing under the list being read")
+	}
+
+	engine.resumeAfterList()
+	if engine.playing.Paused() {
+		t.Error("the song was not given back when the reading ended")
+	}
+}
+
+// A pause she asked for is hers. The reading must not treat it as its own and
+// hand the song back at the end of a list she was not listening to anyway.
+func TestAPauseSheAskedForSurvivesTheReading(t *testing.T) {
+	engine := playingSomething()
+	engine.playing.paused.Store(true)
+
+	engine.pauseForList()
+	engine.resumeAfterList()
+
+	if !engine.playing.Paused() {
+		t.Error("the reading gave back a song she had paused herself")
+	}
+}
+
+// The other way round: she says "jeda lagunya" while the list is being read.
+// The song is already paused, so the only thing that answer can mean is that
+// the pause should outlast the reading.
+func TestPausingDuringAReadingKeepsTheSongPaused(t *testing.T) {
+	t.Setenv("MIKKILENS_SILENT", "1")
+
+	engine := playingSomething()
+	engine.locale = i18n.Load("id")
+	engine.bus = feedback.NewWith(config.Default(), engine.locale, silentSpeaker{}, silentVoice)
+	t.Cleanup(engine.bus.Stop)
+
+	engine.pauseForList()
+	engine.PauseMusic()
+	engine.resumeAfterList()
+
+	if !engine.playing.Paused() {
+		t.Error("the song came back after she asked for it to stay paused")
+	}
+}
+
+// Nothing playing, nothing to hold: the reading must not leave a pause behind
+// on a song that starts afterwards.
+func TestHoldingWithNothingPlayingIsHarmless(t *testing.T) {
+	engine := &Engine{}
+
+	engine.pauseForList()
+	engine.resumeAfterList()
+
+	if engine.playing.Paused() {
+		t.Error("a reading with no song playing left a pause behind")
+	}
+}
+
+func playingSomething() *Engine {
+	engine := &Engine{}
+	engine.playing.song = music.Song{Title: "Monokrom", VideoID: "1RrF6Ee_io0"}
+	engine.playing.live = true
+	return engine
+}
+
+type silentSpeaker struct{}
+
+func (silentSpeaker) Play(tts.Audio) (bool, error) { return true, nil }
+func (silentSpeaker) Stop()                        {}
+func (silentSpeaker) SetDevice(*devices.Device)    {}
+
+func silentVoice(_ context.Context, text string, _ tts.Options) (tts.Audio, error) {
+	return tts.Audio{Samples: make([]float32, 8), SampleRate: 48000, Channels: 1, Text: text}, nil
 }
 
 // -- the two programs ---------------------------------------------------------

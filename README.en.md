@@ -289,6 +289,23 @@ where her voice goes; and it ducks to `duck_volume` whenever MikkiLens speaks,
 lifted again on a timer so a run of chat messages reads over one continuous dip
 instead of making the music surge between every sentence.
 
+A list of results is the one thing it does not duck under -- it pauses for it.
+Ducking is right for a sentence and wrong for a list: the reading is half a
+dozen utterances with a synthesis round trip between them, so the dip lifts in
+every gap and the music swells under the numbers she is trying to hold in her
+head. And she is choosing a song, so the one playing is the thing she is about
+to replace. The pause is silent, it leaves a pause she asked for alone, and it
+is given back by whichever line of the list finds nothing queued behind it --
+because which line is last is not something the reading gets to decide.
+
+Picking a number cuts the reading off mid-word, including the line that is
+still being synthesized when she picks. Stopping the player cannot catch that
+one: it is told to stop before it has started, and starting clears the stop. So
+the bus counts how many times each group has been called off, takes the count
+when an utterance leaves the queue, and checks it again before playing -- about
+a second of every gap between two results, which is exactly where a number
+lands.
+
 Nothing is downloaded. yt-dlp only resolves a direct URL; ffmpeg reads it over
 HTTP and writes decoded PCM to a pipe as it arrives; `wasapi.Stream` pulls
 blocks from that on demand. So the song starts about three seconds after she
