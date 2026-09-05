@@ -296,6 +296,7 @@ const statusLabels: Array<[keyof Snapshot & string, string]> = [
   // the two are separately true and a backlog behind a mute is the state most
   // easily mistaken for chat just being quiet.
   ['chat_muted', 'label.chatMuted'],
+  ['now_playing', 'label.nowPlaying'],
   ['last_transcript', 'label.lastTranscript'],
   ['last_command', 'label.lastCommand'],
   ['installing', 'label.installing'],
@@ -838,7 +839,9 @@ element('save-language').addEventListener('click', async () => {
         model: element<HTMLSelectElement>('wake-model').value,
         threshold: numberFrom('wake-threshold', settings?.wake.threshold ?? 0.6),
       },
-      hotkey: { combination: element<HTMLInputElement>('hotkey').value },
+      hotkey: { combination: hotkeys.listen.value() },
+      mute: { combination: hotkeys.mute.value() },
+      music: { combination: hotkeys.music.value() },
     },
     t('language.saved'),
   )
@@ -1269,145 +1272,179 @@ function modifiersHeld(event: KeyboardEvent): string[] {
   return held
 }
 
-const hotkeyField = element<HTMLInputElement>('hotkey')
-const hotkeyButton = element<HTMLButtonElement>('hotkey-record')
-
-/** What the field held before capture started; null when not capturing. */
-let hotkeyBefore: string | null = null
-
-function hotkeyNote(text: string): void {
-  element('hotkey-note').textContent = text
-}
-
-function startHotkeyCapture(): void {
-  if (hotkeyBefore !== null) {
-    cancelHotkeyCapture()
-    return
-  }
-
-  hotkeyBefore = hotkeyField.value
-  hotkeyField.value = ''
-  hotkeyField.placeholder = t('language.hotkeyPrompt')
-  hotkeyField.classList.add('capturing')
-  hotkeyButton.textContent = t('common.cancel')
-  hotkeyNote(t('language.hotkeyPrompt'))
-  announce(t('language.hotkeyPrompt'))
-  hotkeyField.focus()
-
-  // Capture phase, so the keys land here rather than in the page: a
-  // combination the window itself would act on has to be recordable too.
-  window.addEventListener('keydown', onHotkeyDown, true)
-  window.addEventListener('mousedown', onHotkeyMouse, true)
-  window.addEventListener('keyup', onHotkeyUp, true)
-  hotkeyField.addEventListener('blur', cancelHotkeyCapture)
-}
-
-function endHotkeyCapture(): void {
-  window.removeEventListener('keydown', onHotkeyDown, true)
-  window.removeEventListener('keyup', onHotkeyUp, true)
-  window.removeEventListener('mousedown', onHotkeyMouse, true)
-  hotkeyField.removeEventListener('blur', cancelHotkeyCapture)
-  hotkeyField.classList.remove('capturing')
-  hotkeyField.placeholder = ''
-  hotkeyButton.textContent = t('language.hotkeyRecord')
-  hotkeyBefore = null
-}
-
-function cancelHotkeyCapture(): void {
-  if (hotkeyBefore === null) {
-    return
-  }
-  hotkeyField.value = hotkeyBefore
-  endHotkeyCapture()
-  hotkeyNote(t('language.hotkeyUnchanged'))
-  announce(t('language.hotkeyUnchanged'))
-}
-
-function finishHotkeyCapture(combination: string): void {
-  hotkeyField.value = combination
-  endHotkeyCapture()
-
-  const said = t('language.hotkeyCaptured', { combination })
-  hotkeyNote(said)
-  announce(said)
-}
-
 /**
- * A mouse button, which cannot be bound and has to say so.
+ * A field that records a key by having it pressed.
  *
- * Windows registers global hotkeys through RegisterHotKey, and that is a
- * keyboard API: there is no mouse button to give it. Pressing one here used to
- * do nothing whatsoever, which is indistinguishable from a field that has
- * stopped working -- and a side button on a gaming mouse is exactly the thing
- * somebody would try first.
+ * There are three of these now -- push to talk, mute the chat, find a song --
+ * and typing "<ctrl>+<alt>+<f>" into a box is the wrong way to set any of
+ * them. It is a spelling she has to be told, in angle brackets she cannot see,
+ * for a key she is holding in her hand. Pressing it is the answer, and it is
+ * the same answer three times, so it is written once.
  *
- * The way through is the mouse's own software, which every one of them has:
- * point the button at a key combination and record that instead. So this says
- * so rather than ignoring the press.
- *
- * The left button is left alone: it is how she reaches the Cancel button.
+ * The ids are conventional: a field, a button called <id>-record, and a note
+ * called <id>-note that says what happened.
  */
-function onHotkeyMouse(event: MouseEvent): void {
-  if (event.button === 0) {
-    return
-  }
-  event.preventDefault()
-  event.stopPropagation()
-  const advice = t('language.hotkeyMouseButton', { example: '<ctrl>+<alt>+<f13>' })
-  hotkeyNote(advice)
-  announce(advice)
+interface KeyRecorder {
+  value(): string
+  set(combination: string): void
 }
 
-function onHotkeyDown(event: KeyboardEvent): void {
-  event.preventDefault()
-  event.stopPropagation()
+function keyRecorder(id: string): KeyRecorder {
+  const field = element<HTMLInputElement>(id)
+  const button = element<HTMLButtonElement>(`${id}-record`)
 
-  if (event.code === 'Escape') {
-    cancelHotkeyCapture()
-    return
-  }
-  if (modifierCodes.has(event.code)) {
-    // Show what is held, so a combination still on its way down looks like
-    // progress rather than a field that has stopped responding.
-    hotkeyField.value = modifiersHeld(event).join('+')
-    return
+  /** What the field held before capture started; null when not capturing. */
+  let before: string | null = null
+
+  const note = (text: string): void => {
+    element(`${id}-note`).textContent = text
   }
 
-  // The code first, because it is the physical key and survives a different
-  // keyboard layout. The key second, for everything injected rather than
-  // pressed -- which is every macro device worth binding.
-  const name = keyName(event.code) ?? keyNameFromKey(event.key)
-  if (name === null) {
-    hotkeyNote(t('language.hotkeyUnusableKey', { key: event.key || event.code }))
-    return
+  function start(): void {
+    if (before !== null) {
+      cancel()
+      return
+    }
+
+    before = field.value
+    field.value = ''
+    field.placeholder = t('language.hotkeyPrompt')
+    field.classList.add('capturing')
+    button.textContent = t('common.cancel')
+    note(t('language.hotkeyPrompt'))
+    announce(t('language.hotkeyPrompt'))
+    field.focus()
+
+    // Capture phase, so the keys land here rather than in the page: a
+    // combination the window itself would act on has to be recordable too.
+    window.addEventListener('keydown', onDown, true)
+    window.addEventListener('mousedown', onMouse, true)
+    window.addEventListener('keyup', onUp, true)
+    field.addEventListener('blur', cancel)
   }
 
-  const modifiers = modifiersHeld(event)
-  // A bare key is registered globally, which would take it away from every
-  // other application on the machine. Function keys are the exception: that
-  // is what a Stream Deck or a foot pedal usually sends.
-  if (modifiers.length === 0 && !/^f\d+$/.test(name)) {
-    hotkeyField.value = ''
-    hotkeyNote(t('language.hotkeyNeedsModifier'))
-    return
+  function end(): void {
+    window.removeEventListener('keydown', onDown, true)
+    window.removeEventListener('keyup', onUp, true)
+    window.removeEventListener('mousedown', onMouse, true)
+    field.removeEventListener('blur', cancel)
+    field.classList.remove('capturing')
+    field.placeholder = ''
+    button.textContent = t('language.hotkeyRecord')
+    before = null
   }
 
-  finishHotkeyCapture([...modifiers, written(name)].join('+'))
+  function cancel(): void {
+    if (before === null) {
+      return
+    }
+    field.value = before
+    end()
+    note(t('language.hotkeyUnchanged'))
+    announce(t('language.hotkeyUnchanged'))
+  }
+
+  function finish(combination: string): void {
+    field.value = combination
+    end()
+
+    const said = t('language.hotkeyCaptured', { combination })
+    note(said)
+    announce(said)
+  }
+
+  /**
+   * A mouse button, which cannot be bound and has to say so.
+   *
+   * Windows registers global hotkeys through RegisterHotKey, and that is a
+   * keyboard API: there is no mouse button to give it. Pressing one here used
+   * to do nothing whatsoever, which is indistinguishable from a field that has
+   * stopped working -- and a side button on a gaming mouse is exactly the
+   * thing somebody would try first.
+   *
+   * The way through is the mouse's own software, which every one of them has:
+   * point the button at a key combination and record that instead. So this
+   * says so rather than ignoring the press.
+   *
+   * The left button is left alone: it is how she reaches the Cancel button.
+   */
+  function onMouse(event: MouseEvent): void {
+    if (event.button === 0) {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    const advice = t('language.hotkeyMouseButton', { example: '<ctrl>+<alt>+<f13>' })
+    note(advice)
+    announce(advice)
+  }
+
+  function onDown(event: KeyboardEvent): void {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (event.code === 'Escape') {
+      cancel()
+      return
+    }
+    if (modifierCodes.has(event.code)) {
+      // Show what is held, so a combination still on its way down looks like
+      // progress rather than a field that has stopped responding.
+      field.value = modifiersHeld(event).join('+')
+      return
+    }
+
+    // The code first, because it is the physical key and survives a different
+    // keyboard layout. The key second, for everything injected rather than
+    // pressed -- which is every macro device worth binding.
+    const name = keyName(event.code) ?? keyNameFromKey(event.key)
+    if (name === null) {
+      note(t('language.hotkeyUnusableKey', { key: event.key || event.code }))
+      return
+    }
+
+    const modifiers = modifiersHeld(event)
+    // A bare key is registered globally, which would take it away from every
+    // other application on the machine. Function keys are the exception: that
+    // is what a Stream Deck or a foot pedal usually sends.
+    if (modifiers.length === 0 && !/^f\d+$/.test(name)) {
+      field.value = ''
+      note(t('language.hotkeyNeedsModifier'))
+      return
+    }
+
+    finish([...modifiers, written(name)].join('+'))
+  }
+
+  function onUp(event: KeyboardEvent): void {
+    event.preventDefault()
+    if (before !== null && modifiersHeld(event).length === 0) {
+      field.value = '' // nothing is held any more; start the guess again
+    }
+  }
+
+  button.addEventListener('click', start)
+  field.addEventListener('click', () => {
+    if (before === null) {
+      start()
+    }
+  })
+
+  return {
+    value: () => field.value,
+    set: (combination: string) => {
+      field.value = combination
+    },
+  }
 }
 
-function onHotkeyUp(event: KeyboardEvent): void {
-  event.preventDefault()
-  if (hotkeyBefore !== null && modifiersHeld(event).length === 0) {
-    hotkeyField.value = '' // nothing is held any more; start the guess again
-  }
+// Push to talk, the chat mute, and the key that opens the box she types a song
+// name into. Three keys, one way of setting them.
+const hotkeys = {
+  listen: keyRecorder('hotkey'),
+  mute: keyRecorder('mute-key'),
+  music: keyRecorder('music-key'),
 }
-
-hotkeyButton.addEventListener('click', startHotkeyCapture)
-hotkeyField.addEventListener('click', () => {
-  if (hotkeyBefore === null) {
-    startHotkeyCapture()
-  }
-})
 
 /**
  * Report a hotkey the engine could not take.
@@ -1423,7 +1460,9 @@ async function showHotkeyProblem(): Promise<void> {
     renderStatus()
 
     const problem = typeof state.hotkey_error === 'string' ? state.hotkey_error : ''
-    hotkeyNote(problem ? t('language.hotkeyRefused', { reason: problem }) : '')
+    element('hotkey-note').textContent = problem
+      ? t('language.hotkeyRefused', { reason: problem })
+      : ''
     if (problem) {
       alarm(t('language.hotkeyRefused', { reason: problem }))
     }
@@ -1875,7 +1914,9 @@ async function boot(): Promise<void> {
 
   element<HTMLInputElement>('wake-enabled').checked = settings.wake.enabled
   showFraction('wake-threshold', settings.wake.threshold)
-  element<HTMLInputElement>('hotkey').value = settings.hotkey.combination
+  hotkeys.listen.set(settings.hotkey.combination)
+  hotkeys.mute.set(settings.mute?.combination ?? '')
+  hotkeys.music.set(settings.music?.combination ?? '')
   await refreshWake()
 
   await refreshYouTube()

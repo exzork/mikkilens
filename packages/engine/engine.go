@@ -94,6 +94,11 @@ type Engine struct {
 	songs  results
 	typing typing
 
+	// playing is the song coming out of the speakers, and duckTimer is what
+	// lifts it back up once MikkiLens has finished talking over it.
+	playing   playback
+	duckTimer *time.Timer
+
 	listening  sync.Mutex
 	listenBusy bool
 	release    chan struct{}
@@ -127,10 +132,23 @@ func New(settings config.Config, locale *i18n.Locale) *Engine {
 	// Switch the wake word off while MikkiLens is talking. Looked up each time
 	// rather than captured, because changing the wake word or its threshold
 	// swaps the detector underneath this.
+	// The music is lifted back up on a timer rather than the moment an
+	// utterance ends, so a run of chat messages reads over one continuous dip
+	// instead of making the song surge between every sentence. Created stopped.
+	engine.duckTimer = time.AfterFunc(time.Hour, func() {
+		engine.playing.ducked.Store(false)
+	})
+	engine.duckTimer.Stop()
+
+	// One hook, two jobs. The wake word goes deaf while MikkiLens talks --
+	// her name is the trigger, and it comes back through the microphone like
+	// anyone else saying it -- and the music steps back so the voice is not
+	// competing with it.
 	bus.OnSpeaking(func(speaking bool) {
 		if detector := engine.Wake(); detector != nil {
 			detector.SetSpeaking(speaking)
 		}
+		engine.duckMusic(speaking)
 	})
 	return engine
 }
@@ -315,6 +333,7 @@ func (e *Engine) registerBuiltinHandlers() {
 	e.router.RegisterAll(clockHandlers(e))
 	e.router.RegisterAll(searchHandlers(e))
 	e.router.RegisterAll(musicHandlers(e))
+	e.router.RegisterAll(musicPlaybackHandlers(e))
 }
 
 func (e *Engine) handleHelp(map[string]string) error {
@@ -1445,6 +1464,9 @@ func (e *Engine) Stop() {
 	if microphone != nil {
 		microphone.Stop()
 	}
+	// Otherwise ffmpeg outlives the application that started it, and the song
+	// keeps playing over a machine that has been told to stop.
+	e.stopSong(false)
 
 	e.bus.SayKey("app.shutdown", feedback.Result)
 	e.bus.WaitUntilIdle(10 * time.Second)

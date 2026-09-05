@@ -275,20 +275,41 @@ func (e *Engine) listSongsCommand(map[string]string) error {
 	return nil
 }
 
+// resultsGroup names the burst of utterances that reads a search out.
+//
+// It exists so the whole reading can be called off in one go the moment she
+// picks something, which is the difference between choosing a song and
+// listening to the rest of a list she has already chosen from.
+const resultsGroup = "music.results"
+
 // readResults says the results one at a time.
 //
 // One utterance per song rather than one long sentence, deliberately. They
 // queue separately, so they are read with a breath between them and can be
 // followed; an error or a confirmation preempts at the next gap rather than
-// waiting out the whole list; and being cut off loses the rest of the list
-// rather than the whole of it.
+// waiting out the whole list; and picking one cancels the rest mid-word.
 func (e *Engine) readResults(songs []music.Song) {
-	e.bus.SayKey("music.found", feedback.Result, i18n.Args{"count": len(songs)})
+	locale := e.Locale()
 
+	e.say(locale.T("music.found", i18n.Args{"count": len(songs)}))
 	for index, song := range songs {
-		e.bus.Say(e.describe(index+1, song), feedback.Result)
+		e.say(e.describe(index+1, song))
 	}
-	e.bus.SayKey("music.pick", feedback.Result, i18n.Args{"count": len(songs)})
+	e.say(locale.T("music.pick", i18n.Args{"count": len(songs)}))
+}
+
+// say queues one line of the reading, tagged so the whole reading can be
+// called off together.
+//
+// Deliberately not requeued when interrupted. Every other kind of interruption
+// in this application postpones rather than drops, because the thing that was
+// cut off is still worth hearing; a result she has already chosen past is not,
+// and re-reading it after the song has started would be the exact noise the
+// cancelling exists to remove.
+func (e *Engine) say(text string) {
+	e.bus.Enqueue(feedback.Utterance{
+		Text: text, Priority: feedback.Result, Group: resultsGroup,
+	})
 }
 
 // describe is one result as a sentence.
@@ -329,10 +350,20 @@ func (e *Engine) playSongCommand(slots map[string]string) error {
 // PlaySong opens the nth result, counting from one, and says which it was.
 //
 // Every ending speaks. A number with nothing behind it, a search that has been
-// forgotten, a machine with no browser to open it in: each of those is a
-// different thing to do next, and silence is indistinguishable from a song
-// playing somewhere she cannot hear it.
+// forgotten, a song that will not resolve: each of those is a different thing
+// to do next, and silence is indistinguishable from a song playing somewhere
+// she cannot hear it.
+//
+// It returns as soon as the song is under way. What happens after that -- the
+// two programs being fetched on a first run, the URL being resolved, four
+// minutes of audio -- happens on its own goroutine and says so as it goes.
 func (e *Engine) PlaySong(number int) (music.Song, error) {
+	// Called off before anything else, so a number pressed while result three
+	// is being read stops the voice mid-word rather than talking over the song
+	// it is about to start. Costs nothing when the reading has already
+	// finished, which is why it is not conditional on anything.
+	e.bus.ClearGroup(resultsGroup)
+
 	songs, ok := e.songs.current()
 	if !ok {
 		e.bus.SayKey("music.nothing_to_play", feedback.Result)
@@ -345,32 +376,8 @@ func (e *Engine) PlaySong(number int) (music.Song, error) {
 	}
 
 	song := songs[number-1]
-	if !e.openInBrowser(song.URL()) {
-		e.bus.SayKey("music.no_browser", feedback.Error)
-		return music.Song{}, &music.Error{Reason: "there is no browser to play it in"}
-	}
-	e.bus.SayKey("music.playing", feedback.Result,
-		i18n.Args{"title": song.Title, "artist": song.Artist})
+	e.startSong(song)
 	return song, nil
-}
-
-// openInBrowser is openBrowser, with an answer about whether there was one.
-//
-// The sign-in flow can afford to warn into the log and carry on, because she
-// is looking at the settings page when it runs. This cannot: a played song is
-// meant to start playing, and nothing else on the machine will say that it did
-// not.
-func (e *Engine) openInBrowser(url string) bool {
-	e.mu.RLock()
-	open := e.OpenBrowser
-	e.mu.RUnlock()
-
-	if open == nil {
-		slog.Error("no way to open a browser; the song cannot be played", "url", url)
-		return false
-	}
-	open(url)
-	return true
 }
 
 // spokenNumber reads a position out of what she said.

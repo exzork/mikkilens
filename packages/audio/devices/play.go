@@ -1,6 +1,8 @@
 package devices
 
 import (
+	"errors"
+	"io"
 	"sync/atomic"
 	"time"
 
@@ -81,6 +83,74 @@ func waitSilently(frames, sampleRate int, interrupt *Interrupt) bool {
 		time.Sleep(5 * time.Millisecond)
 	}
 	return true
+}
+
+// Source produces audio on demand, for playing something that is still
+// arriving. Re-exported so callers need only import this package.
+type Source = wasapi.Source
+
+// Control steers a running stream: stop, pause, and the gain that lets music
+// duck under the voice.
+type Control = wasapi.Control
+
+// Stream plays a source on one device until it ends or is stopped.
+//
+// Unlike [Play] it never holds the whole sound: a song is four minutes and
+// would be ninety megabytes assembled, on a machine that is also encoding
+// video. The device asks for the next block when it needs one.
+func Stream(device *Device, source Source, sampleRate, channels int, control Control) error {
+	if source == nil {
+		return nil
+	}
+	if channels < 1 {
+		channels = 1
+	}
+	if audio.Silent() {
+		return drainSilently(source, sampleRate, channels, control)
+	}
+
+	id := ""
+	if device != nil {
+		id = device.ID
+	}
+	return wasapi.Stream(id, source, sampleRate, channels, control)
+}
+
+// drainSilently consumes a source at roughly the speed it would be heard, so
+// a silent test run behaves like a real one: the same amount of time passes,
+// stopping still stops, and nothing races ahead to the end of the song.
+func drainSilently(source Source, sampleRate, channels int, control Control) error {
+	if err := source.Format(sampleRate, channels); err != nil {
+		return err
+	}
+	// A tenth of a second per block, which is close enough to a device buffer
+	// to make the pacing realistic without spinning.
+	block := make([]float32, sampleRate/10*channels)
+	pace := 100 * time.Millisecond
+
+	for {
+		if control != nil && control.Stopped() {
+			return nil
+		}
+		if control != nil && control.Paused() {
+			time.Sleep(pace)
+			continue
+		}
+		read, err := source.Read(block)
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if read > 0 {
+			elapsed := time.Duration(float64(read/channels) /
+				float64(sampleRate) * float64(time.Second))
+			time.Sleep(elapsed)
+			continue
+		}
+		time.Sleep(pace)
+	}
 }
 
 // PlayTestTone plays a short tone on one device and blocks until it finishes.

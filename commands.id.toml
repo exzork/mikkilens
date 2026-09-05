@@ -194,3 +194,17 @@ phrases = ["putar nomor {number}", "pilih nomor {number}", "mainkan nomor {numbe
 
 [commands.list_songs]
 phrases = ["sebutkan lagunya lagi", "ulangi daftar lagunya", "tadi lagunya apa saja"]
+
+# Menguasai lagu yang sedang diputar. Ini yang tidak bisa dilakukan kalau
+# lagunya diserahkan ke peramban: "hentikan lagunya" tidak punya tujuan.
+[commands.stop_music]
+phrases = ["hentikan lagunya", "matikan musiknya", "stop musiknya"]
+
+[commands.pause_music]
+phrases = ["jeda lagunya", "tahan dulu lagunya"]
+
+[commands.resume_music]
+phrases = ["lanjutkan lagunya", "mainkan lagi lagunya"]
+
+[commands.now_playing]
+phrases = ["lagu apa ini", "ini lagu apa", "sedang memutar apa"]

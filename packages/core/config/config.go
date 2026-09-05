@@ -116,6 +116,32 @@ type Mute struct {
 type Music struct {
 	Enabled     bool   `toml:"enabled" json:"enabled"`
 	Combination string `toml:"combination" json:"combination"`
+
+	// OutputDevice is where the song comes out, empty meaning wherever the
+	// voice goes.
+	//
+	// Worth its own setting because on a streaming machine the two often want
+	// to be different: her voice in her headphones, the music into whatever
+	// OBS is capturing, so the audience hears the song and not the chat being
+	// read to her.
+	OutputDevice string `toml:"output_device" json:"output_device"`
+
+	// Volume is how loud the song is, and DuckVolume what it drops to while
+	// MikkiLens is speaking.
+	//
+	// The ducking is the reason playing here beats handing the song to a
+	// browser: a browser cannot know that the chat is being read over it, so
+	// the two talk at once and neither can be followed.
+	Volume     float64 `toml:"volume" json:"volume"`
+	DuckVolume float64 `toml:"duck_volume" json:"duck_volume"`
+
+	// YtDlpPath and FFmpegPath override where the two programs are found.
+	//
+	// Normally empty: MikkiLens looks for its own copies, then the PATH, and
+	// fetches what is missing the first time she plays something. These are
+	// for a machine that keeps them somewhere particular.
+	YtDlpPath  string `toml:"ytdlp_path,omitempty" json:"ytdlp_path,omitempty"`
+	FFmpegPath string `toml:"ffmpeg_path,omitempty" json:"ffmpeg_path,omitempty"`
 }
 
 type STT struct {
@@ -475,8 +501,14 @@ func Default() Config {
 		Hotkey: Hotkey{Enabled: true, Combination: "<ctrl>+<alt>+<space>", PushToTalk: true},
 		// M for mute and F for find, both behind ctrl and alt so neither can
 		// be hit while typing in something else.
-		Mute:  Mute{Enabled: true, Combination: "<ctrl>+<alt>+<m>"},
-		Music: Music{Enabled: true, Combination: "<ctrl>+<alt>+<f>"},
+		Mute: Mute{Enabled: true, Combination: "<ctrl>+<alt>+<m>"},
+		// Seventy percent, dropping to a quarter while MikkiLens talks: enough
+		// that the voice is clearly on top without the song disappearing, which
+		// would be its own kind of confusing on a stream.
+		Music: Music{
+			Enabled: true, Combination: "<ctrl>+<alt>+<f>",
+			Volume: 0.7, DuckVolume: 0.25,
+		},
 		STT: STT{
 			// small rather than base: base mishears enough of a short
 			// Indonesian command to be the difference between a command that

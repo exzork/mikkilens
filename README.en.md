@@ -37,8 +37,8 @@ packages/
   audio/        devices, earcons, text to speech, capture, recognition,
                 wake word, global hotkey, and the first-run asset downloads
   controllers/  OBS, YouTube, the OpenAI-compatible client, screen description,
-                web and YouTube Music search, and the Tako and Trakteer
-                donation overlays
+                web and YouTube Music search, music playback, and the Tako and
+                Trakteer donation overlays
   chat/         live chat ingestion and the reader cursor
   engine/       the running application: wiring, handlers, the setup wizard
   httpapi/      the local API the desktop app talks to
@@ -264,10 +264,56 @@ searches, and the engine reads the five results back **one utterance each** --
 separately queued, so they are read with a breath between them, an error
 preempts at the next gap rather than after the whole list, and being cut off
 loses the rest of the list rather than the whole of it. Then a number, pressed
-in the window or said out loud, and it opens in YouTube Music in her browser.
-MikkiLens grows no player of its own: she has an account, a history and a
-subscription there, and a second player would be a second thing to control by
-voice for no gain.
+in the window or said out loud.
+
+Pressing that number is a barge-in. The reading is one group of utterances on
+the speech bus, and picking a song calls the whole group off -- cutting the
+voice mid-word rather than reading her options four and five over the song she
+has already chosen. That is what `Utterance.Group` and `Bus.ClearGroup` exist
+for, and it is the one place in this application where interrupted speech is
+dropped rather than requeued: a result she has chosen past is not worth hearing
+again.
+
+The song plays here rather than in a browser, and that was a reversal. The
+browser was the honest first answer -- she has an account, a history and a
+subscription there -- and it was wrong for this machine. A browser window is
+another thing on a screen she does not look at, another thing OBS may or may
+not be capturing, and above all it is not controllable: "stop the music" has
+nowhere to go when the song is somebody else's tab, and it plays over the chat
+being read because neither knows the other exists.
+
+Played here, that is one problem rather than several. `stop_music`,
+`pause_music`, `resume_music` and `now_playing` mean something; the song goes
+to its own `[music] output_device`, which on a streaming machine is usually not
+where her voice goes; and it ducks to `duck_volume` whenever MikkiLens speaks,
+lifted again on a timer so a run of chat messages reads over one continuous dip
+instead of making the music surge between every sentence.
+
+Nothing is downloaded. yt-dlp only resolves a direct URL; ffmpeg reads it over
+HTTP and writes decoded PCM to a pipe as it arrives; `wasapi.Stream` pulls
+blocks from that on demand. So the song starts about three seconds after she
+picks it rather than after a four minute file has been fetched, and it costs
+one buffer rather than the ninety megabytes a decoded track would be in memory
+-- on a machine that is also encoding video.
+
+Two details in that path are load-bearing. The render tells the source what
+format the device actually accepted and ffmpeg produces exactly that, so
+nothing here resamples and there is no seam every few milliseconds where
+converted blocks were stitched together. And `Stream.Read` never blocks: it is
+called on the thread driving the sound card, so a stalled network returns
+nothing-yet and is padded with silence, rather than holding that thread until
+the device runs dry -- which would also mean nothing ever returned to notice
+the stall.
+
+The two programs are fetched rather than shipped, and fetched on first use
+rather than at startup. Not shipped because between them they are bigger than
+MikkiLens -- a full ffmpeg is about a hundred and ninety megabytes against an
+installer of ninety -- and because yt-dlp goes stale: YouTube changes something
+every few months, yt-dlp answers within days, and one frozen into an installer
+would work until it quietly did not. Not at startup because the first run
+already asks her to wait for half a gigabyte of speech model, and someone who
+never asks for a song should never pay for one. Anything already on the machine
+wins over both, which on a box that already runs ffmpeg is most of it.
 
 The search talks to the InnerTube endpoint `music.youtube.com` itself calls,
 with the client name it identifies itself by, and deliberately without the
@@ -444,6 +490,19 @@ file much harder to read for the one job it exists to do.
 - The typing box needs the desktop app running. `mikkilensd` on its own has no
   window to open, so it answers a bare "putar lagu" by saying to say the song
   name instead -- it knows, because nothing is parked on the long poll.
+- Playing a song needs yt-dlp and ffmpeg. They are fetched automatically the
+  first time she plays something, announced as they come down; a machine with
+  no connection at that moment is told so and can still search.
+- yt-dlp now warns that YouTube extraction without a JavaScript runtime is
+  deprecated. It still resolves, and installing Deno would silence it, but the
+  day it stops resolving is a day songs stop playing -- and since yt-dlp is
+  fetched rather than frozen into the installer, the fix is a newer yt-dlp
+  rather than a new MikkiLens.
+- Number keys reach the song list only while the typing box has focus. They are
+  not registered globally on purpose: a global 1 to 5 would take those keys
+  away from everything else on the machine, including whatever she is typing
+  into. Saying "putar nomor dua" works from anywhere, which is what the voice
+  is for.
 
 ## Iterating
 

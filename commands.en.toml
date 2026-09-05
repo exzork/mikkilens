@@ -191,3 +191,17 @@ phrases = ["play number {number}", "pick number {number}", "choose number {numbe
 
 [commands.list_songs]
 phrases = ["read the songs again", "list those songs again", "what were the songs"]
+
+# Controlling the song that is playing. This is the part a browser could never
+# do: "stop the music" has nowhere to go when the song is somebody else's tab.
+[commands.stop_music]
+phrases = ["stop the music", "turn the music off"]
+
+[commands.pause_music]
+phrases = ["pause the music", "hold the music"]
+
+[commands.resume_music]
+phrases = ["resume the music", "start the music again"]
+
+[commands.now_playing]
+phrases = ["what song is this", "what is playing"]

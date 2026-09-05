@@ -9,7 +9,10 @@
 // application is built to avoid.
 package wasapi
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // Direction is which half of the sound card we mean.
 type Direction int
@@ -41,6 +44,21 @@ var errUnsupported = errors.New("audio is only available on Windows")
 func Endpoints(Direction) ([]Endpoint, error) { return nil, errUnsupported }
 
 func Play(string, []float32, int, int, Interrupt) (bool, error) { return false, errUnsupported }
+
+// Source produces audio on demand, for playing something still arriving.
+type Source interface {
+	Format(sampleRate, channels int) error
+	Read(dst []float32) (int, error)
+}
+
+// Control steers a running stream from another goroutine.
+type Control interface {
+	Stopped() bool
+	Paused() bool
+	Gain() float32
+}
+
+func Stream(string, Source, int, int, Control) error { return errUnsupported }
 
 // SetLeadIn is a no-op off Windows.
 func SetLeadIn(time.Duration) {}

@@ -55,6 +55,8 @@ export interface Snapshot {
   chat_backlog?: number
   /** The mute key, which is not the reader: muted chat is still being collected. */
   chat_muted?: boolean
+  /** The song coming out of the speakers, empty for none. */
+  now_playing?: string
   listening?: boolean
   last_transcript?: string
   last_command?: string
@@ -179,6 +181,10 @@ export interface AppConfig {
   stt: { backend: string; model_size: string; device: string; [key: string]: unknown }
   wake: { enabled: boolean; model: string; threshold: number; cooldown_s: number }
   hotkey: { enabled: boolean; combination: string; push_to_talk: boolean }
+  /** The key that silences the chat being read aloud, and gives it back. */
+  mute: { enabled: boolean; combination: string }
+  /** The key that opens the box she types a song name into. */
+  music: { enabled: boolean; combination: string; [key: string]: unknown }
   obs: { host: string; port: number; password: string; mic_source: string; [key: string]: unknown }
   /** The one OpenAI-compatible endpoint, used for text and for images alike. */
   model: { base_url: string; model: string; api_key_env: string; [key: string]: unknown }

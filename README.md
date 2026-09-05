@@ -108,7 +108,9 @@ Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
 | "apa saja perintahnya" | Daftar perintah dibacakan |
 | "putar lagu" | Kotak ketik terbuka; ketik judulnya, lima hasil dibacakan |
 | "putar lagu monokrom" | Langsung dicari, hasilnya dibacakan satu per satu |
-| "putar nomor dua" | Hasil kedua diputar di YouTube Music |
+| "putar nomor dua" | Hasil kedua diputar di dalam MikkiLens |
+| "hentikan lagunya" | Lagunya berhenti |
+| "lagu apa ini" | Judul lagu yang sedang diputar dibacakan |
 | "bisukan chat" | Pembacaan chat dibisukan; tidak ada yang hilang |
 
 Semua kalimat di atas **bisa diubah**. Lihat bagian
@@ -207,8 +209,18 @@ durasinya. Lalu tinggal pilih:
 - tekan **1** sampai **5** di kotak itu, atau
 - ucapkan **"putar nomor dua"**.
 
-Lagunya terbuka di YouTube Music di peramban — akun, riwayat, dan langganan
-yang sudah kamu punya, bukan pemutar baru yang harus dipelajari lagi.
+Lagunya **diputar di dalam MikkiLens**, bukan dibuka di peramban. Itu yang
+membuat "hentikan lagunya", "jeda lagunya", dan "lagu apa ini" ada artinya —
+dan yang membuat musiknya otomatis mengecil setiap kali MikkiLens bicara, lalu
+kembali lagi sesudahnya. Peramban tidak bisa tahu bahwa chat sedang dibacakan
+di atasnya, jadi keduanya bicara bersamaan dan tidak ada yang bisa disimak.
+
+Tidak ada berkas yang diunduh: lagunya dialirkan sambil diputar, dan menekan
+"hentikan" benar-benar menghentikannya.
+
+Menekan angka **saat hasilnya masih dibacakan** langsung memotong pembacaannya
+dan memulai lagunya. Tidak perlu menunggu daftar itu selesai — kamu sudah
+memilih.
 
 Kenapa diketik, bukan diucapkan? Judul lagu dan nama penyanyi adalah hal yang
 paling sering salah didengar. "Sisitipsi Buih Jadi Permadani" bukan kalimat
@@ -222,6 +234,15 @@ mendengar lima hasil tadi sekali lagi: **"sebutkan lagunya lagi"**.
 
 `Escape` menutup kotaknya. `Backspace` kembali ke kolom ketik untuk mencari
 yang lain.
+
+Selagi lagunya jalan: **"jeda lagunya"**, **"lanjutkan lagunya"**,
+**"hentikan lagunya"**, dan **"lagu apa ini"**.
+
+Pertama kali memutar lagu, MikkiLens mengunduh dua program kecil yang
+memutarnya — dan itu dikatakan, bukan didiamkan. Cuma sekali, dan kalau
+komputermu sudah punya ffmpeg, yang diunduh cuma yang belum ada. Suara musiknya
+bisa diarahkan ke perangkat lain dari `config.toml`, misalnya supaya penonton
+mendengar lagunya sementara chat tetap dibacakan ke headphone-mu saja.
 
 ## Membisukan chat sebentar
 

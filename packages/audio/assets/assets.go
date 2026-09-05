@@ -86,6 +86,11 @@ var Bytes = map[Stage]int64{
 	// source hears.
 	StageWake: 78_300_000,
 	StageGPU:  670_600_000,
+	// The two music programs. yt-dlp is one small executable; the ffmpeg
+	// archive is the large one, and most machines that stream already have
+	// ffmpeg somewhere on the PATH and never reach this stage at all.
+	StagePlayer: 18_400_000,
+	StageFFmpeg: 92_000_000,
 }
 
 // modelsDir is where everything lands. A variable so tests can contain it.

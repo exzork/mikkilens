@@ -60,6 +60,9 @@ type App struct {
 	// ChatReading are separately true and both worth showing.
 	ChatMuted bool `json:"chat_muted"`
 
+	// NowPlaying is the song coming out of the speakers, empty for none.
+	NowPlaying string `json:"now_playing"`
+
 	Listening      bool    `json:"listening"`
 	LastTranscript string  `json:"last_transcript"`
 	LastCommand    string  `json:"last_command"`

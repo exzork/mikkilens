@@ -29,6 +29,8 @@ stage_engine = "the speech recognition engine"
 stage_model = "the speech model"
 stage_wake = "the wake word files"
 stage_gpu = "the graphics card build, which answers far faster"
+stage_player = "the music downloader"
+stage_ffmpeg = "the audio decoder"
 
 [status]
 live = "You are live."
@@ -144,10 +146,27 @@ result = "{number}. {title}, {artist}."
 result_timed = "{number}. {title}, {artist}, {minutes} minutes {seconds}."
 pick = "Say play number one to {count}."
 playing = "Playing {title} by {artist}."
+# Playing it here rather than handing it to a browser, so it can be stopped,
+# paused, and stepped back whenever MikkiLens speaks.
+playing_is = "{title} by {artist} is playing."
+paused_is = "{title} by {artist} is paused."
+nothing_playing = "Nothing is playing."
+stopped = "Music stopped."
+paused = "Music paused."
+already_paused = "The music is already paused."
+resumed = "Music playing again."
+already_playing = "The music is already playing."
+play_failed = "I could not play {title}."
+# The first song on a new machine fetches the two programs that play it. Said
+# out loud, because it is the one time this takes minutes rather than seconds.
+installing = "Getting what I need to play music, about {size}. This happens once."
+installed = "Ready to play music."
+install_failed = "I could not set up music playback: {reason}"
+tools_busy = "Something else is still downloading. Ask again in a minute."
+no_tools = "The music programs are not where the settings say they are."
 nothing_to_play = "There are no search results to play. Search for a song first."
 no_such_result = "There is no number {number}. There are {count}."
 not_a_number = "I did not catch which number: {number}."
-no_browser = "I could not open a browser to play it in."
 
 [vision]
 looking = "Looking at your screen."

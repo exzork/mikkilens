@@ -268,5 +268,12 @@
   "music.nothingFound": "Tidak ada hasil untuk {query}.",
   "music.failed": "Pencariannya gagal: {reason}",
   "music.resultLabel": "{number}. {title}, {artist}",
-  "label.chatMuted": "Chat dibisukan"
+  "label.chatMuted": "Chat dibisukan",
+  "install.stage.player": "pengunduh musiknya",
+  "install.stage.ffmpeg": "pengurai audionya",
+  "label.nowPlaying": "Sedang diputar",
+  "language.muteKey": "Bisukan chat",
+  "language.muteKeyHint": "Mendiamkan suara pembaca chat, lalu membunyikannya lagi. Tidak ada yang hilang selama dibisukan.",
+  "language.musicKey": "Cari lagu",
+  "language.musicKeyHint": "Membuka kotak untuk mengetik judul lagu. Hasilnya dibacakan; tekan 1 sampai 5 untuk memutar."
 }

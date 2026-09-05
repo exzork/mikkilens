@@ -60,6 +60,16 @@ type Utterance struct {
 	// donation announced after it had left the screen.
 	ThroughHold bool
 
+	// Group names a burst of utterances that belong together, so they can be
+	// called off as one.
+	//
+	// Reading five search results is seven utterances, and the moment she
+	// picks one the other six are wrong -- she is not waiting to hear options
+	// four and five over the song she just started. Cancelling by priority
+	// would take unrelated answers with it; this takes exactly the burst that
+	// has been overtaken.
+	Group string
+
 	// OnSpoken reports whether the utterance finished. The chat reader waits on
 	// it so messages cannot pile up faster than they can be heard.
 	OnSpoken func(completed bool)
@@ -389,6 +399,60 @@ func (b *Bus) Clear(priority Priority) int {
 	}
 	b.cond.Broadcast()
 	return before - len(b.queue)
+}
+
+// ClearGroup drops everything pending in one group and cuts off the member
+// being spoken right now. It reports how many were dropped.
+//
+// The interruption is the point rather than a side effect. She presses 2 while
+// result three is being read, and what has to happen is that the voice stops
+// mid-word and the song starts -- not that she listens to the rest of a list
+// she has already chosen from.
+//
+// Nothing is requeued: these are called off, not postponed, and a group member
+// sets no requeue flag precisely so that being cut off here is final.
+func (b *Bus) ClearGroup(group string) int {
+	if group == "" {
+		return 0
+	}
+
+	b.mu.Lock()
+	before := len(b.queue)
+	kept := b.queue[:0]
+	for _, entry := range b.queue {
+		if entry.what.Group != group {
+			kept = append(kept, entry)
+		}
+	}
+	b.queue = kept
+	heap.Init(&b.queue)
+
+	interrupt := b.current != nil && b.current.Group == group
+	if len(b.queue) == 0 && b.current == nil {
+		b.markIdleLocked()
+	}
+	b.cond.Broadcast()
+	dropped := before - len(b.queue)
+	b.mu.Unlock()
+
+	if interrupt {
+		b.player.Stop()
+	}
+	return dropped
+}
+
+// SpeakingGroup is the group of the utterance being spoken, or "" for none.
+//
+// The key that picks a song asks this: cancelling costs nothing when the
+// reading has already finished, but knowing whether it was still going is what
+// decides whether she is cut off mid-sentence or simply answered.
+func (b *Bus) SpeakingGroup() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.current == nil {
+		return ""
+	}
+	return b.current.Group
 }
 
 // ClearAll drops everything pending.

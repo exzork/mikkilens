@@ -166,6 +166,12 @@ func (i *Installer) fetch(ctx context.Context, stage Stage, modelSize string, on
 	case StageGPU:
 		return i.fetchArchive(ctx, whisperURL("whisper-cublas-12.4.0-bin-x64.zip"),
 			"whisper-gpu.zip", gpuDir(), wantedFromWhisper, track)
+
+	case StagePlayer:
+		return i.fetchPlayer(ctx, track)
+
+	case StageFFmpeg:
+		return i.fetchFFmpeg(ctx, track)
 	}
 	return &Error{Reason: "unknown download stage " + string(stage)}
 }

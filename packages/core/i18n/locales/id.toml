@@ -31,6 +31,8 @@ stage_engine = "mesin pengenalan suara"
 stage_model = "model suaranya"
 stage_wake = "berkas kata pemicu"
 stage_gpu = "versi kartu grafis, supaya dia menjawab jauh lebih cepat"
+stage_player = "pengunduh musiknya"
+stage_ffmpeg = "pengurai audionya"
 
 [status]
 live = "Kamu sedang siaran."
@@ -146,10 +148,27 @@ result = "{number}. {title}, {artist}."
 result_timed = "{number}. {title}, {artist}, {minutes} menit {seconds}."
 pick = "Sebutkan putar nomor satu sampai {count}."
 playing = "Memutar {title} dari {artist}."
+# Diputar di dalam MikkiLens, bukan diserahkan ke peramban, supaya bisa
+# dihentikan, dijeda, dan otomatis mengecil saat MikkiLens bicara.
+playing_is = "Sedang memutar {title} dari {artist}."
+paused_is = "{title} dari {artist} sedang dijeda."
+nothing_playing = "Tidak ada lagu yang diputar."
+stopped = "Lagunya dihentikan."
+paused = "Lagunya dijeda."
+already_paused = "Lagunya memang sedang dijeda."
+resumed = "Lagunya dilanjutkan."
+already_playing = "Lagunya memang sedang diputar."
+play_failed = "Saya tidak bisa memutar {title}."
+# Lagu pertama di komputer baru mengunduh dua program pemutarnya. Dikatakan,
+# karena ini satu-satunya saat yang makan menit, bukan detik.
+installing = "Mengunduh yang diperlukan untuk memutar musik, sekitar {size}. Ini cuma sekali."
+installed = "Siap memutar musik."
+install_failed = "Gagal menyiapkan pemutar musik: {reason}"
+tools_busy = "Masih ada unduhan lain yang jalan. Coba lagi sebentar."
+no_tools = "Program pemutarnya tidak ada di tempat yang ditulis di pengaturan."
 nothing_to_play = "Belum ada hasil pencarian untuk diputar. Cari lagunya dulu."
 no_such_result = "Tidak ada nomor {number}. Hasilnya ada {count}."
 not_a_number = "Saya tidak menangkap nomornya: {number}."
-no_browser = "Saya tidak bisa membuka peramban untuk memutarnya."
 
 [vision]
 looking = "Sedang melihat layar kamu."

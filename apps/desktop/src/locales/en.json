@@ -268,5 +268,12 @@
   "music.nothingFound": "Nothing found for {query}.",
   "music.failed": "The search did not work: {reason}",
   "music.resultLabel": "{number}. {title}, {artist}",
-  "label.chatMuted": "Chat muted"
+  "label.chatMuted": "Chat muted",
+  "install.stage.player": "the music downloader",
+  "install.stage.ffmpeg": "the audio decoder",
+  "label.nowPlaying": "Now playing",
+  "language.muteKey": "Mute chat",
+  "language.muteKeyHint": "Silences the chat being read aloud, and gives it back. Nothing is lost while it is muted.",
+  "language.musicKey": "Find a song",
+  "language.musicKeyHint": "Opens a box to type a song name into. The results are read out; press 1 to 5 to play one."
 }
