@@ -318,11 +318,19 @@ file much harder to read for the one job it exists to do.
   connected: Connections → Connect YouTube, which is a browser consent screen
   once. Reading chat needs none of it. The consent screen is the one setup step
   that genuinely cannot be driven by voice.
-- No Google credential is built in, so signing in needs an OAuth desktop client
-  of the operator's own in `data/client_secret.json`. A secret in a public
-  source tree is scraped within hours and Google revokes the client rather than
-  the leaked copy, which would break the sign-in for everyone at once. Without
-  the file the Connect button is disabled and the page says why.
+- The released installer carries an OAuth client, so Connect works out of the
+  box. It is not in this source tree: it lives in two GitHub secrets and is
+  sealed into the engine at link time, so it appears neither in the repository
+  nor in a `strings` dump of the executable. That is obfuscation and not
+  secrecy — a program that can open it can be made to hand it over, and the
+  client id is on screen in the address bar during consent anyway. What it
+  stops is the automated scraping that finds a credential within hours and
+  burns its quota; a desktop OAuth client is treated as eventually public by
+  RFC 8252 and by Google, and on its own reads nobody's data.
+- A build from this source tree carries no credential at all, and an operator's
+  own `data/client_secret.json` wins over the built-in one — their own project,
+  their own quota, and a way to keep streaming if the shipped client is ever
+  revoked. With neither, the Connect button is disabled and the page says why.
 - A Google Cloud project still in Testing expires refresh tokens after seven
   days. MikkiLens detects that, removes the dead token and says to connect
   again; publishing the project is the fix.

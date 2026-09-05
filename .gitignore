@@ -26,13 +26,18 @@
 
 # Credentials, which never belong in a public repository.
 #
-# .npmrc carries an npm auth token. The OAuth client is read from
-# data/client_secret.json at runtime rather than built into the binary: a
-# secret in a source tree is scraped within hours, and Google revokes the
-# client rather than the copy that leaked -- which would break the sign-in for
-# everyone at once, including her, mid-stream.
+# .npmrc carries an npm auth token.
+#
+# The OAuth client reaches a release build from two GitHub secrets, sealed in
+# at link time, and never from a file in this tree -- a secret in a source tree
+# is scraped within hours, and Google revokes the client rather than the copy
+# that leaked, which would break the sign-in for everyone at once, including
+# her, mid-stream. The names below are the shapes that mistake takes; ignoring
+# them means a slip is not one `git add .` away from being permanent.
 /.npmrc
-/packages/controllers/youtube/embedded_client_secret.json
+client_secret*.json
+*.p12
+*.pem
 
 # Editor and OS noise
 .DS_Store

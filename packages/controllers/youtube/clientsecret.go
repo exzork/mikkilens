@@ -9,38 +9,53 @@ import (
 	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
-// The OAuth client is read from her data directory, never built in.
+// Where the OAuth client comes from, and why there are two places.
 //
-// An earlier version embedded one, on the reasoning that RFC 8252 says an
-// installed app cannot keep a secret anyway and Google issues desktop clients
-// on that understanding -- which is true, and is why OBS ships its own. It is
-// still the wrong thing to put in a public repository: a secret in a source
-// tree is scraped within hours, the quota it carries is shared with whoever
-// scraped it, and Google revokes the client rather than the copy. The credential
-// then stops working for everyone at once, including her, mid-stream.
+// RFC 8252 is blunt that an installed app cannot keep a secret, and Google
+// issues desktop OAuth clients on that understanding -- which is why OBS,
+// rclone and gcloud all ship one. What must never happen is the credential
+// sitting in a public source tree: that is scraped within hours, the quota it
+// carries is shared with whoever scraped it, and Google revokes the client
+// rather than the copy, so the sign-in dies for everyone at once, including
+// her, mid-stream.
 //
-// So it lives beside her token and her keys, in data/client_secret.json, which
-// is hers and is never committed. A build carries no credential at all, and the
-// API key path stays as the route that needs no Cloud project.
+// So it is in neither the repository nor a plain string in the executable. It
+// lives in two GitHub secrets, is sealed into the release build at link time
+// by tools/packclient (see embedded.go), and never appears as readable text in
+// anything published. That is obfuscation, not protection -- a determined
+// reader gets it out of the binary -- and packages/core/secret says exactly
+// what it does and does not buy. The mitigation for the day it does leak is
+// that a replacement is one rotated secret and one release away, and that her
+// own file below outlives the rotation.
 //
-// clientSource says where the OAuth client came from, for the settings page and
-// for saying something useful when there is none.
+// Her own file wins over the built-in one. Two reasons, both of them about her
+// stream not stopping: a client from her own Cloud project carries her own
+// quota rather than one shared with every other install, and if the shipped
+// client is ever revoked she can drop a file in and keep going without waiting
+// on a release.
+//
+// clientSource says which of the two it came from, for the settings page and
+// for saying something useful when there is neither.
 type clientSource string
 
 const (
-	clientNone clientSource = "none"
-	clientFile clientSource = "file"
+	clientNone    clientSource = "none"
+	clientFile    clientSource = "file"
+	clientBuiltIn clientSource = "built-in"
 )
 
 // oauthConfig finds the OAuth client to use.
 func oauthConfig() (*oauth2.Config, error) {
-	settings, _, err := oauthConfigFrom(readClientSecretFile())
+	settings, _, err := oauthConfigFrom(readClientSecretFile(), readEmbeddedClient())
 	return settings, err
 }
 
-func oauthConfigFrom(file []byte) (*oauth2.Config, clientSource, error) {
+func oauthConfigFrom(file, embedded []byte) (*oauth2.Config, clientSource, error) {
 	if settings, ok := parseClientSecret(file); ok {
 		return settings, clientFile, nil
+	}
+	if settings, ok := parseClientSecret(embedded); ok {
+		return settings, clientBuiltIn, nil
 	}
 	return nil, clientNone, &NotAuthenticatedError{Reason: "there is no YouTube " +
 		"sign-in set up: download OAuth desktop credentials from Google Cloud " +
@@ -73,14 +88,18 @@ func readClientSecretFile() []byte {
 
 // HasClientSecret reports whether signing in is possible at all.
 func HasClientSecret() bool {
-	_, _, err := oauthConfigFrom(readClientSecretFile())
+	_, _, err := oauthConfigFrom(readClientSecretFile(), readEmbeddedClient())
 	return err == nil
 }
 
 // ClientSource names where the OAuth client came from: "file" when
-// data/client_secret.json holds one, "none" when signing in is not offered.
+// data/client_secret.json holds one, "built-in" when the build carries one,
+// "none" when signing in is not offered.
+//
+// It names the source and never the credential. Nothing in this package hands
+// a client id or a secret to the HTTP API, the settings page or a log line.
 func ClientSource() string {
-	_, source, err := oauthConfigFrom(readClientSecretFile())
+	_, source, err := oauthConfigFrom(readClientSecretFile(), readEmbeddedClient())
 	if err != nil {
 		return string(clientNone)
 	}

@@ -30,6 +30,11 @@ WAKEWORD := uv run --python 3.11 --with-requirements $(CURDIR)/tools/wakeword/re
 all: engine desktop
 
 ## engine: build the voice engine
+#
+# Plain `go build`, so this carries no built-in YouTube sign-in and needs
+# data/client_secret.json to connect. That is deliberate: the engine stays
+# buildable with no Node anywhere near it, and the credential belongs to the
+# release, which goes through `npm run release` and scripts/build-daemon.mjs.
 engine:
 	$(GO) build $(LDFLAGS) -o $(ENGINE) ./apps/daemon
 

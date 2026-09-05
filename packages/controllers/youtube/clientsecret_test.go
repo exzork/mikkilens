@@ -30,11 +30,20 @@ func TestAUsableFileIsRecognised(t *testing.T) {
 	}
 }
 
-// Nothing is built in, so a build with no file must say "none" rather than
-// offer a sign-in it cannot complete.
-func TestNoCredentialIsBuiltIntoTheBinary(t *testing.T) {
+// A build from this source tree carries no credential.
+//
+// Only the release workflow links one in, out of two GitHub secrets that are
+// not in the repository -- so a clone, the dev loop and this test suite all
+// find nothing built in, and must say "none" rather than offer a sign-in they
+// cannot complete. That the release build does carry one is embedded_test.go's
+// business; this is the invariant that keeps the credential out of the tree.
+func TestASourceBuildCarriesNoCredential(t *testing.T) {
 	isolate(t)
 
+	if embeddedClient != "" {
+		t.Fatal("a credential is linked into this build; it must only ever come " +
+			"from the release workflow's -ldflags, never from the source tree")
+	}
 	if got := ClientSource(); got != string(clientNone) {
 		t.Errorf("ClientSource() is %q with no file present, want %q", got, clientNone)
 	}
@@ -52,7 +61,7 @@ func TestNothingAtAllIsNotAClient(t *testing.T) {
 }
 
 func TestTheDownloadedFileIsUsed(t *testing.T) {
-	settings, source, err := oauthConfigFrom([]byte(realClient))
+	settings, source, err := oauthConfigFrom([]byte(realClient), nil)
 	if err != nil {
 		t.Fatalf("oauthConfigFrom: %v", err)
 	}
@@ -67,7 +76,7 @@ func TestTheDownloadedFileIsUsed(t *testing.T) {
 // A half-written file must be refused rather than accepted as a client, or the
 // sign-in button appears and dies at the consent screen.
 func TestAnUnusableFileIsNotAClient(t *testing.T) {
-	_, source, err := oauthConfigFrom([]byte("{}"))
+	_, source, err := oauthConfigFrom([]byte("{}"), nil)
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -77,7 +86,7 @@ func TestAnUnusableFileIsNotAClient(t *testing.T) {
 }
 
 func TestWithNoClientAtAllTheErrorSaysWhatToDo(t *testing.T) {
-	_, source, err := oauthConfigFrom(nil)
+	_, source, err := oauthConfigFrom(nil, nil)
 	if err == nil {
 		t.Fatal("expected an error")
 	}

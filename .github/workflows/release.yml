@@ -19,6 +19,30 @@
 #
 # Either way the finished installer is also attached to the run itself as an
 # artifact, so it can be downloaded and tested without publishing anything.
+#
+# This is also the only workflow that sees the Google OAuth client. Two
+# repository secrets, under Settings -> Secrets and variables -> Actions:
+#
+#   GOOGLE_OAUTH_CLIENT_ID       the desktop client id from Google Cloud
+#   GOOGLE_OAUTH_CLIENT_SECRET   its secret
+#
+# They are read by the two steps below and nowhere else, sealed into the engine
+# at link time, and never printed -- one step checks only that they are there,
+# the other builds. The quick checks in ci.yml do not get them and do not need
+# them:
+# nothing there builds an installer, and a pull request from a fork cannot read
+# a secret anyway. With the secrets absent the build still succeeds and simply
+# ships without a built-in sign-in.
+#
+# To rotate: add a second secret to the same client in Google Cloud, update
+# GOOGLE_OAUTH_CLIENT_SECRET here, cut a release, and delete the old secret
+# once people have had time to update. Both secrets are live during that
+# window, which is what keeps installs still on the old build working.
+#
+# Existing sign-ins survive a rotation: a refresh token is bound to the client
+# id and the person, not to the secret. Deleting the OAuth client itself is the
+# thing that signs everyone out at once, which is why the credential is kept
+# out of the source tree at all -- see packages/controllers/youtube/clientsecret.go.
 
 name: Build the installer
 
@@ -114,13 +138,39 @@ jobs:
       - name: Test the window
         run: npm run test:desktop
 
+      # Said before the build rather than after, because "the installer has no
+      # sign-in in it" is a thing to learn now and not from her, on stream.
+      # The values are never printed -- only whether they are there.
+      - name: Check the YouTube sign-in credential
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          $id = "$env:GOOGLE_OAUTH_CLIENT_ID"
+          $secret = "$env:GOOGLE_OAUTH_CLIENT_SECRET"
+          if ($id -and $secret) {
+            Write-Host "The installer will carry a built-in YouTube sign-in."
+          } elseif ($id -or $secret) {
+            Write-Host "::error::Only one of GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET is set. Half a credential builds a Connect button that dies at Google's consent screen."
+            exit 1
+          } else {
+            Write-Host "::warning::No OAuth client in the repository secrets, so this installer ships without a built-in YouTube sign-in. Anyone installing it will need their own data/client_secret.json to press Connect. Add GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET under Settings -> Secrets and variables -> Actions."
+          }
+
       # Builds the engine, packages the app, and uploads to a draft release.
       # GH_TOKEN is what electron-builder looks for; the publish target is the
       # github provider already declared in apps/desktop/package.json.
+      #
+      # The two Google secrets are read here and nowhere else. scripts/build-daemon.mjs
+      # seals them into the engine at link time (packages/core/secret), so
+      # neither value reaches the log, the source tree, or a `strings` dump of
+      # the shipped executable. Absent, the build simply carries no credential.
       - name: Build and draft the release
         run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
 
       # Also kept on the run itself, so a build can be downloaded and tried
       # without touching releases at all.

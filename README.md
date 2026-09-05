@@ -295,22 +295,34 @@ mengganti judul siaran.
 dan mematikan YouTube sampai kamu menekan Sambungkan lagi. Jadi keputusannya
 bertahan setelah MikkiLens ditutup.
 
-**Satu berkas yang harus kamu siapkan sendiri: `data/client_secret.json`.**
+**Installer resminya sudah membawa OAuth client-nya, jadi Sambungkan langsung
+bisa ditekan.** Kredensialnya tidak ada di repositori ini: ia disimpan sebagai
+GitHub secret, dan hanya build rilis yang menyegelnya ke dalam mesinnya saat
+proses link. Yang dibaca dari repositori publik tidak akan menemukan apa pun,
+dan `strings` pada installernya juga tidak.
 
-MikkiLens tidak membawa kredensial Google apa pun, dan tidak akan pernah.
-Secret yang ditaruh di repositori publik akan diambil orang dalam hitungan jam,
-dan Google mencabut client-nya, bukan salinan yang bocor — artinya login-nya
-mati untuk semua orang sekaligus, termasuk kamu, di tengah siaran.
+Segelnya itu penghalang, bukan rahasia. Program yang bisa membukanya berarti
+orang yang memegang program itu juga bisa — dan `client_id`-nya memang tampil
+di address bar waktu layar persetujuan Google terbuka. Yang dicegah adalah
+pemulungan otomatis yang menemukan kredensial dalam hitungan jam lalu
+menghabiskan kuotanya. Client OAuth aplikasi desktop memang dianggap begitu
+oleh Google (RFC 8252) — sendirian ia tidak membaca data siapa pun.
 
-Jadi OAuth client-nya milikmu:
+**Kalau kamu mau pakai proyekmu sendiri: `data/client_secret.json`.**
+
+Berkas itu menang atas yang bawaan. Kuotanya jadi kuotamu sendiri, bukan kuota
+yang dibagi dengan semua pemasang lain, dan kalau client bawaannya suatu hari
+dicabut kamu bisa terus siaran tanpa menunggu rilis berikutnya.
 
 1. Buat proyek di [Google Cloud Console](https://console.cloud.google.com/),
    aktifkan **YouTube Data API v3**.
 2. Di **Credentials**, buat **OAuth client ID** dengan tipe **Desktop app**.
 3. Unduh JSON-nya, simpan sebagai **`data/client_secret.json`**.
 
-Kalau berkas itu belum ada, halaman Koneksi mengatakannya dengan jelas dan
-tombolnya dimatikan — bukan tombol yang bisa ditekan tapi selalu gagal.
+Kalau kamu membangun sendiri dari kode ini, tidak ada kredensial bawaan sama
+sekali — berkas itu satu-satunya jalan. Tanpanya halaman Koneksi mengatakannya
+dengan jelas dan tombolnya dimatikan, bukan tombol yang bisa ditekan tapi
+selalu gagal.
 
 > Proyek Google Cloud yang masih berstatus **Testing** membuat refresh token
 > kedaluwarsa setelah tujuh hari. Kalau itu terjadi MikkiLens mengatakannya dan
