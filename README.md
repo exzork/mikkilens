@@ -238,11 +238,15 @@ yang lain.
 Selagi lagunya jalan: **"jeda lagunya"**, **"lanjutkan lagunya"**,
 **"hentikan lagunya"**, dan **"lagu apa ini"**.
 
-Pertama kali memutar lagu, MikkiLens mengunduh dua program kecil yang
-memutarnya — dan itu dikatakan, bukan didiamkan. Cuma sekali, dan kalau
-komputermu sudah punya ffmpeg, yang diunduh cuma yang belum ada. Suara musiknya
-bisa diarahkan ke perangkat lain dari `config.toml`, misalnya supaya penonton
-mendengar lagunya sementara chat tetap dibacakan ke headphone-mu saja.
+Dua program kecil yang memutar lagunya ikut diunduh **saat pertama kali
+MikkiLens dijalankan**, bersama model suaranya — bukan saat kamu memutar lagu
+pertama. Itu disengaja: menunggu semenit di tengah siaran adalah waktu yang
+tidak kamu punya, sedangkan penjalanan pertama memang sudah waktunya menunggu.
+Kalau komputermu sudah punya ffmpeg, yang diunduh cuma yang belum ada.
+
+Suara musiknya bisa diarahkan ke perangkat lain lewat `config.toml`, misalnya
+supaya penonton mendengar lagunya sementara chat tetap dibacakan ke
+headphone-mu saja.
 
 ## Membisukan chat sebentar
 

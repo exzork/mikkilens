@@ -70,17 +70,24 @@ func TestAStalledDownloadIsNoticedAndResumed(t *testing.T) {
 // transfer.
 func TestReportedSpeedFallsWhenTheTransferGoesQuiet(t *testing.T) {
 	previousStall, previousWait, previousWindow := stallTimeout, retryWait, speedWindow
-	stallTimeout, retryWait, speedWindow = 3*time.Second, 10*time.Millisecond, 400*time.Millisecond
+	stallTimeout, retryWait, speedWindow = 6*time.Second, 10*time.Millisecond, 400*time.Millisecond
 	defer func() {
 		stallTimeout, retryWait, speedWindow = previousStall, previousWait, previousWindow
 	}()
 
+	// The quiet spell has to be comfortably longer than the watchdog's own
+	// interval, not just longer than the second of silence it reports after.
+	// At 1.2s it was neither: the watchdog wakes once a second and reports once
+	// the transfer has been quiet for a second, so there was a single 200ms
+	// window for a tick to land in, and whether it did came down to scheduling
+	// -- which failed about one run in four, more on a loaded machine. Nothing
+	// was wrong with the download; the test was timing a coin flip.
 	whole := bytes.Repeat([]byte("m"), 4000)
 	server := httptest.NewServer(http.HandlerFunc(
 		func(writer http.ResponseWriter, request *http.Request) {
 			_, _ = writer.Write(whole[:2000])
 			writer.(http.Flusher).Flush()
-			time.Sleep(1200 * time.Millisecond) // quiet, but not long enough to be dead
+			time.Sleep(2500 * time.Millisecond) // quiet, but not long enough to be dead
 			_, _ = writer.Write(whole[2000:])
 		}))
 	defer server.Close()

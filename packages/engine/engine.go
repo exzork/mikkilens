@@ -409,6 +409,17 @@ func (e *Engine) installAssets(ctx context.Context) {
 	// at their own endpoint has already answered this question.
 	speech := settings.STT.AutoInstall && wantsLocalRecognition(settings.STT)
 	wanted := assets.Missing(speech, settings.Wake.Enabled, settings.STT.ModelSize)
+
+	// The two music programs come down with everything else rather than at the
+	// first song. Fetched lazily, the first "putar nomor dua" of a machine's
+	// life spent a minute and a half downloading before any music came out --
+	// which is a fine thing to wait for at first launch and a terrible one to
+	// wait for mid-stream.
+	if settings.Music.Enabled {
+		wanted = assets.WithMusic(wanted, assets.MissingPlayer(
+			settings.Music.YtDlpPath, settings.Music.FFmpegPath))
+	}
+
 	if wanted.Empty() {
 		return
 	}

@@ -155,9 +155,11 @@ duck_volume = 0.25
 # streamed and played, and stopping it stops it.
 #
 # Leave both empty and MikkiLens finds them: its own copies first, then the
-# PATH, and it fetches whatever is missing the first time you play something,
-# saying so as it goes. Anything already installed is used rather than
-# downloaded again, which on a machine that already runs ffmpeg is most of it.
+# PATH. Whatever is missing comes down with the first-run download, alongside
+# the speech model, rather than partway through your first song -- a minute of
+# waiting is fine at first launch and no use at all mid-stream. Anything already
+# installed is used rather than downloaded again, which on a machine that
+# already runs ffmpeg is most of it.
 #
 # Set these only to point at a copy kept somewhere particular. A path written
 # here that is not there is an error rather than a fallback: running a

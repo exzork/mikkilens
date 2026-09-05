@@ -9,8 +9,8 @@ import (
 
 // The two programs that play a song.
 //
-// They are fetched rather than shipped, and fetched late rather than at
-// startup, which is two separate decisions.
+// They are fetched rather than shipped, and fetched with everything else at
+// first launch rather than at the first song.
 //
 // Not shipped, because between them they are bigger than the whole of
 // MikkiLens -- a full ffmpeg is about a hundred and ninety megabytes against
@@ -19,10 +19,16 @@ import (
 // an installer would work until it quietly did not, and the failure would land
 // mid-stream on a song that used to play. Fetched, it can be replaced.
 //
-// Not at startup, because the first run already asks her to wait for half a
-// gigabyte of speech model before MikkiLens can hear at all, and a person who
-// never asks for a song should never pay for one. So these come down the first
-// time she plays something, announced like everything else.
+// At first launch, because the alternative was tried and was worse. Fetching
+// them the first time she played something meant that song began with eighty-
+// five seconds of downloading -- announced, but mid-stream, which is precisely
+// when there is no eighty-five seconds to spare. First launch is already the
+// moment this application asks her to wait, so this waits with the rest of it.
+//
+// [MissingPlayer] is still consulted at the first song, and that is a safety
+// net rather than the path: a machine whose first-run download failed, or one
+// where music was switched on afterwards, should be a slow song rather than no
+// song at all.
 //
 // Anything already on the machine wins over both. ffmpeg in particular is
 // already installed on a lot of streaming machines, and downloading a second
@@ -84,9 +90,11 @@ func findTool(configured, fileName, commandName string) string {
 
 // MissingPlayer is what still has to be fetched before a song can play.
 //
-// Its own function rather than part of [Missing]: these are wanted the first
-// time she asks for a song, not at startup, and a machine that already has
-// ffmpeg needs only the eighteen megabytes of the other one.
+// Its own function rather than part of [Missing] because it answers a
+// different question from a different setting: these are wanted when music is
+// switched on, they are found by looking down the PATH as well as on disk, and
+// a machine that already has ffmpeg needs only the eighteen megabytes of the
+// other one. [WithMusic] is how it joins the first-run download.
 func MissingPlayer(configuredYtDlp, configuredFFmpeg string) Wanted {
 	tools := FindPlayerTools(configuredYtDlp, configuredFFmpeg)
 
@@ -101,6 +109,37 @@ func MissingPlayer(configuredYtDlp, configuredFFmpeg string) Wanted {
 		wanted.Bytes += Bytes[stage]
 	}
 	return wanted
+}
+
+// WithMusic folds the music programs into a first-run download.
+//
+// They are fetched at first launch rather than at first song, which was the
+// other way round to begin with and wrong. Fetching them lazily meant the first
+// "putar nomor dua" of a machine's life spent eighty-five seconds downloading
+// before any music came out -- announced, but mid-stream, which is exactly when
+// there is no eighty-five seconds to spare. First launch is already the moment
+// this application asks her to wait for things.
+//
+// Spliced in ahead of the graphics build rather than appended. That build is
+// six hundred megabytes and it is an upgrade -- recognition already works
+// without it -- so leaving music behind it would mean a feature she asked for
+// waiting on one she did not.
+func WithMusic(wanted, music Wanted) Wanted {
+	if music.Empty() {
+		return wanted
+	}
+
+	combined := Wanted{Bytes: wanted.Bytes + music.Bytes}
+	for _, stage := range wanted.Stages {
+		if stage == StageGPU {
+			combined.Stages = append(combined.Stages, music.Stages...)
+			music.Stages = nil
+		}
+		combined.Stages = append(combined.Stages, stage)
+	}
+	// No graphics build to go in front of, so they go on the end.
+	combined.Stages = append(combined.Stages, music.Stages...)
+	return combined
 }
 
 // fetchPlayer downloads yt-dlp, which is one executable and needs no unpacking.

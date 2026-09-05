@@ -305,15 +305,23 @@ nothing-yet and is padded with silence, rather than holding that thread until
 the device runs dry -- which would also mean nothing ever returned to notice
 the stall.
 
-The two programs are fetched rather than shipped, and fetched on first use
-rather than at startup. Not shipped because between them they are bigger than
+The two programs are fetched rather than shipped, and fetched at first launch
+with everything else. Not shipped because between them they are bigger than
 MikkiLens -- a full ffmpeg is about a hundred and ninety megabytes against an
 installer of ninety -- and because yt-dlp goes stale: YouTube changes something
 every few months, yt-dlp answers within days, and one frozen into an installer
-would work until it quietly did not. Not at startup because the first run
-already asks her to wait for half a gigabyte of speech model, and someone who
-never asks for a song should never pay for one. Anything already on the machine
-wins over both, which on a box that already runs ffmpeg is most of it.
+would work until it quietly did not.
+
+At first launch because the alternative was tried and measured. Fetching them
+lazily meant the first song a machine ever played began with eighty-five
+seconds of downloading -- announced, but mid-stream, which is exactly when
+there is no eighty-five seconds to spare. `WithMusic` splices them into the
+first-run download ahead of the graphics build, since that build is six hundred
+megabytes of upgrade and music should not queue behind it. `MissingPlayer` is
+still consulted at the first song, as a safety net rather than the path: a
+first-run download that failed, or music switched on afterwards, should be a
+slow song rather than no song. Anything already on the machine wins over both,
+which on a box that already runs ffmpeg is most of it.
 
 The search talks to the InnerTube endpoint `music.youtube.com` itself calls,
 with the client name it identifies itself by, and deliberately without the
@@ -490,9 +498,9 @@ file much harder to read for the one job it exists to do.
 - The typing box needs the desktop app running. `mikkilensd` on its own has no
   window to open, so it answers a bare "putar lagu" by saying to say the song
   name instead -- it knows, because nothing is parked on the long poll.
-- Playing a song needs yt-dlp and ffmpeg. They are fetched automatically the
-  first time she plays something, announced as they come down; a machine with
-  no connection at that moment is told so and can still search.
+- Playing a song needs yt-dlp and ffmpeg. They come down with the first-run
+  download, announced like the rest of it; a machine that missed them fetches
+  them at the first song instead and says so.
 - yt-dlp now warns that YouTube extraction without a JavaScript runtime is
   deprecated. It still resolves, and installing Deno would silence it, but the
   day it stops resolving is a day songs stop playing -- and since yt-dlp is
