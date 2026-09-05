@@ -129,8 +129,18 @@ phrases = [
 
 # --------------------------------------------------------------- sistem ----
 
+[commands.search_web]
+# Mencari di internet. Modelnya sendiri tidak bisa membuka web, jadi MikkiLens
+# yang mencari lalu modelnya membacakan jawabannya -- bukan daftar judul
+# halaman, tapi satu kalimat yang menjawab.
+phrases = ["cari {question}", "carikan {question}", "googling {question}", "cari tahu {question}", "coba cari {question}"]
+answers = true
+
 [commands.current_time]
 phrases = ["jam berapa sekarang", "sekarang jam berapa", "jam berapa", "waktu sekarang"]
+# Menjawab, bukan sekadar melaporkan: "berapa menit lagi sampai jam 12" perlu
+# jamnya untuk dijawab, bukan minta dibacakan jamnya.
+answers = true
 
 [commands.status]
 phrases = ["status", "bagaimana keadaannya", "laporan status"]

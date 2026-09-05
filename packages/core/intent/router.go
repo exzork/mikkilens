@@ -187,7 +187,24 @@ func (r *Router) UnhandledCommands() []string {
 // answer. It is expected to be slow -- a second or so of local inference --
 // which is why it is only ever reached once the cheap path has failed.
 type Understander interface {
-	Understand(ctx context.Context, transcript string, commands *Set) (command string, slots map[string]string, err error)
+	Understand(ctx context.Context, transcript string, commands *Set) (Resolution, error)
+}
+
+// Resolution is what the fallback made of an utterance.
+type Resolution struct {
+	Command string
+	Slots   map[string]string
+
+	// Answered means it has already said everything there is to say, and
+	// nothing should be dispatched.
+	//
+	// This is the shape of a question rather than an order. "Berapa menit lagi
+	// sampai jam 12" needs the time to answer but is not a request to be told
+	// it, so for commands marked `answers` the fallback runs the command
+	// itself, gives the result back to the model, and speaks what comes back.
+	// Dispatching afterwards would run the command a second time and say the
+	// bare result on top of the answer.
+	Answered bool
 }
 
 // SetUnderstander installs the fallback. Nil disables it, which restores the
@@ -285,8 +302,15 @@ func (r *Router) HandleTranscript(text string) string {
 		return ""
 	}
 	if match == nil {
-		if understood := r.understand(text); understood != nil {
+		understood, answered := r.understand(text)
+		if understood != nil {
 			return r.dispatch(*understood)
+		}
+		if answered {
+			// Already answered, in its own words. "I do not know that command"
+			// on top of it would be talking over something she is listening to
+			// and contradicting it besides.
+			return ""
 		}
 		r.bus.Say(locale.T("listen.unknown_command", i18n.Args{"text": trimSpace(text)}), PriorityResult)
 		return ""
@@ -301,44 +325,50 @@ func (r *Router) HandleTranscript(text string) string {
 // understands, must come to nothing rather than to a command that was never
 // written -- and the result goes through dispatch like any other match, so a
 // command marked confirm still asks before it acts.
-func (r *Router) understand(text string) *Match {
+// The second return says the fallback has already spoken, which is different
+// from it having found nothing: one must stay silent, the other must say so.
+func (r *Router) understand(text string) (*Match, bool) {
 	r.mu.Lock()
 	understander := r.understander
 	commands := r.commands
 	r.mu.Unlock()
 
 	if understander == nil || commands == nil {
-		return nil
+		return nil, false
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), understandTimeout)
 	defer cancel()
 
-	id, slots, err := understander.Understand(ctx, text, commands)
+	resolved, err := understander.Understand(ctx, text, commands)
 	if err != nil {
 		// Not spoken: she already hears "I do not know that command", and
 		// explaining that a model failed helps nobody mid-stream.
 		slog.Warn("the fallback matcher failed", "error", err)
-		return nil
+		return nil, false
 	}
-	id = trimSpace(id)
+	if resolved.Answered {
+		// Already spoken about, in its own words.
+		return nil, true
+	}
+	id := trimSpace(resolved.Command)
 	if id == "" {
-		return nil
+		return nil, false
 	}
 	if _, exists := commands.Commands[id]; !exists {
 		slog.Warn("the fallback matcher invented a command", "command", id)
-		return nil
+		return nil, false
 	}
 
 	kept := map[string]string{}
-	for name, value := range slots {
+	for name, value := range resolved.Slots {
 		if KnownSlots[name] && trimSpace(value) != "" {
 			kept[name] = trimSpace(value)
 		}
 	}
 
 	slog.Info("understood by the fallback matcher", "text", text, "command", id)
-	return &Match{Command: id, Slots: kept, Transcript: text}
+	return &Match{Command: id, Slots: kept, Transcript: text}, false
 }
 
 // understandTimeout bounds the whole fallback. The client has its own, shorter

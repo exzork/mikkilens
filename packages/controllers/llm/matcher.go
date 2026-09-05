@@ -374,3 +374,60 @@ func unsupportedTools(err error) bool {
 	}
 	return false
 }
+
+// -- answering from a result ----------------------------------------------
+
+// answerTimeout is the whole second pass: running the command took no time,
+// and what is left is one short reply. Longer than the matcher's, because this
+// one is generating sentences rather than picking a name, and shorter than a
+// summary's, because she is standing there waiting for it.
+const answerTimeout = 20 * time.Second
+
+// AnswerLimit caps the reply. Two or three sentences read aloud is already
+// more than most of these questions need.
+const AnswerLimit = 220
+
+// AnswerFromResult turns a command's result into an answer to what she asked.
+//
+// The command has already run. What comes back from it is a sentence in her
+// language -- "Sekarang jam 14:35." -- and the question was something that
+// sentence does not directly answer: how long until noon, whether there is
+// time for one more game, how late it is getting.
+//
+// Sentences are handed over as they arrive rather than at the end, so the
+// answer starts while the rest is still being written.
+func (c *Controller) AnswerFromResult(
+	ctx context.Context, transcript, command, result string, onSentence func(string),
+) (string, error) {
+	endpoint := c.MatcherEndpoint()
+	if !endpoint.Configured() {
+		return "", &Error{Reason: "no model endpoint is configured"}
+	}
+	endpoint.Timeout = answerTimeout
+
+	timed, cancel := context.WithTimeout(ctx, answerTimeout)
+	defer cancel()
+
+	return c.CompleteStream(timed, []Message{
+		{Role: "system", Content: answerSystemPrompt(c.LanguageInstruction())},
+		{Role: "user", Content: transcript},
+		{Role: "assistant", Content: fmt.Sprintf("I used %s and it reported: %s", command, result)},
+		{Role: "user", Content: "Now answer my question using that."},
+	}, endpoint, AnswerLimit, onSentence)
+}
+
+// answerSystemPrompt is what separates answering from repeating.
+//
+// The failure worth guarding against is not a wrong answer but a padded one.
+// Every word is read aloud at speaking speed, so a preamble is a second of her
+// time, and a model that explains its working before answering has buried the
+// answer under the part she did not ask for.
+func answerSystemPrompt(language string) string {
+	return "You answer a question using a result MikkiLens has already looked " +
+		"up for her. Use it as fact: it is correct and it is current.\n\n" +
+		"Answer in one short sentence, and put the answer first. No preamble, " +
+		"no restating the question, no explaining how you worked it out, no " +
+		"offering to help further. If the result does not contain what is " +
+		"needed to answer, say so plainly in one sentence instead of " +
+		"guessing.\n\n" + language
+}

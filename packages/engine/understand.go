@@ -2,6 +2,9 @@ package engine
 
 import (
 	"context"
+	"log/slog"
+
+	"github.com/exzork/mikkilens/packages/audio/feedback"
 
 	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -24,15 +27,67 @@ type understander struct {
 // Understand implements intent.Understander.
 func (u *understander) Understand(
 	ctx context.Context, transcript string, commands *intent.Set,
-) (string, map[string]string, error) {
+) (intent.Resolution, error) {
 	settings := u.engine.Config()
 	client := llm.New(settings, u.engine.Locale())
 
 	guess, err := client.MatchCommand(ctx, transcript, commandOptions(commands))
 	if err != nil {
-		return "", nil, err
+		return intent.Resolution{}, err
 	}
-	return guess.Command, guess.Slots, nil
+	if guess.Command == "" {
+		return intent.Resolution{}, nil
+	}
+
+	// A command that reports rather than acts, reached by a question the
+	// phrases did not match, is answered rather than read out. "Berapa menit
+	// lagi sampai jam 12" needs the time; it is not a request to be told it.
+	if command, known := commands.Commands[guess.Command]; known && command.Answers {
+		if spoke, err := u.answer(ctx, client, transcript, guess); err != nil {
+			// The command still exists and still works. Falling through to the
+			// ordinary path means she hears the time rather than nothing,
+			// which is a worse answer to her question but a far better outcome
+			// than silence.
+			slog.Warn("could not answer from the command result",
+				"command", guess.Command, "error", err)
+		} else if spoke {
+			return intent.Resolution{Answered: true}, nil
+		}
+	}
+	return intent.Resolution{Command: guess.Command, Slots: guess.Slots}, nil
+}
+
+// answer runs the command, hands the result back to the model, and speaks what
+// it makes of it.
+//
+// Reports whether anything was said. A report the engine cannot produce, or a
+// model that answers with nothing, both mean "carry on as usual" rather than
+// "fail": the ordinary path still says the plain result, which answers a
+// narrower question than she asked but answers something.
+func (u *understander) answer(
+	ctx context.Context, client *llm.Controller, transcript string, guess llm.CommandGuess,
+) (bool, error) {
+	report, found := u.engine.report(guess.Command, guess.Slots)
+	if !found {
+		return false, nil
+	}
+	if report == "" {
+		return false, nil
+	}
+
+	// Spoken a sentence at a time as the model writes them, so the answer
+	// starts before it has finished thinking. Silence is the one thing this
+	// application treats as a fault.
+	spoken := 0
+	_, err := client.AnswerFromResult(ctx, transcript, guess.Command, report,
+		func(sentence string) {
+			spoken++
+			u.engine.bus.Say(sentence, feedback.Result)
+		})
+	if err != nil {
+		return spoken > 0, err
+	}
+	return spoken > 0, nil
 }
 
 // commandOptions describes the commands to the model using the phrases already

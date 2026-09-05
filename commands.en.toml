@@ -124,8 +124,18 @@ phrases = [
 
 # ---------------------------------------------------------------- system ----
 
+[commands.search_web]
+# Searching the web. The model has no live access of its own, so MikkiLens does
+# the looking and the model says the one sentence worth hearing -- an answer,
+# not a list of page titles.
+phrases = ["search for {question}", "look up {question}", "google {question}", "find out {question}"]
+answers = true
+
 [commands.current_time]
 phrases = ["what time is it", "what is the time", "tell me the time", "the time please"]
+# Answers rather than reports: "how long until noon" needs the time to answer,
+# it is not a request to be told the time.
+answers = true
 
 [commands.status]
 phrases = ["status", "give me a status report", "how are things"]

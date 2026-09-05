@@ -104,6 +104,20 @@ type Command struct {
 	Phrases       []Phrase
 	Confirm       bool
 	ConfirmPrompt string
+
+	// Answers marks a command that reports something rather than doing
+	// something: the time, the viewer count, which scene is up.
+	//
+	// It changes what happens when the model was the one who worked out what
+	// she meant. "Berapa menit lagi sampai jam 12" is not a request to be told
+	// the time, it is a question the time is needed to answer -- so for these,
+	// the result goes back to the model and it answers in its own words.
+	//
+	// Only for commands that report. Handing "the microphone is off" back to a
+	// model to comment on would add a round trip to a command that was already
+	// finished, and every one of those seconds is one she spends waiting
+	// mid-stream.
+	Answers bool
 }
 
 // Match is a transcript resolved to a command, with anything it captured.
@@ -188,8 +202,10 @@ func SetFromMap(document map[string]any, source string) (*Set, error) {
 
 		confirm, _ := body["confirm"].(bool)
 		prompt, _ := body["confirm_prompt"].(string)
+		answers, _ := body["answers"].(bool)
 		set.Commands[id] = Command{
 			ID: id, Phrases: parsed, Confirm: confirm, ConfirmPrompt: prompt,
+			Answers: answers,
 		}
 		set.Order = append(set.Order, id)
 	}

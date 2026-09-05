@@ -419,6 +419,17 @@ max_answer_chars = 700       # Keeps spoken answers from running on forever.
 # asked the older way, in the prompt, and remembered so the attempt is not
 # repeated on every utterance.
 #
+# A command marked `answers` in commands.toml is treated differently: it is run,
+# and its result is given back to the model to answer from. "Berapa menit lagi
+# sampai jam 12" needs the time to answer but is not a request to be told the
+# time, and "cari harga bitcoin" needs a search whose results are page titles
+# rather than an answer. The reply is spoken a sentence at a time as it is
+# written, so it starts before the model has finished.
+#
+# Only commands that report are marked that way. Handing "the microphone is
+# off" back to a model to comment on would add a round trip to a command that
+# had already finished.
+#
 # The model is only ever allowed to pick a command that exists, and a command
 # marked confirm still asks before it acts -- so a wrong guess costs a
 # question, not a stopped stream. It is free to pick nothing, which is what it

@@ -112,6 +112,13 @@ donation_no_message = "{donor} gave {count} {unit}, {price}."
 # cannot be the wrong half of the day the way "2:35" can.
 now = "It is {time}."
 
+[search]
+# Read by the model rather than by her, except when a search phrase matched
+# outright and the results are relayed as they are.
+nothing_asked = "I did not catch what to search for."
+failed = "I could not reach the search just now."
+nothing_found = "I could not find anything about {question}."
+
 [vision]
 looking = "Looking at your screen."
 failed = "Could not read the screen: {reason}"

@@ -114,6 +114,13 @@ donation_no_message = "{donor} memberi {count} {unit}, {price}."
 # tertukar pagi atau sore seperti "2:35".
 now = "Sekarang jam {time}."
 
+[search]
+# Dibaca oleh model, kecuali kalau frasa pencarian yang cocok langsung dan
+# hasilnya dibacakan apa adanya.
+nothing_asked = "Saya tidak menangkap apa yang harus dicari."
+failed = "Saya tidak bisa menghubungi pencarian sekarang."
+nothing_found = "Saya tidak menemukan apa pun tentang {question}."
+
 [vision]
 looking = "Sedang melihat layar kamu."
 failed = "Gagal membaca layar: {reason}"

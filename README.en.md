@@ -196,6 +196,51 @@ ask for is the failure worth the most care. Endpoints too small or too old for
 tool calling fall back to the prompt, and are remembered, because this sits in
 the way of a command she has already spoken.
 
+## Answering, not just reporting
+
+Most commands speak and are done: the sentence goes on the bus and that is the
+whole of it. That is right when the sentence is the answer, and wrong when it
+is only the ingredient. "Berapa menit lagi sampai jam 12" needs the time, but
+being told the time does not answer it.
+
+So a command can be marked `answers = true` in `commands.toml`. When the model
+was the one who worked out what she meant, those commands are run, and their
+result goes back to the model to answer from -- streamed over SSE and handed to
+the speech bus a sentence at a time, so the answer starts before the model has
+finished writing it.
+
+Only commands that report are marked. Giving "the microphone is off" back to a
+model to comment on would add a round trip to a command that had already
+finished, and every one of those seconds is one she spends waiting. A phrase
+that matched exactly never goes near the model either: it runs the ordinary
+handler and speaks immediately, as it always did.
+
+Splitting a streamed reply into sentences is the fiddly part. The buffer is
+still filling, so "the end of what has arrived" is not "the end of a sentence"
+-- a chunk ending just after a full stop would otherwise split `pukul 09.41`
+into `pukul 09.` and `41`, read aloud as two sentences and two wrong numbers.
+So a cut needs whitespace after the punctuation, never end-of-buffer, and
+whatever is left when the stream closes is spoken as it stands.
+
+## Searching
+
+The model has no live access. It says so when asked, the endpoint accepts a
+`web_search_options` field and then ignores it, and none of the models on offer
+are search-backed. So MikkiLens does the searching itself: `search_web` is an
+`answers` command that queries DuckDuckGo's HTML endpoint and hands the results
+back for the model to answer from.
+
+Results read aloud are a list of page titles, which is not an answer, and the
+model alone would be guessing -- neither half is much use without the other.
+
+DuckDuckGo needs no key and no account, which matters more than it sounds: a
+search she cannot use until she has been through a signup page is a search she
+does not have. The trade is that it is scraped rather than promised. It is a
+POST, not a GET -- the GET form answers with a challenge page containing no
+results, and the difference is silent. When the markup changes one day this
+returns nothing rather than nonsense, and nothing is a state the caller already
+handles.
+
 ## Updating
 
 Updates come from GitHub Releases through electron-updater, and the parts are

@@ -17,12 +17,14 @@
 package llm
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -120,6 +122,7 @@ type completionRequest struct {
 	// ToolChoice is "auto" whenever tools are offered: the model must stay
 	// free to call nothing, because "none of these" is a real answer here.
 	ToolChoice string `json:"tool_choice,omitempty"`
+	Stream     bool   `json:"stream,omitempty"`
 }
 
 // Tool is one function the model may call, in the shape every
@@ -387,4 +390,172 @@ func clip(text string, limit int) string {
 		return text
 	}
 	return string(runes[:limit])
+}
+
+// -- streaming ------------------------------------------------------------
+
+// Speaking before the model has finished thinking.
+//
+// A model composing two sentences takes a few seconds, and waiting for the
+// last word before saying the first is the whole of that wait spent in
+// silence. Silence is the one thing this application treats as a fault: it is
+// indistinguishable from a command that did nothing.
+//
+// So the reply is read as it arrives and handed over a sentence at a time. The
+// first one is usually the answer -- models put it first when asked to -- so
+// she hears it while the rest is still being written.
+
+// sentenceEnd is where it is safe to stop and speak.
+//
+// Whitespace after the punctuation is required, and end-of-string is not
+// accepted. That looks like an oversight and is the opposite: this runs over a
+// buffer that is still being filled, so "$" means "as much as has arrived so
+// far", not "the end of the sentence". A chunk that happened to end just after
+// a full stop would split there -- and the reply "pukul 09.41" arrives in
+// chunks, so it came out as "pukul 09." and then "41", read aloud as two
+// sentences and two wrong numbers.
+//
+// Whatever is left when the stream ends is spoken by the caller, so nothing is
+// lost by waiting for proof that the sentence is really over.
+var sentenceEnd = regexp.MustCompile(`[.!?]["')\]]*\s`)
+
+// splitSentence returns the first complete sentence in buffered text and what
+// is left, or "" when nothing is finished yet.
+func splitSentence(buffered string) (sentence, rest string) {
+	for _, found := range sentenceEnd.FindAllStringIndex(buffered, -1) {
+		end := found[1]
+		candidate := strings.TrimSpace(buffered[:end])
+		if candidate == "" {
+			continue
+		}
+		// A decimal point has digits on both sides; a full stop does not.
+		if dot := found[0]; dot > 0 && dot+1 < len(buffered) &&
+			isDigit(buffered[dot-1]) && isDigit(buffered[dot+1]) {
+			continue
+		}
+		// Too short to be a sentence is usually an abbreviation or a stray
+		// initial; waiting for more is the safer read.
+		if len([]rune(candidate)) < 12 && end < len(buffered) {
+			continue
+		}
+		return candidate, buffered[end:]
+	}
+	return "", buffered
+}
+
+func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+
+// CompleteStream runs a completion and hands over each sentence as it lands.
+//
+// onSentence is called on this goroutine, in order, once per finished
+// sentence. The whole reply is returned as well, for anything that wants to
+// record what was said.
+func (c *Controller) CompleteStream(
+	ctx context.Context, messages []Message, endpoint Endpoint, maxTokens int,
+	onSentence func(string),
+) (string, error) {
+	if !endpoint.Configured() {
+		return "", &Error{Reason: "no model endpoint is configured"}
+	}
+	timeout := endpoint.Timeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	timed, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	body, err := json.Marshal(completionRequest{
+		Model: endpoint.Model, Messages: messages, MaxTokens: maxTokens, Stream: true,
+	})
+	if err != nil {
+		return "", &Error{Reason: err.Error()}
+	}
+
+	url := strings.TrimRight(endpoint.BaseURL, "/") + "/chat/completions"
+	request, err := http.NewRequestWithContext(timed, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", &Error{Reason: err.Error()}
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "text/event-stream")
+	if endpoint.APIKey != "" {
+		request.Header.Set("Authorization", "Bearer "+endpoint.APIKey)
+	}
+
+	response, err := c.client.Do(request)
+	if err != nil {
+		return "", &Error{Reason: Readable(err.Error())}
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		var parsed completionResponse
+		_ = json.Unmarshal(payload, &parsed)
+		detail := response.Status
+		if parsed.Error != nil && parsed.Error.Message != "" {
+			detail = fmt.Sprintf("%d %s", response.StatusCode, parsed.Error.Message)
+		}
+		return "", &Error{Reason: Readable(detail)}
+	}
+
+	var whole strings.Builder
+	buffered := ""
+	scanner := bufio.NewScanner(response.Body)
+	scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+
+		var chunk streamChunk
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			// One malformed frame is not worth abandoning an answer already
+			// half spoken.
+			continue
+		}
+		for _, choice := range chunk.Choices {
+			piece := choice.Delta.Content
+			if piece == "" {
+				continue
+			}
+			whole.WriteString(piece)
+			buffered += piece
+			for {
+				sentence, rest := splitSentence(buffered)
+				if sentence == "" {
+					break
+				}
+				buffered = rest
+				if onSentence != nil {
+					onSentence(sentence)
+				}
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		// Whatever arrived has already been spoken, so this is reported rather
+		// than thrown away.
+		return strings.TrimSpace(whole.String()), &Error{Reason: Readable(err.Error())}
+	}
+
+	// Whatever is left had no full stop on the end. It is still an answer.
+	if tail := strings.TrimSpace(buffered); tail != "" && onSentence != nil {
+		onSentence(tail)
+	}
+	return strings.TrimSpace(whole.String()), nil
+}
+
+type streamChunk struct {
+	Choices []struct {
+		Delta struct {
+			Content string `json:"content"`
+		} `json:"delta"`
+	} `json:"choices"`
 }

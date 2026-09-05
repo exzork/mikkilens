@@ -15,17 +15,20 @@ import (
 // broadcasts.
 
 type fakeUnderstander struct {
-	command string
-	slots   map[string]string
-	err     error
-	asked   []string
+	command  string
+	slots    map[string]string
+	answered bool
+	err      error
+	asked    []string
 }
 
 func (f *fakeUnderstander) Understand(
 	_ context.Context, transcript string, _ *intent.Set,
-) (string, map[string]string, error) {
+) (intent.Resolution, error) {
 	f.asked = append(f.asked, transcript)
-	return f.command, f.slots, f.err
+	return intent.Resolution{
+		Command: f.command, Slots: f.slots, Answered: f.answered,
+	}, f.err
 }
 
 func withUnderstander(t *testing.T, fake *fakeUnderstander) (*intent.Router, *recordingBus, *[]call) {
@@ -184,5 +187,36 @@ func TestAConfirmedCommandStillAsksWhenItCameFromTheFallback(t *testing.T) {
 	router.HandleTranscript("ya")
 	if len(*calls) != 1 || (*calls)[0].command != "stop_stream" {
 		t.Errorf("ran %v after confirming", *calls)
+	}
+}
+
+// A fallback that has already answered must not then have the command run on
+// top of it. For a question like "berapa menit lagi sampai jam 12" the command
+// has been run once already, to get the time; dispatching would run it again
+// and read the bare time out over an answer she is still listening to.
+func TestAnAnsweredResolutionRunsNothingAndSaysNothingMore(t *testing.T) {
+	fake := &fakeUnderstander{answered: true}
+	router, bus, calls := withUnderstander(t, fake)
+
+	router.HandleTranscript("berapa menit lagi sampai jam 12")
+
+	if len(*calls) != 0 {
+		t.Errorf("ran %v; an answered resolution must dispatch nothing", *calls)
+	}
+	if len(bus.said) != 0 {
+		t.Errorf("said %v on top of an answer already given", bus.said)
+	}
+}
+
+// Answered wins over any command it also carries, so a fallback that answers
+// cannot accidentally act as well.
+func TestAnsweredWinsOverACommand(t *testing.T) {
+	fake := &fakeUnderstander{command: "mute_mic", answered: true}
+	router, _, calls := withUnderstander(t, fake)
+
+	router.HandleTranscript("berapa menit lagi sampai jam 12")
+
+	if len(*calls) != 0 {
+		t.Errorf("ran %v despite having answered", *calls)
 	}
 }
