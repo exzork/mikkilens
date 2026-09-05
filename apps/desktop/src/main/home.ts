@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
+import { addNewCommands } from './commands.js'
 import { dirname, join } from 'node:path'
 
 /**
@@ -16,6 +17,13 @@ import { dirname, join } from 'node:path'
  * So the app decides, and tells the engine over MIKKILENS_HOME. Both processes
  * then agree on one directory, whoever started first.
  */
+
+/** The header written above commands an update adds, so their arrival is
+ * explained in the file itself rather than being a surprise. */
+const UPDATE_NOTE = [
+  '# Added by a MikkiLens update. Edit the phrases freely: nothing here is',
+  '# overwritten again, and everything above this line was left untouched.',
+].join(String.fromCharCode(10))
 
 /** Files the engine expects beside config.toml, seeded on a fresh install. */
 const seeded = ['commands.en.toml', 'commands.id.toml', 'config.example.toml']
@@ -144,6 +152,21 @@ export function seedHome(home: string): void {
   }
   for (const name of seeded) {
     seedOne(join(process.resourcesPath, name), join(home, name), name)
+  }
+
+  // A command file she already has is never overwritten -- the phrases in it
+  // are hers. But a command added since she installed has to reach her
+  // somehow, or it exists everywhere except the one file that decides what she
+  // can say.
+  for (const name of ['commands.en.toml', 'commands.id.toml']) {
+    const added = addNewCommands(
+      join(home, name),
+      join(process.resourcesPath, name),
+      UPDATE_NOTE,
+    )
+    if (added.length > 0) {
+      console.info(`added ${added.join(', ')} to ${name}`)
+    }
   }
 
   const models = join(home, 'data', 'models')

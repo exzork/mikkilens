@@ -195,10 +195,27 @@ for (const tab of tabs) {
 // The version is small and out of the way, but it is the first thing anyone
 // asks for when something is wrong, and reading it off an installer filename is
 // not a thing to have to do.
+//
+// Held rather than written straight to the header, because the number and the
+// words around it arrive separately: the version comes over the bridge, and
+// "version {version}" comes from a catalogue loaded at about the same time.
+// Whichever lands second has to do the writing, or the header shows the raw key
+// -- and applyTranslations cannot rescue it, since the text is built here
+// rather than carried by a data-i18n attribute.
+let appVersion = ''
+
+/** Put the version in the header, if both halves of it are known yet. */
+function renderVersion(): void {
+  if (appVersion === '') {
+    return
+  }
+  element('version').textContent = t('app.version', { version: appVersion })
+}
+
 void (async () => {
   try {
-    const version = await window.mikkilens.version()
-    element('version').textContent = t('app.version', { version })
+    appVersion = await window.mikkilens.version()
+    renderVersion()
   } catch {
     // A header without a version number is a cosmetic loss, not a failure.
   }
@@ -842,6 +859,7 @@ async function applyLanguage(wanted: string): Promise<void> {
 
   // Anything built from script carries translated text of its own, so it has
   // to be rebuilt rather than just re-labelled.
+  renderVersion()
   renderStatus()
   fillSpokenLanguageChoices()
   fillRecognitionChoices()
@@ -1880,6 +1898,7 @@ void (async () => {
   const initial = await bridge.loadLocale()
   setCatalog(initial.language, initial.strings)
   applyTranslations()
+  renderVersion()
 
   try {
     await boot()

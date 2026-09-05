@@ -11,7 +11,8 @@
     "dev": "npm run build && electron . --dev",
     "package": "npm run build && node scripts/package.mjs",
     "package:dir": "npm run build && node scripts/package.mjs --dir",
-    "release": "npm run build && node scripts/package.mjs --publish always"
+    "release": "npm run build && node scripts/package.mjs --publish always",
+    "test:commands": "node scripts/test-commands.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -33,6 +33,14 @@ export function setCatalog(languageCode: string, catalog: Catalog): void {
 export function t(key: string, values?: Record<string, string | number>): string {
   const template = strings[key]
   if (template === undefined) {
+    // An empty catalogue means this was asked before one was installed, which
+    // is a different fault from a key that is genuinely missing and has a
+    // different fix: the text has to be written again once the catalogue
+    // lands, because applyTranslations only revisits data-i18n attributes and
+    // cannot reach anything a script set itself.
+    if (Object.keys(strings).length === 0) {
+      console.warn(`t(${key}) before a catalogue was installed; it will need rendering again`)
+    }
     return `[${key}]`
   }
   return template.replace(/\{(\w+)\}/g, (whole, name: string) =>

@@ -19,7 +19,7 @@
     "package": "npm run build:daemon && npm run fetch:wake && npm run package --workspace @mikkilens/desktop",
     "test": "npm run test:go && npm run test:desktop",
     "test:go": "go test ./...",
-    "test:desktop": "npm run typecheck --workspace @mikkilens/desktop",
+    "test:desktop": "npm run typecheck --workspace @mikkilens/desktop && npm run build --workspace @mikkilens/desktop && npm run test:commands --workspace @mikkilens/desktop",
     "lint": "gofmt -l apps packages && go vet ./...",
     "package:dir": "npm run build:daemon && npm run fetch:wake && npm run package:dir --workspace @mikkilens/desktop",
     "release": "npm run build:daemon && npm run fetch:wake && npm run release --workspace @mikkilens/desktop"
