@@ -1,11 +1,17 @@
 // Package assets fetches the files recognition and the wake word need, so a
 // fresh installation can hear.
 //
-// None of these files ship inside MikkiLens. The speech model alone is half a
+// The large ones do not ship inside MikkiLens. The speech model alone is half a
 // gigabyte, the CUDA build is another two thirds of one, and which build is
 // right depends on the card in the machine -- so an installer carrying all of
 // them would be a gigabyte of mostly-wrong binaries. They come down here
 // instead, once, into data/models, where the engine already knows to look.
+//
+// The wake word files are the exception and go in the installer: eighteen
+// megabytes, and the wake word is how she starts talking to MikkiLens without
+// touching anything, so first run is the worst moment to need a network. An
+// installed copy therefore never reaches stage 3 below; it is what somebody
+// building from source sees.
 //
 // The ordering is the point. Each stage leaves the machine more useful than
 // the last, so an interrupted download is never the difference between working
@@ -13,7 +19,7 @@
 //
 //  1. the processor build      8 MB   -- something that can run at all
 //  2. the speech model       488 MB   -- and now it can hear
-//  3. the wake word           68 MB   -- and now it answers hands-free
+//  3. the wake word           78 MB   -- and now it answers hands-free
 //  4. the graphics build     670 MB   -- and now it answers in a fifth of a second
 //
 // Step 4 only happens on a machine with a graphics driver to run it, and it is
@@ -44,7 +50,7 @@ const (
 	// An older runtime loads and then refuses at startup with "Error setting
 	// ORT API base", which reads as a broken wake word rather than as a
 	// version that needs bumping alongside the Go dependency.
-	onnxRuntime = "1.29.0"
+	onnxRuntime = RuntimeVersion
 
 	wakeWordRelease  = "v0.5.1"
 	whisperModelHost = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
@@ -63,6 +69,10 @@ const (
 	// StageGPU is the CUDA build, which is an upgrade rather than a need.
 	StageGPU Stage = "gpu"
 )
+
+// RuntimeVersion is the ONNX Runtime the wake word needs, named here so the
+// wake package can say it when the library on disk answers a different one.
+const RuntimeVersion = "1.29.0"
 
 // Bytes is roughly how large each stage is, for what is said before it starts.
 // Approximate on purpose: the exact number moves with every release, and it is

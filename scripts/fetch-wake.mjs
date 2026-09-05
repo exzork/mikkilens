@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
-import { copyFile, mkdir, mkdtemp, readdir, rename, rm, stat } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { Readable } from 'node:stream'
@@ -51,6 +51,22 @@ const wakeWordRelease = 'v0.5.1'
 
 /** The two stages every wake word shares, whatever the word is. */
 const sharedModels = ['melspectrogram.onnx', 'embedding_model.onnx']
+
+/**
+ * Which runtime version the files in data/models came from.
+ *
+ * The libraries carry a version resource, but reading it means platform
+ * specific work for something a one-line file answers just as well.
+ */
+const stampPath = join(models, '.onnxruntime-version')
+
+async function stampedVersion() {
+  try {
+    return (await readFile(stampPath, 'utf8')).trim()
+  } catch {
+    return null
+  }
+}
 
 /** What is kept out of the runtime archive: 65 MB of headers around two files. */
 const runtimeLibraries = ['onnxruntime.dll', 'onnxruntime_providers_shared.dll']
@@ -139,9 +155,14 @@ async function fetchRuntime() {
     return
   }
 
+  // What is on disk is checked against the version that put it there, not
+  // merely for being present. A runtime left over from an older pin is the one
+  // failure worth catching here: it loads, refuses at startup with "Error
+  // setting ORT API base", and looks like a broken wake word rather than a
+  // stale file. Presence alone would keep it forever.
   const present = await Promise.all(runtimeLibraries.map((name) => exists(join(models, name))))
-  if (!force && present.every(Boolean)) {
-    say('  the ONNX runtime is already here')
+  if (!force && present.every(Boolean) && (await stampedVersion()) === onnxRuntime) {
+    say(`  the ONNX runtime ${onnxRuntime} is already here`)
     return
   }
 
@@ -164,6 +185,7 @@ async function fetchRuntime() {
       await copyFile(found, join(models, name))
       say(`  ${name}`)
     }
+    await writeFile(stampPath, onnxRuntime, 'utf8')
   } finally {
     await rm(scratch, { recursive: true, force: true })
   }

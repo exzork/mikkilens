@@ -5,10 +5,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
 
+	"github.com/exzork/mikkilens/packages/audio/assets"
 	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
@@ -53,10 +55,32 @@ func initRuntime() error {
 		}
 		ort.SetSharedLibraryPath(library)
 		if err := ort.InitializeEnvironment(); err != nil {
-			runtimeErr = &Error{Reason: "the ONNX runtime could not start: " + err.Error()}
+			runtimeErr = &Error{Reason: startupReason(library, err)}
 		}
 	})
 	return runtimeErr
+}
+
+// startupReason turns the runtime's own refusal into something worth hearing.
+//
+// The common failure is not a corrupt file but the wrong version: the engine is
+// compiled against one ORT C API, and an older library answers a different one
+// and refuses with "Error setting ORT API base". Said as-is that names neither
+// the file at fault nor anything to do about it, which for someone who cannot
+// glance at a folder is the difference between a fixable problem and a wake
+// word that has simply stopped working.
+//
+// The file is named rather than deleted here. Removing something of hers on her
+// behalf, at startup, because a library disagreed about a version number, is
+// not a decision this code should be making on its own.
+func startupReason(library string, err error) string {
+	reason := "the ONNX runtime could not start: " + err.Error()
+	if !strings.Contains(err.Error(), "ORT API base") {
+		return reason
+	}
+	return fmt.Sprintf("%s in %s is not the version MikkiLens needs (%s). "+
+		"Delete it and start again to fetch the right one; the hotkey works meanwhile.",
+		filepath.Base(library), filepath.Dir(library), assets.RuntimeVersion)
 }
 
 func findRuntimeLibrary() (string, error) {

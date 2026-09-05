@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 /**
@@ -33,12 +33,28 @@ const seeded = ['commands.en.toml', 'commands.id.toml', 'config.example.toml']
  * The speech models are not here on purpose -- those are hundreds of megabytes
  * and which one suits her machine is a question only she can answer.
  */
-const seededModels = [
-  'onnxruntime.dll',
-  'onnxruntime_providers_shared.dll',
-  'melspectrogram.onnx',
-  'embedding_model.onnx',
-]
+const seededModels = ['melspectrogram.onnx', 'embedding_model.onnx']
+
+/**
+ * The ONNX runtime, which is kept in step with the app rather than left alone.
+ *
+ * Everything else here is seeded once and then never touched again, because it
+ * is hers. The runtime is the exception, and it has to be: it is not a
+ * preference but a matching part. The engine is compiled against one ORT C API
+ * version, and a runtime that answers a different one does not degrade -- it
+ * refuses at startup with "Error setting ORT API base", which reaches her as a
+ * wake word that simply stopped working.
+ *
+ * That is not hypothetical. Every machine that downloaded the old 1.20 runtime
+ * before it shipped in the installer keeps it forever under a copy-only-if-
+ * missing rule, so installing a build that carries the right one changes
+ * nothing and the wake word stays dead through every future update.
+ *
+ * Compared by size: two builds of the runtime differ by megabytes, and hashing
+ * sixteen of them on every launch to learn what the file listing already says
+ * would be a poor trade.
+ */
+const syncedRuntime = ['onnxruntime.dll', 'onnxruntime_providers_shared.dll']
 
 /** Markers that identify the repository when running from source. */
 const sourceMarkers = ['config.toml', 'config.example.toml', 'go.mod']
@@ -135,6 +151,23 @@ export function seedHome(home: string): void {
   for (const name of seededModels) {
     seedOne(join(process.resourcesPath, 'wake', name), join(models, name), name)
   }
+  for (const name of syncedRuntime) {
+    const source = join(process.resourcesPath, 'wake', name)
+    const destination = join(models, name)
+    if (sameSize(source, destination)) {
+      continue
+    }
+    seedOne(source, destination, name, { replace: true })
+  }
+}
+
+/** Whether two files are byte-for-byte the same length; false if either is missing. */
+function sameSize(left: string, right: string): boolean {
+  try {
+    return statSync(left).size === statSync(right).size
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -149,8 +182,13 @@ export function seedHome(home: string): void {
  * says the wake word, with an error about a corrupt library rather than about
  * an install that was interrupted.
  */
-function seedOne(source: string, destination: string, name: string): void {
-  if (existsSync(destination) || !existsSync(source)) {
+function seedOne(
+  source: string,
+  destination: string,
+  name: string,
+  options: { replace?: boolean } = {},
+): void {
+  if (!existsSync(source) || (existsSync(destination) && !options.replace)) {
     return
   }
   const temporary = `${destination}.part`
