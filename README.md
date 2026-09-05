@@ -602,6 +602,42 @@ something else would be a worse question than the first. A binding may set
 `confirm = false` to waive it -- a dedicated key is a deliberate act in a way a
 misheard sentence is not -- but it can only waive its own, never add one.
 
+### Matching
+
+An utterance goes through fuzzy phrase matching first: it is rule-based, it
+works offline, it costs nothing per utterance, and the same words always
+produce the same command. Working by ear, there is no way to check what the app
+thought she said, so being predictable matters more than being clever.
+
+String similarity is exact about the wrong thing, though. It compares letters,
+so "matiin mic dong" scores well against "matikan mikrofon" while "tolong
+jangan bacakan chatnya dulu" scores near zero against "jeda chat" -- even
+though a person hears the second pair as obviously the same request. So where
+the old answer was "I do not know that command", and only there, the model in
+`[model]` is asked.
+
+It is asked with the commands as **tools**, not as a list in a prompt. Each
+command becomes one tool: the id is the name, the phrases she wrote for it are
+the description, and its slots are declared arguments with
+`additionalProperties: false`. A slot is marked required only when every
+phrasing takes one, so a command that can be said without a value never pushes
+the model into inventing one.
+
+The point is whose job it is to keep the answer well formed. Asking for JSON
+and hoping produces replies wrapped in code fences, prefaced with a sentence,
+or naming a command that does not exist. A tool call is constrained by the
+provider against the schema, so the name is one that was offered and the
+arguments are slots that were declared. Both are checked again on the way back
+regardless, because a provider that does not constrain them is exactly the sort
+this gets pointed at.
+
+`tool_choice` is `auto`, never `required`: calling nothing is how the model
+refuses, and refusing is the answer this most wants to get honestly. Two calls
+count as no answer as well -- doing the first of several commands she did not
+ask for is the failure worth the most care. Endpoints too small or too old for
+tool calling fall back to the prompt, and are remembered, because this sits in
+the way of a command she has already spoken.
+
 ### Updating
 
 Updates come from GitHub Releases through electron-updater, and the parts are

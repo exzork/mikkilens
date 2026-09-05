@@ -116,12 +116,61 @@ type completionRequest struct {
 	Model     string    `json:"model"`
 	Messages  []Message `json:"messages"`
 	MaxTokens int       `json:"max_tokens,omitempty"`
+	Tools     []Tool    `json:"tools,omitempty"`
+	// ToolChoice is "auto" whenever tools are offered: the model must stay
+	// free to call nothing, because "none of these" is a real answer here.
+	ToolChoice string `json:"tool_choice,omitempty"`
+}
+
+// Tool is one function the model may call, in the shape every
+// OpenAI-compatible provider expects.
+type Tool struct {
+	Type     string       `json:"type"`
+	Function ToolFunction `json:"function"`
+}
+
+// ToolFunction names a tool and describes the arguments it takes.
+type ToolFunction struct {
+	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
+	Parameters  ToolSchema `json:"parameters"`
+}
+
+// ToolSchema is the JSON Schema for one tool's arguments.
+//
+// additionalProperties is false so a model cannot invent an argument that
+// nothing downstream reads; an unknown slot is a sign it misunderstood, and
+// silently dropping it would hide that.
+type ToolSchema struct {
+	Type                 string                  `json:"type"`
+	Properties           map[string]ToolProperty `json:"properties"`
+	Required             []string                `json:"required,omitempty"`
+	AdditionalProperties bool                    `json:"additionalProperties"`
+}
+
+// ToolProperty is one argument.
+type ToolProperty struct {
+	Type        string `json:"type"`
+	Description string `json:"description,omitempty"`
+}
+
+// ToolCall is one call the model asked for, with its arguments already decoded.
+type ToolCall struct {
+	Name      string
+	Arguments map[string]string
 }
 
 type completionResponse struct {
 	Choices []struct {
 		Message struct {
-			Content string `json:"content"`
+			Content   string `json:"content"`
+			ToolCalls []struct {
+				Function struct {
+					Name string `json:"name"`
+					// Arguments is JSON, but delivered as a string.
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			} `json:"tool_calls"`
 		} `json:"message"`
 	} `json:"choices"`
 	Error *struct {
@@ -132,8 +181,26 @@ type completionResponse struct {
 
 // Complete runs one completion.
 func (c *Controller) Complete(ctx context.Context, messages []Message, endpoint Endpoint, maxTokens int) (string, error) {
+	content, _, err := c.complete(ctx, messages, endpoint, maxTokens, nil)
+	return content, err
+}
+
+// CompleteTools runs one completion with tools on the table.
+//
+// Returns whatever the model called and whatever it said. No call is not a
+// failure: with tool_choice "auto" it is how the model declines, which is the
+// answer this is most interested in getting honestly.
+func (c *Controller) CompleteTools(
+	ctx context.Context, messages []Message, endpoint Endpoint, maxTokens int, tools []Tool,
+) (string, []ToolCall, error) {
+	return c.complete(ctx, messages, endpoint, maxTokens, tools)
+}
+
+func (c *Controller) complete(
+	ctx context.Context, messages []Message, endpoint Endpoint, maxTokens int, tools []Tool,
+) (string, []ToolCall, error) {
 	if !endpoint.Configured() {
-		return "", &Error{Reason: "no model endpoint is configured"}
+		return "", nil, &Error{Reason: "no model endpoint is configured"}
 	}
 	timeout := endpoint.Timeout
 	if timeout <= 0 {
@@ -142,17 +209,22 @@ func (c *Controller) Complete(ctx context.Context, messages []Message, endpoint 
 	timed, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	body, err := json.Marshal(completionRequest{
+	asked := completionRequest{
 		Model: endpoint.Model, Messages: messages, MaxTokens: maxTokens,
-	})
+	}
+	if len(tools) > 0 {
+		asked.Tools = tools
+		asked.ToolChoice = "auto"
+	}
+	body, err := json.Marshal(asked)
 	if err != nil {
-		return "", &Error{Reason: err.Error()}
+		return "", nil, &Error{Reason: err.Error()}
 	}
 
 	url := strings.TrimRight(endpoint.BaseURL, "/") + "/chat/completions"
 	request, err := http.NewRequestWithContext(timed, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return "", &Error{Reason: err.Error()}
+		return "", nil, &Error{Reason: err.Error()}
 	}
 	request.Header.Set("Content-Type", "application/json")
 	if endpoint.APIKey != "" {
@@ -161,13 +233,13 @@ func (c *Controller) Complete(ctx context.Context, messages []Message, endpoint 
 
 	response, err := c.client.Do(request)
 	if err != nil {
-		return "", &Error{Reason: Readable(err.Error())}
+		return "", nil, &Error{Reason: Readable(err.Error())}
 	}
 	defer response.Body.Close()
 
 	payload, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
 	if err != nil {
-		return "", &Error{Reason: Readable(err.Error())}
+		return "", nil, &Error{Reason: Readable(err.Error())}
 	}
 
 	var parsed completionResponse
@@ -178,12 +250,56 @@ func (c *Controller) Complete(ctx context.Context, messages []Message, endpoint 
 		if parsed.Error != nil && parsed.Error.Message != "" {
 			detail = fmt.Sprintf("%d %s", response.StatusCode, parsed.Error.Message)
 		}
-		return "", &Error{Reason: Readable(detail)}
+		return "", nil, &Error{Reason: Readable(detail)}
 	}
 	if len(parsed.Choices) == 0 {
-		return "", &Error{Reason: "the model returned nothing"}
+		return "", nil, &Error{Reason: "the model returned nothing"}
 	}
-	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+
+	message := parsed.Choices[0].Message
+	calls := make([]ToolCall, 0, len(message.ToolCalls))
+	for _, raw := range message.ToolCalls {
+		if name := strings.TrimSpace(raw.Function.Name); name != "" {
+			calls = append(calls, ToolCall{
+				Name:      name,
+				Arguments: decodeArguments(raw.Function.Arguments),
+			})
+		}
+	}
+	return strings.TrimSpace(message.Content), calls, nil
+}
+
+// decodeArguments reads a tool call's arguments.
+//
+// Everything is turned into a string because that is what a command slot is:
+// a scene name, a title, a question. A model that answers a number rather than
+// a string is not wrong enough to throw the whole call away over.
+func decodeArguments(raw string) map[string]string {
+	arguments := map[string]string{}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return arguments
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		return arguments
+	}
+	for name, value := range decoded {
+		text := ""
+		switch typed := value.(type) {
+		case string:
+			text = typed
+		case nil:
+			continue
+		default:
+			text = fmt.Sprint(typed)
+		}
+		if text = strings.TrimSpace(text); text != "" {
+			arguments[strings.TrimSpace(name)] = text
+		}
+	}
+	return arguments
 }
 
 // SummarizeChat condenses a chat backlog into something worth hearing.

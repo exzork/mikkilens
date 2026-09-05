@@ -409,10 +409,20 @@ max_answer_chars = 700       # Keeps spoken answers from running on forever.
 # working exactly as before and stays instant; only the misses cost about a
 # second, and only the misses are ever sent anywhere.
 #
+# The commands are handed over as tools, the same shape a model is given any
+# other tool, each one described by the phrases you wrote for it and declaring
+# the values it takes. That is what keeps the answer honest: the provider
+# constrains it to a command that exists and to values that were declared,
+# rather than the model being asked for JSON and hoping.
+#
+# An endpoint too old or too small for tool calling is not left out -- it is
+# asked the older way, in the prompt, and remembered so the attempt is not
+# repeated on every utterance.
+#
 # The model is only ever allowed to pick a command that exists, and a command
 # marked confirm still asks before it acts -- so a wrong guess costs a
-# question, not a stopped stream. When it is unsure it is told to say so, and
-# MikkiLens then answers exactly as it did before.
+# question, not a stopped stream. It is free to pick nothing, which is what it
+# is told to do when unsure, and MikkiLens then answers exactly as before.
 #
 # Switch it off if you would rather nothing you say leaves the machine unless
 # you asked a question outright. Pointing [model] at a local Ollama is the

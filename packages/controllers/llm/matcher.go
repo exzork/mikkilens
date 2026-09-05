@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -45,6 +46,10 @@ type CommandOption struct {
 	ID      string
 	Phrases []string
 	Slots   []string
+	// Required are the slots every phrasing of this command takes, so the
+	// schema can insist on them without pushing the model into inventing one
+	// for a phrasing that does not need it.
+	Required []string
 }
 
 // CommandGuess is what the model made of an utterance.
@@ -71,6 +76,20 @@ func (c *Controller) MatchCommand(
 
 	timed, cancel := context.WithTimeout(ctx, matchTimeout)
 	defer cancel()
+
+	// Tools first, because the provider then constrains the answer to a command
+	// that exists and slots that were declared. The prompt below is the
+	// fallback for endpoints that cannot do it.
+	if toolsSupported(endpoint) {
+		guess, err := c.matchWithTools(timed, transcript, options, endpoint)
+		if err == nil {
+			return guess, nil
+		}
+		if !unsupportedTools(err) {
+			return CommandGuess{}, err
+		}
+		rememberToolsUnsupported(endpoint)
+	}
 
 	answer, err := c.Complete(timed, []Message{
 		{Role: "system", Content: matchSystemPrompt(options)},
@@ -169,4 +188,189 @@ func parseGuess(answer string) CommandGuess {
 		}
 	}
 	return guess
+}
+
+// -- tools ---------------------------------------------------------------
+
+// Offering the commands as tools rather than as a list in a prompt.
+//
+// Both describe the same commands, and the difference is whose job it is to
+// keep the answer well formed. A prompt asks for JSON and hopes: the reply
+// arrives wrapped in a code fence, or with a sentence in front of it, or
+// naming a command that does not exist, and parseGuess below exists entirely
+// to cope with that. A tool call is constrained by the provider against a
+// schema, so the name is always one that was offered and the arguments are
+// always the slots that were declared.
+//
+// Not every endpoint supports them. Small local servers are exactly the ones
+// most likely to refuse, and are exactly what this is usually pointed at, so
+// the prompt path stays as the fallback and an endpoint that rejects tools is
+// remembered rather than retried on every utterance -- this sits in the way of
+// a command she has already spoken.
+
+// slotDescriptions say what each known slot holds.
+//
+// The slot names come from commands.toml and are terse by design. "scene" tells
+// a model very little on its own; "the name of the OBS scene to switch to"
+// tells it what to extract and, as importantly, what not to.
+var slotDescriptions = map[string]string{
+	"scene":    "The name of the OBS scene, as she said it.",
+	"source":   "The name of the source in the current scene, as she said it.",
+	"text":     "The text to use, exactly as she said it, with nothing added.",
+	"question": "The question she asked, in full.",
+	"value":    "The value she gave, as she said it.",
+	"channel":  "The name of the channel, as she said it.",
+}
+
+// toolsFor turns the commands into tool definitions.
+func toolsFor(options []CommandOption) []Tool {
+	tools := make([]Tool, 0, len(options))
+	for _, option := range options {
+		properties := map[string]ToolProperty{}
+		for _, slot := range option.Slots {
+			description := slotDescriptions[slot]
+			if description == "" {
+				description = "The " + slot + " she named."
+			}
+			properties[slot] = ToolProperty{Type: "string", Description: description}
+		}
+
+		tools = append(tools, Tool{
+			Type: "function",
+			Function: ToolFunction{
+				Name:        option.ID,
+				Description: toolDescription(option),
+				Parameters: ToolSchema{
+					Type:                 "object",
+					Properties:           properties,
+					Required:             option.Required,
+					AdditionalProperties: false,
+				},
+			},
+		})
+	}
+	return tools
+}
+
+// toolDescription is the phrases she actually uses for a command.
+//
+// They are worth far more than the id: "chat_skip_to_now" says almost nothing,
+// while "susul chat; lompat ke chat terbaru" says exactly when to call it, in
+// her own words and her own language.
+func toolDescription(option CommandOption) string {
+	if len(option.Phrases) == 0 {
+		return "The " + option.ID + " command."
+	}
+	return "Call this when she says something like: " + strings.Join(option.Phrases, "; ")
+}
+
+// toolSystemPrompt is short because the tools carry the descriptions.
+//
+// What is left is the part no schema can express: that the transcript may be
+// misheard, and that calling nothing is a real answer.
+const toolSystemPrompt = "You turn a voice command into one tool call. The " +
+	"words come from speech recognition and may be misheard, so judge them by " +
+	"what they sound like they were meant to be rather than by exact spelling.\n\n" +
+	"Call exactly one tool, or none at all. Calling nothing is correct and " +
+	"expected whenever no tool is clearly what she meant. Never choose between " +
+	"two plausible tools: these start and stop live broadcasts, and doing the " +
+	"wrong one is far worse than doing nothing."
+
+// matchWithTools asks with the commands on the table as tools.
+func (c *Controller) matchWithTools(
+	ctx context.Context, transcript string, options []CommandOption, endpoint Endpoint,
+) (CommandGuess, error) {
+	content, calls, err := c.CompleteTools(ctx, []Message{
+		{Role: "system", Content: toolSystemPrompt},
+		{Role: "user", Content: transcript},
+	}, endpoint, MatchLimit, toolsFor(options))
+	if err != nil {
+		return CommandGuess{}, err
+	}
+
+	// More than one call is a model that has not understood the question. Doing
+	// the first of several commands she did not ask for is the failure this is
+	// most careful to avoid, so it counts as no answer.
+	if len(calls) > 1 {
+		return CommandGuess{}, nil
+	}
+	if len(calls) == 1 {
+		return guessFromCall(calls[0], options), nil
+	}
+
+	// No call. Usually a refusal, which is the answer wanted. But a server that
+	// ignored the tools entirely and answered in prose looks identical from
+	// here, so anything it said is given to the old parser before giving up.
+	return parseGuess(content), nil
+}
+
+// guessFromCall keeps only what was actually offered.
+//
+// The provider is supposed to constrain both, and mostly does. This is the
+// backstop for the ones that do not: a tool name that was never offered, or an
+// argument that is not a slot of the command it was given to, means the model
+// has invented something, and inventing is the one thing that must not reach a
+// handler.
+func guessFromCall(call ToolCall, options []CommandOption) CommandGuess {
+	for _, option := range options {
+		if option.ID != call.Name {
+			continue
+		}
+		allowed := map[string]bool{}
+		for _, slot := range option.Slots {
+			allowed[slot] = true
+		}
+		slots := map[string]string{}
+		for name, value := range call.Arguments {
+			if allowed[name] {
+				slots[name] = value
+			}
+		}
+		return CommandGuess{Command: option.ID, Slots: slots}
+	}
+	return CommandGuess{}
+}
+
+// Endpoints that turned out not to support tools.
+//
+// Keyed by base URL and model, because that pair is what decides it. Remembered
+// for the life of the process: this is in the way of a spoken command, and
+// paying a failed round trip before every fallback would add a second to every
+// command the phrases did not match.
+var toolless sync.Map
+
+func toolKey(endpoint Endpoint) string { return endpoint.BaseURL + "\x00" + endpoint.Model }
+
+func toolsSupported(endpoint Endpoint) bool {
+	_, refused := toolless.Load(toolKey(endpoint))
+	return !refused
+}
+
+func rememberToolsUnsupported(endpoint Endpoint) {
+	toolless.Store(toolKey(endpoint), true)
+}
+
+// unsupportedTools reports whether an error is the endpoint saying it does not
+// do tool calling, rather than something that would fail the same way again.
+//
+// Matched on the message because there is no status code for it: providers
+// answer 400, 404, 422 or 500 for the same complaint, and the only thing they
+// agree on is naming the field.
+func unsupportedTools(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	if !strings.Contains(message, "tool") && !strings.Contains(message, "function") {
+		return false
+	}
+	for _, phrase := range []string{
+		"not support", "unsupported", "unrecognized", "unrecognised",
+		"unknown", "unexpected", "invalid", "no such", "cannot be used",
+	} {
+		if strings.Contains(message, phrase) {
+			return true
+		}
+	}
+	return false
 }

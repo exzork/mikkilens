@@ -53,17 +53,35 @@ func commandOptions(commands *intent.Set) []llm.CommandOption {
 		phrases := make([]string, 0, len(command.Phrases))
 		slots := map[string]bool{}
 		names := []string{}
+		counts := map[string]int{}
 		for _, phrase := range command.Phrases {
 			phrases = append(phrases, phrase.Raw)
+			seen := map[string]bool{}
 			for _, name := range phrase.SlotNames {
 				if !slots[name] {
 					slots[name] = true
 					names = append(names, name)
 				}
+				if !seen[name] {
+					seen[name] = true
+					counts[name]++
+				}
 			}
 		}
+
+		// Required means every way of saying it takes that value. A command
+		// with both "stop the stream" and "stop the stream in {value}" can be
+		// called with nothing, and marking the slot required would push the
+		// model into inventing one.
+		required := []string{}
+		for _, name := range names {
+			if counts[name] == len(command.Phrases) {
+				required = append(required, name)
+			}
+		}
+
 		options = append(options, llm.CommandOption{
-			ID: id, Phrases: phrases, Slots: names,
+			ID: id, Phrases: phrases, Slots: names, Required: required,
 		})
 	}
 	return options

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -138,10 +139,16 @@ func indexOf(haystack, needle string) int {
 // and the reply comes back as a command.
 func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 	var seen struct {
-		path   string
-		model  string
-		system string
-		user   string
+		path             string
+		model            string
+		system           string
+		user             string
+		toolChoice       string
+		tools            []string
+		sceneDescription string
+		sceneRequired    []string
+		sceneClosed      bool
+		sceneHasSlot     bool
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(
@@ -154,9 +161,27 @@ func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 					Role    string `json:"role"`
 					Content string `json:"content"`
 				} `json:"messages"`
+				ToolChoice string `json:"tool_choice"`
+				Tools      []struct {
+					Type     string `json:"type"`
+					Function struct {
+						Name        string `json:"name"`
+						Description string `json:"description"`
+						Parameters  struct {
+							Type       string `json:"type"`
+							Properties map[string]struct {
+								Type        string `json:"type"`
+								Description string `json:"description"`
+							} `json:"properties"`
+							Required             []string `json:"required"`
+							AdditionalProperties bool     `json:"additionalProperties"`
+						} `json:"parameters"`
+					} `json:"function"`
+				} `json:"tools"`
 			}
 			_ = json.NewDecoder(request.Body).Decode(&body)
 			seen.model = body.Model
+			seen.toolChoice = body.ToolChoice
 			for _, message := range body.Messages {
 				switch message.Role {
 				case "system":
@@ -165,10 +190,20 @@ func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 					seen.user = message.Content
 				}
 			}
+			for _, tool := range body.Tools {
+				seen.tools = append(seen.tools, tool.Function.Name)
+				if tool.Function.Name == "switch_scene" {
+					seen.sceneDescription = tool.Function.Description
+					seen.sceneRequired = tool.Function.Parameters.Required
+					seen.sceneClosed = !tool.Function.Parameters.AdditionalProperties
+					_, seen.sceneHasSlot = tool.Function.Parameters.Properties["scene"]
+				}
+			}
 
 			writer.Header().Set("Content-Type", "application/json")
-			_, _ = writer.Write([]byte(
-				`{"choices":[{"message":{"content":"{\"command\":\"chat_pause\",\"slots\":{}}"}}]}`))
+			_, _ = writer.Write([]byte(`{"choices":[{"message":{"content":"",` +
+				`"tool_calls":[{"type":"function","function":` +
+				`{"name":"chat_pause","arguments":"{}"}}]}}]}`))
 		}))
 	defer server.Close()
 
@@ -181,6 +216,8 @@ func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 		[]CommandOption{
 			{ID: "chat_pause", Phrases: []string{"jeda chat"}},
 			{ID: "chat_resume", Phrases: []string{"lanjutkan chat"}},
+			{ID: "switch_scene", Phrases: []string{"ganti ke {scene}"},
+				Slots: []string{"scene"}, Required: []string{"scene"}},
 		})
 	if err != nil {
 		t.Fatalf("MatchCommand: %v", err)
@@ -198,8 +235,28 @@ func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 	if seen.user != "tolong jangan bacakan chatnya dulu" {
 		t.Errorf("sent transcript %q", seen.user)
 	}
-	if !contains(seen.system, "chat_pause") || !contains(seen.system, "jeda chat") {
-		t.Error("the commands and their phrases must reach the model")
+
+	// Every command reaches the model as a tool, not as a list in the prompt.
+	if len(seen.tools) != 3 {
+		t.Errorf("offered %d tools, want 3: %v", len(seen.tools), seen.tools)
+	}
+	if seen.toolChoice != "auto" {
+		t.Errorf("tool_choice is %q, want auto so it can call nothing", seen.toolChoice)
+	}
+
+	// The phrases are the description: they are what tells a model when to
+	// call this rather than the one next to it.
+	if !contains(seen.sceneDescription, "ganti ke {scene}") {
+		t.Errorf("the phrases must describe the tool, got %q", seen.sceneDescription)
+	}
+	if !seen.sceneHasSlot {
+		t.Error("a slotted command must declare its slot as an argument")
+	}
+	if len(seen.sceneRequired) != 1 || seen.sceneRequired[0] != "scene" {
+		t.Errorf("required is %v, want [scene]", seen.sceneRequired)
+	}
+	if !seen.sceneClosed {
+		t.Error("additionalProperties must be false so no argument can be invented")
 	}
 }
 
@@ -232,5 +289,190 @@ func TestDisablingTheMatcherStopsItUsingTheSharedEndpoint(t *testing.T) {
 	// The same settings must still serve everything else.
 	if !New(settings, i18n.Load("id")).Endpoint().Configured() {
 		t.Error("switching the matcher off must not switch the model off")
+	}
+}
+
+// -- tools ---------------------------------------------------------------
+
+// toolServer answers every call with a fixed body and records the last request.
+func toolServer(t *testing.T, reply func(w http.ResponseWriter), seen *[]string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			var body struct {
+				Tools []struct {
+					Function struct {
+						Name string `json:"name"`
+					} `json:"function"`
+				} `json:"tools"`
+			}
+			_ = json.NewDecoder(request.Body).Decode(&body)
+			names := []string{}
+			for _, tool := range body.Tools {
+				names = append(names, tool.Function.Name)
+			}
+			*seen = append(*seen, strings.Join(names, ","))
+			writer.Header().Set("Content-Type", "application/json")
+			reply(writer)
+		}))
+}
+
+func matcherFor(t *testing.T, url string) *Controller {
+	t.Helper()
+	settings := config.Default()
+	settings.Model = config.Model{Base: url + "/v1", Model: "test"}
+	settings.Matcher = config.Matcher{Enabled: true}
+	return New(settings, i18n.Load("id"))
+}
+
+var twoCommands = []CommandOption{
+	{ID: "chat_pause", Phrases: []string{"jeda chat"}},
+	{ID: "set_title", Phrases: []string{"ganti judul jadi {text}"},
+		Slots: []string{"text"}, Required: []string{"text"}},
+}
+
+// Calling nothing is how the model refuses, and refusing must survive intact:
+// it is the whole reason tool_choice is "auto" rather than "required".
+func TestNoToolCallMeansItRecognisedNothing(t *testing.T) {
+	var seen []string
+	server := toolServer(t, func(w http.ResponseWriter) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"I am not sure."}}]}`))
+	}, &seen)
+	defer server.Close()
+
+	guess, err := matcherFor(t, server.URL).MatchCommand(
+		context.Background(), "cuaca hari ini gimana", twoCommands)
+	if err != nil {
+		t.Fatalf("MatchCommand: %v", err)
+	}
+	if guess.Command != "" {
+		t.Errorf("command is %q, want a refusal", guess.Command)
+	}
+}
+
+// The arguments of a call become the slots.
+func TestAToolCallsArgumentsBecomeSlots(t *testing.T) {
+	var seen []string
+	server := toolServer(t, func(w http.ResponseWriter) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"tool_calls":[{"function":` +
+			`{"name":"set_title","arguments":"{\"text\":\"main valorant\"}"}}]}}]}`))
+	}, &seen)
+	defer server.Close()
+
+	guess, err := matcherFor(t, server.URL).MatchCommand(
+		context.Background(), "judulnya jadi main valorant", twoCommands)
+	if err != nil {
+		t.Fatalf("MatchCommand: %v", err)
+	}
+	if guess.Command != "set_title" {
+		t.Fatalf("command is %q", guess.Command)
+	}
+	if guess.Slots["text"] != "main valorant" {
+		t.Errorf("text slot is %q", guess.Slots["text"])
+	}
+}
+
+// A name that was never offered is the model inventing one, and inventing must
+// not reach a handler.
+func TestAToolNameThatWasNeverOfferedIsRefused(t *testing.T) {
+	var seen []string
+	server := toolServer(t, func(w http.ResponseWriter) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"tool_calls":[{"function":` +
+			`{"name":"delete_everything","arguments":"{}"}}]}}]}`))
+	}, &seen)
+	defer server.Close()
+
+	guess, err := matcherFor(t, server.URL).MatchCommand(
+		context.Background(), "apa saja", twoCommands)
+	if err != nil {
+		t.Fatalf("MatchCommand: %v", err)
+	}
+	if guess.Command != "" {
+		t.Errorf("accepted an invented tool %q", guess.Command)
+	}
+}
+
+// An argument that is not a slot of that command is dropped rather than passed
+// on, so a handler never sees something nothing declared.
+func TestArgumentsThatAreNotSlotsAreDropped(t *testing.T) {
+	var seen []string
+	server := toolServer(t, func(w http.ResponseWriter) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"tool_calls":[{"function":` +
+			`{"name":"set_title","arguments":"{\"text\":\"halo\",\"scene\":\"nope\"}"}}]}}]}`))
+	}, &seen)
+	defer server.Close()
+
+	guess, _ := matcherFor(t, server.URL).MatchCommand(
+		context.Background(), "judulnya halo", twoCommands)
+	if guess.Slots["scene"] != "" {
+		t.Errorf("kept an undeclared argument: %v", guess.Slots)
+	}
+	if guess.Slots["text"] != "halo" {
+		t.Errorf("dropped the real slot: %v", guess.Slots)
+	}
+}
+
+// Two calls means it did not understand the question. Doing the first of
+// several commands she never asked for is the exact failure to avoid.
+func TestSeveralToolCallsAreRefusedRatherThanPicked(t *testing.T) {
+	var seen []string
+	server := toolServer(t, func(w http.ResponseWriter) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"tool_calls":[` +
+			`{"function":{"name":"chat_pause","arguments":"{}"}},` +
+			`{"function":{"name":"set_title","arguments":"{\"text\":\"x\"}"}}]}}]}`))
+	}, &seen)
+	defer server.Close()
+
+	guess, _ := matcherFor(t, server.URL).MatchCommand(
+		context.Background(), "jeda chat dan ganti judul", twoCommands)
+	if guess.Command != "" {
+		t.Errorf("picked %q out of two calls", guess.Command)
+	}
+}
+
+// A server with no tool support must not cost her the command. It should fall
+// back to the prompt, and not pay the failed round trip again next time.
+func TestAServerWithoutToolSupportFallsBackToThePrompt(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			var body struct {
+				Tools []any `json:"tools"`
+			}
+			_ = json.NewDecoder(request.Body).Decode(&body)
+			calls++
+
+			writer.Header().Set("Content-Type", "application/json")
+			if len(body.Tools) > 0 {
+				writer.WriteHeader(http.StatusBadRequest)
+				_, _ = writer.Write([]byte(
+					`{"error":{"message":"Unrecognized request argument supplied: tools"}}`))
+				return
+			}
+			_, _ = writer.Write([]byte(
+				`{"choices":[{"message":{"content":"{\"command\":\"chat_pause\",\"slots\":{}}"}}]}`))
+		}))
+	defer server.Close()
+
+	client := matcherFor(t, server.URL)
+	guess, err := client.MatchCommand(context.Background(), "jangan bacakan chat", twoCommands)
+	if err != nil {
+		t.Fatalf("MatchCommand: %v", err)
+	}
+	if guess.Command != "chat_pause" {
+		t.Fatalf("command is %q, want the prompt fallback to have answered", guess.Command)
+	}
+	if calls != 2 {
+		t.Fatalf("made %d calls, want 2: one refused, one fallback", calls)
+	}
+
+	// Second time it must go straight to the prompt: this sits in the way of a
+	// command she has already spoken, and a wasted round trip is a wasted second.
+	if _, err := client.MatchCommand(
+		context.Background(), "jangan bacakan chat", twoCommands); err != nil {
+		t.Fatalf("second MatchCommand: %v", err)
+	}
+	if calls != 3 {
+		t.Errorf("made %d calls in total, want 3: the refusal must be remembered", calls)
 	}
 }
