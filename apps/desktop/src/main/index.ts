@@ -339,6 +339,10 @@ ipcMain.handle('engine:status', async () => ({
 
 ipcMain.handle('update:status', () => updates.status())
 
+ipcMain.handle('update:check', () => updates.checkNow())
+
+ipcMain.handle('app:version', () => app.getVersion())
+
 ipcMain.handle('update:install', async () => {
   await updates.install()
   return updates.status()

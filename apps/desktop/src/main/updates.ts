@@ -37,6 +37,13 @@ export interface UpdateStatus {
   readonly blocked: string
 }
 
+/** What a check she asked for turned up. */
+export interface CheckResult {
+  outcome: 'current' | 'downloading' | 'ready' | 'failed' | 'unsupported'
+  version: string
+  detail?: string
+}
+
 export class Updates {
   private ready = false
   private version = ''
@@ -110,6 +117,38 @@ export class Updates {
       clearTimeout(this.timer)
       clearInterval(this.timer)
       this.timer = null
+    }
+  }
+
+  /**
+   * Check now, because she asked, and say what came of it.
+   *
+   * Separate from the timer's own check, which is deliberately silent: a
+   * background check that finds nothing should say nothing, but a button that
+   * says nothing when pressed is indistinguishable from a broken one.
+   */
+  async checkNow(): Promise<CheckResult> {
+    if (!app.isPackaged) {
+      return { outcome: 'unsupported', version: '' }
+    }
+    if (this.ready) {
+      return { outcome: 'ready', version: this.version }
+    }
+    try {
+      const found = await autoUpdater.checkForUpdates()
+      const latest = found?.updateInfo?.version ?? ''
+      if (latest && latest !== app.getVersion()) {
+        // autoDownload is on, so this one is on its way; "ready" arrives later
+        // through the event above, and is announced then.
+        return { outcome: 'downloading', version: latest }
+      }
+      return { outcome: 'current', version: app.getVersion() }
+    } catch (error) {
+      return {
+        outcome: 'failed',
+        version: '',
+        detail: error instanceof Error ? error.message : String(error),
+      }
     }
   }
 

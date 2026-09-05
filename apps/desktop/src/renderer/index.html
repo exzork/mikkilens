@@ -15,15 +15,27 @@
     <header>
       <h1>MikkiLens</h1>
       <p class="sub" id="headline" data-i18n="app.connecting">Connecting…</p>
-      <button
-        type="button"
-        id="contrast"
-        class="ghost"
-        aria-pressed="false"
-        data-i18n="app.highContrast"
-      >
-        High contrast
-      </button>
+      <div class="header-end">
+        <span class="version" id="version"></span>
+        <button
+          type="button"
+          id="check-update"
+          class="ghost small"
+          data-i18n="app.checkUpdate"
+        >
+          Check for updates
+        </button>
+        <button
+          type="button"
+          id="contrast"
+          class="ghost"
+          aria-pressed="false"
+          data-i18n="app.highContrast"
+        >
+          High contrast
+        </button>
+      </div>
+      <p class="result" id="update-result" role="status"></p>
     </header>
 
     <!--

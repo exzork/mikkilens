@@ -40,10 +40,22 @@ const api = {
   /** Read or set whether MikkiLens opens when she signs in. */
   loginItem: (enabled?: boolean): Promise<boolean> => ipcRenderer.invoke('login-item', enabled),
 
+  /** The version of the app itself, for the header. */
+  version: (): Promise<string> => ipcRenderer.invoke('app:version'),
+
+  /** Look for a new version now, because she asked. */
+  checkForUpdate: (): Promise<CheckResult> => ipcRenderer.invoke('update:check'),
+
   /** Called once at startup with how the engine came up. */
   onEngineStatus: (listener: (status: EngineStatus) => void): void => {
     ipcRenderer.on('engine-status', (_event, status: EngineStatus) => listener(status))
   },
+}
+
+export interface CheckResult {
+  outcome: 'current' | 'downloading' | 'ready' | 'failed' | 'unsupported'
+  version: string
+  detail?: string
 }
 
 export interface EngineStatus {

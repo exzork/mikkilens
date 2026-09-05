@@ -18,7 +18,16 @@ export interface MikkiLensBridge {
   openExternal(url: string): Promise<boolean>
   readLogTail(lines: number): Promise<string>
   loginItem(enabled?: boolean): Promise<boolean>
+  version(): Promise<string>
+  checkForUpdate(): Promise<UpdateCheck>
   onEngineStatus(listener: (status: EngineStatus) => void): void
+}
+
+/** What a check she asked for turned up. */
+export interface UpdateCheck {
+  outcome: 'current' | 'downloading' | 'ready' | 'failed' | 'unsupported'
+  version: string
+  detail?: string
 }
 
 declare global {

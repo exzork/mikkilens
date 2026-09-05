@@ -190,6 +190,59 @@ for (const tab of tabs) {
   })
 }
 
+// -- version and updates ------------------------------------------------------
+
+// The version is small and out of the way, but it is the first thing anyone
+// asks for when something is wrong, and reading it off an installer filename is
+// not a thing to have to do.
+void (async () => {
+  try {
+    const version = await window.mikkilens.version()
+    element('version').textContent = t('app.version', { version })
+  } catch {
+    // A header without a version number is a cosmetic loss, not a failure.
+  }
+})()
+
+// Checking on purpose, rather than waiting for the twelve-hourly one.
+//
+// The background check is deliberately silent -- finding nothing is not worth
+// interrupting her for -- but a button that says nothing when pressed is
+// indistinguishable from a broken one, so this one always answers.
+const checkUpdateButton = element<HTMLButtonElement>('check-update')
+checkUpdateButton.addEventListener('click', () => {
+  void (async () => {
+    const say = (message: string) => {
+      element('update-result').textContent = message
+    }
+    checkUpdateButton.disabled = true
+    say(t('app.checking'))
+    try {
+      const result = await window.mikkilens.checkForUpdate()
+      switch (result.outcome) {
+        case 'current':
+          say(t('app.upToDate'))
+          break
+        case 'downloading':
+          say(t('app.updateDownloading', { version: result.version }))
+          break
+        case 'ready':
+          say(t('app.updateReady', { version: result.version }))
+          break
+        case 'unsupported':
+          say(t('app.updateFromSource'))
+          break
+        default:
+          say(t('app.updateFailed', { reason: result.detail ?? '' }))
+      }
+    } catch (error) {
+      say(t('app.updateFailed', { reason: String(error) }))
+    } finally {
+      checkUpdateButton.disabled = false
+    }
+  })()
+})
+
 // -- high contrast ------------------------------------------------------------
 
 const contrastButton = element<HTMLButtonElement>('contrast')
@@ -1122,6 +1175,46 @@ const modifierCodes = new Set([
   'MetaRight',
 ])
 
+/**
+ * The engine's name for a key that arrived without a physical code.
+ *
+ * A Stream Deck, a mouse macro, AutoHotkey and most macro software do not press
+ * a key -- they inject one with SendInput, often with no scancode attached. The
+ * browser then reports an empty code and only a key, and matching on the code
+ * alone rejects the very devices this field exists to capture.
+ *
+ * Only the shapes that are unambiguous: a single letter or digit, or a function
+ * key. Anything else is left to be refused with a message.
+ */
+function keyNameFromKey(key: string): string | null {
+  if (/^[a-zA-Z]$/.test(key)) {
+    return key.toLowerCase()
+  }
+  if (/^[0-9]$/.test(key)) {
+    return key
+  }
+  if (/^F([1-9]|1[0-9]|2[0-4])$/.test(key)) {
+    return key.toLowerCase()
+  }
+  const named: Record<string, string> = {
+    ' ': 'space',
+    Spacebar: 'space',
+    Enter: 'enter',
+    Tab: 'tab',
+    Insert: 'insert',
+    Delete: 'delete',
+    Home: 'home',
+    End: 'end',
+    PageUp: 'page_up',
+    PageDown: 'page_down',
+    ArrowUp: 'up',
+    ArrowDown: 'down',
+    ArrowLeft: 'left',
+    ArrowRight: 'right',
+  }
+  return named[key] ?? null
+}
+
 /** The engine's name for one physical key, or null if it has no name there. */
 function keyName(code: string): string | null {
   if (/^Key[A-Z]$/.test(code)) {
@@ -1181,6 +1274,7 @@ function startHotkeyCapture(): void {
   // Capture phase, so the keys land here rather than in the page: a
   // combination the window itself would act on has to be recordable too.
   window.addEventListener('keydown', onHotkeyDown, true)
+  window.addEventListener('mousedown', onHotkeyMouse, true)
   window.addEventListener('keyup', onHotkeyUp, true)
   hotkeyField.addEventListener('blur', cancelHotkeyCapture)
 }
@@ -1188,6 +1282,7 @@ function startHotkeyCapture(): void {
 function endHotkeyCapture(): void {
   window.removeEventListener('keydown', onHotkeyDown, true)
   window.removeEventListener('keyup', onHotkeyUp, true)
+  window.removeEventListener('mousedown', onHotkeyMouse, true)
   hotkeyField.removeEventListener('blur', cancelHotkeyCapture)
   hotkeyField.classList.remove('capturing')
   hotkeyField.placeholder = ''
@@ -1214,6 +1309,32 @@ function finishHotkeyCapture(combination: string): void {
   announce(said)
 }
 
+/**
+ * A mouse button, which cannot be bound and has to say so.
+ *
+ * Windows registers global hotkeys through RegisterHotKey, and that is a
+ * keyboard API: there is no mouse button to give it. Pressing one here used to
+ * do nothing whatsoever, which is indistinguishable from a field that has
+ * stopped working -- and a side button on a gaming mouse is exactly the thing
+ * somebody would try first.
+ *
+ * The way through is the mouse's own software, which every one of them has:
+ * point the button at a key combination and record that instead. So this says
+ * so rather than ignoring the press.
+ *
+ * The left button is left alone: it is how she reaches the Cancel button.
+ */
+function onHotkeyMouse(event: MouseEvent): void {
+  if (event.button === 0) {
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  const advice = t('language.hotkeyMouseButton', { example: '<ctrl>+<alt>+<f13>' })
+  hotkeyNote(advice)
+  announce(advice)
+}
+
 function onHotkeyDown(event: KeyboardEvent): void {
   event.preventDefault()
   event.stopPropagation()
@@ -1229,9 +1350,12 @@ function onHotkeyDown(event: KeyboardEvent): void {
     return
   }
 
-  const name = keyName(event.code)
+  // The code first, because it is the physical key and survives a different
+  // keyboard layout. The key second, for everything injected rather than
+  // pressed -- which is every macro device worth binding.
+  const name = keyName(event.code) ?? keyNameFromKey(event.key)
   if (name === null) {
-    hotkeyNote(t('language.hotkeyUnusableKey', { key: event.key }))
+    hotkeyNote(t('language.hotkeyUnusableKey', { key: event.key || event.code }))
     return
   }
 

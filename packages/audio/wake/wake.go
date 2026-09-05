@@ -58,6 +58,17 @@ type Detector struct {
 	enabled   bool
 	lastScore float64
 
+	// Kept apart from enabled on purpose. Two different things switch the
+	// detector off -- a command being recorded, and MikkiLens talking -- and
+	// they overlap: she is spoken to, and answers before the sentence has
+	// finished. One flag would let whichever finished first switch listening
+	// back on underneath the other.
+	speaking bool
+	// quietUntil holds it off a moment longer than the speech itself. The
+	// pipeline scores the last 1.28 seconds of audio, so the tail of her own
+	// name is still in there when the speaker goes quiet.
+	quietUntil time.Time
+
 	// Scoring happens on this channel's goroutine rather than on the audio
 	// thread. Six milliseconds of inference inside the capture callback is six
 	// milliseconds the microphone is not being drained, and a late drain is a
@@ -162,6 +173,13 @@ func (d *Detector) Close() {
 	}
 }
 
+// speechTail is how long the detector stays off after the speakers go quiet.
+//
+// The scoring window is 1.28 seconds wide, so the moment playback ends the last
+// second of it is still MikkiLens talking. Long enough to cover that and the
+// room's own echo of it; short enough that she can answer straight back.
+const speechTail = 1500 * time.Millisecond
+
 // Pause stops listening, which is what happens while a command is being
 // recorded: the trigger word must not fire on the command itself.
 func (d *Detector) Pause() {
@@ -189,10 +207,44 @@ func (d *Detector) Enabled() bool {
 	return d.enabled
 }
 
+// SetSpeaking switches the detector off while MikkiLens is talking, and back
+// on a moment after it stops.
+//
+// Her name is the wake word, so anything that says it -- reading a command
+// back, answering a question, saying "MikkiLens is listening" -- comes out of
+// the speakers and straight back into the microphone, and the detector cannot
+// tell that voice from hers. Nothing is gained by scoring MikkiLens against
+// its own name.
+//
+// The buffer and the pipeline are cleared on the way out rather than the way
+// in, because what has to be thrown away is the audio recorded during the
+// speech, not before it.
+func (d *Detector) SetSpeaking(speaking bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if speaking {
+		d.speaking = true
+		return
+	}
+	d.speaking = false
+	d.quietUntil = time.Now().Add(speechTail)
+	d.buffer = d.buffer[:0]
+	if d.pipeline != nil {
+		d.pipeline.reset()
+	}
+}
+
+// listening reports whether audio should be scored at all. Callers hold the
+// lock.
+func (d *Detector) listening() bool {
+	return d.enabled && !d.speaking && time.Now().After(d.quietUntil)
+}
+
 // Feed accepts one frame of 16 kHz mono audio from the microphone stream.
 func (d *Detector) Feed(frame []float32) {
 	d.mu.Lock()
-	if !d.enabled || d.pipeline == nil {
+	if !d.listening() || d.pipeline == nil {
 		d.mu.Unlock()
 		return
 	}

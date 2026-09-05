@@ -105,6 +105,26 @@ type Bus struct {
 	locale     *i18n.Locale
 	player     Player
 	synthesize Synthesizer
+
+	// onSpeaking is told when the speakers start and stop carrying speech, so
+	// the wake word can be switched off while MikkiLens is talking: her name is
+	// the trigger, and it comes back through the microphone like anyone else
+	// saying it.
+	onSpeaking func(bool)
+}
+
+// OnSpeaking installs the hook. Nil removes it.
+func (b *Bus) OnSpeaking(hook func(bool)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.onSpeaking = hook
+}
+
+// speakingHook reads it back under the lock.
+func (b *Bus) speakingHook() func(bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.onSpeaking
 }
 
 // New builds a bus around one output device.
@@ -602,6 +622,14 @@ func (b *Bus) speak(utterance Utterance) bool {
 		if held, _ := b.ChatHeld(); held {
 			return false
 		}
+	}
+
+	// Announced around the playback itself rather than around the whole
+	// utterance: synthesis happens first and can take a second, and the
+	// microphone has nothing to fear from it.
+	if hook := b.speakingHook(); hook != nil {
+		hook(true)
+		defer hook(false)
 	}
 
 	completed, err := b.player.Play(audio)

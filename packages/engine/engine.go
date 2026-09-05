@@ -115,6 +115,15 @@ func New(settings config.Config, locale *i18n.Locale) *Engine {
 		time.Duration(settings.Speech.ConfirmTimeoutS*float64(time.Second)))
 
 	engine.registerBuiltinHandlers()
+
+	// Switch the wake word off while MikkiLens is talking. Looked up each time
+	// rather than captured, because changing the wake word or its threshold
+	// swaps the detector underneath this.
+	bus.OnSpeaking(func(speaking bool) {
+		if detector := engine.Wake(); detector != nil {
+			detector.SetSpeaking(speaking)
+		}
+	})
 	return engine
 }
 
