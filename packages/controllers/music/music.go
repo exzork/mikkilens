@@ -86,10 +86,18 @@ const Limit = 5
 const timeout = 12 * time.Second
 
 // endpoint, clientName and clientVersion are how the web player identifies
-// itself. The key in the query string is the public one music.youtube.com
-// ships in its own page source; it identifies the client, and grants nothing.
+// itself.
+//
+// No key in the query string, deliberately. The web player sends one -- the
+// public InnerTube key it ships in its own page source, which identifies the
+// client and grants nothing -- and the endpoint answers the same either way,
+// so carrying it bought nothing and cost something: it is the exact shape of a
+// Google API key, so every secret scanner that ever looks at this repository
+// reports a credential, and whoever reads the alert has to work out that it is
+// not one. A false alarm that has to be re-dismissed for ever is worse than no
+// alarm, because it is how a real one gets waved through.
 const (
-	endpoint      = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false&key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30"
+	endpoint      = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
 	clientName    = "WEB_REMIX"
 	clientVersion = "1.20240101.01.00"
 )

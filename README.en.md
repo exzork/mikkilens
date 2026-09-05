@@ -270,7 +270,13 @@ subscription there, and a second player would be a second thing to control by
 voice for no gain.
 
 The search talks to the InnerTube endpoint `music.youtube.com` itself calls,
-with the client name it identifies itself by. Not the YouTube Data API, because
+with the client name it identifies itself by, and deliberately without the
+`key=` the web player sends. That key is public -- it is in the page source of
+music.youtube.com, it identifies the client and grants nothing -- and the
+endpoint answers the same with or without it, so carrying it bought nothing and
+cost something: it has the exact shape of a Google API key, so every secret
+scanner that looks at this repository reports a credential that is not one.
+Don't add it back. Not the YouTube Data API, because
 `search.list` costs 100 units of a 10,000 unit day -- twenty searches during a
 stream would be a fifth of the allowance chat and the viewer count are also
 drawing on, and the failure would land on chat rather than on the search that
