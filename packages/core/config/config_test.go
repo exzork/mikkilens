@@ -165,7 +165,7 @@ func TestTheModelIsNotConsideredConfiguredWithoutBothHalves(t *testing.T) {
 
 // The sections that used to hold endpoints of their own are gone. A config
 // still carrying them must start rather than fail, because the file on her
-// machine was written by the previous version and she cannot see the warning.
+// machine was written by the previous version and the warning goes unheard.
 func TestAConfigFromTheOlderLayoutStillStarts(t *testing.T) {
 	settings := config.FromMap(map[string]any{
 		"vision": map[string]any{"base_url": "https://old/v1", "model": "old", "max_edge": 800},

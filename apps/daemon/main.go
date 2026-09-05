@@ -164,8 +164,8 @@ func configureLogging(verbose bool) {
 
 // load reads the configuration.
 //
-// A broken config is spoken about rather than only printed: that is exactly
-// the moment she cannot read the screen to find out what went wrong.
+// A broken config is spoken about rather than only printed: a message that
+// only reaches the terminal reaches nobody who is working by ear.
 func load(languageOverride string) (config.Config, *i18n.Locale, error) {
 	settings, err := config.Load("")
 	if err != nil {

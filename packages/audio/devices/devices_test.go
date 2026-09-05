@@ -9,8 +9,8 @@ import (
 
 // These talk to the real sound card. They are written to report what they
 // found rather than to demand a particular machine, because the thing worth
-// catching is "enumeration returned nothing" -- which is what a blind user
-// experiences as MikkiLens having no voice at all.
+// catching is "enumeration returned nothing" -- which reaches her as MikkiLens
+// having no voice at all.
 
 func TestEnumeratesRealDevices(t *testing.T) {
 	if _, err := devices.List(devices.Output); err != nil {

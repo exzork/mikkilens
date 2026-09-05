@@ -2,7 +2,7 @@
   "name": "mikkilens",
   "version": "0.2.0",
   "private": true,
-  "description": "Voice-operated YouTube stream control for a blind or low-vision VTuber",
+  "description": "Hands-free, voice-operated YouTube stream control for VTubers",
   "workspaces": [
     "apps/desktop"
   ],

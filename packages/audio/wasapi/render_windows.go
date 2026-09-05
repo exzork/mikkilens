@@ -18,8 +18,8 @@ type Interrupt interface{ Stopped() bool }
 // Bluetooth headphones drop the audio link when nothing is playing and take a
 // few hundred milliseconds to bring it back up. Anything sent during that
 // window is simply lost -- and losing the first half second of a sentence
-// loses the word that carries it, which for someone who cannot see the screen
-// is the whole message. The tail of a sound was already waited out for the
+// loses the word that carries it, which when the answer only ever arrives by
+// ear is the whole message. The tail of a sound was already waited out for the
 // same reason; this is the other end of it.
 //
 // The fix is to send silence first and let that be what the wake-up eats.

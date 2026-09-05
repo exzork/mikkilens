@@ -56,7 +56,7 @@ phrases = ["list my channels", "what channels do i have", "name my channels"]
 
 # "mute X" and "unmute X" differ by two letters, which speech recognition can
 # and does confuse -- and getting it backwards on a live stream is exactly the
-# mistake you cannot see happen. So the alternates below are deliberately
+# mistake that gives you nothing to notice. So the alternates below are deliberately
 # distinct words rather than near-identical ones. (Indonesian avoids this
 # naturally: "matikan" and "nyalakan" share almost nothing.)
 [commands.mute_mic]

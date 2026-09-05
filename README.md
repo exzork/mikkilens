@@ -1,6 +1,6 @@
 # MikkiLens
 
-Kendali siaran YouTube lewat suara, untuk streamer tunanetra atau low vision.
+Kendali siaran YouTube lewat suara, sepenuhnya bebas tangan.
 
 Semua yang MikkiLens lakukan, dia ucapkan. Setiap perintah, setiap hasil,
 setiap error, dan setiap perubahan keadaan dibacakan. Kamu tidak perlu melihat
@@ -451,7 +451,7 @@ yang lain — berguna saat sedang sibuk.
 
 ## English notes
 
-MikkiLens is a local Windows app that gives a blind or low-vision VTuber voice
+MikkiLens is a local Windows app that gives a VTuber hands-free voice
 control of OBS, YouTube broadcast metadata, live chat read-aloud, and screen
 description through a vision-capable model.
 
@@ -532,7 +532,7 @@ something runnable, then the model (488 MB) so it can hear, then the wake word
 files, and only then — and only where there is a driver to run it — the CUDA
 build (670 MB), into `data/models/whisper` where `chooseBuild` picks it up with
 no restart. Every stage is announced through the speech bus rather than shown,
-because the person waiting cannot see a progress bar; downloads resume rather
+because the person waiting is listening rather than watching a bar; downloads resume rather
 than restart, and a file is renamed into place only once it is whole, so an
 interrupted download is never mistaken on the next start for a model that can
 be loaded.
@@ -632,12 +632,12 @@ is discarded on exit -- so it reports the new version and offers the download
 instead. Publishing a release is `npm run release` with `GH_TOKEN` set, which
 builds and uploads the installer plus the `latest.yml` the updater reads.
 
-### Accessibility
+### Built to be used by ear
 
-Both halves are built for a screen reader first. The settings app uses the
-ARIA tab pattern with arrow-key navigation, announces every outcome into a
-live region, keeps a visible focus ring, and carries a word as well as a
-colour on every status badge. `<html lang>` follows the configured language,
+Both halves are built to be operated without looking at them. The settings
+app uses the ARIA tab pattern with arrow-key navigation, announces every
+outcome into a live region, keeps a visible focus ring, and carries a word as
+well as a colour on every status badge. `<html lang>` follows the configured language,
 because Indonesian read out by an English voice is unusable.
 
 The window is translated too, and follows the language the engine speaks. Its

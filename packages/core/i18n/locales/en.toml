@@ -15,7 +15,7 @@ restarted = "MikkiLens restarted."
 ui_ready = "Settings page open at {url}"
 
 [assets]
-# The first-run download. She cannot see a progress bar, so the size is said
+# The first-run download. A progress bar says nothing out loud, so the size is said
 # up front -- "half a gigabyte" is the number that decides whether now is a
 # good moment, and it is useless after the download has already started.
 starting = "There are some things to download before MikkiLens can hear you, about {size}. This happens once. You can carry on using everything else while it runs."

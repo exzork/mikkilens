@@ -341,7 +341,7 @@ func (c *Controller) Authorize(ctx context.Context, openBrowser func(url string)
 	// channel is the whole point of doing this twice. Without it Google reuses
 	// whoever is already signed in to that browser and hands back a token for
 	// the channel she has connected already -- a sign-in that appears to work,
-	// costs her a trip through a browser she cannot see, and leaves her with
+	// costs her a trip out through a browser to get there, and leaves her with
 	// two names for one channel.
 	url := settings.AuthCodeURL(state, oauth2.AccessTypeOffline,
 		oauth2.SetAuthURLParam("prompt", "consent select_account"))

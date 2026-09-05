@@ -9,7 +9,7 @@ import (
 
 // Being asked a question and then having the microphone switched off is the
 // worst shape this can take: she answers into nothing, hears nothing back, and
-// cannot see why. These pin the pieces the engine relies on to keep listening
+// is told nothing about why. These pin the pieces the engine relies on to keep listening
 // through a confirmation.
 
 // ask puts a real confirming command into its pending state.

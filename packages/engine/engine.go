@@ -345,8 +345,8 @@ func (e *Engine) Start(ctx context.Context) {
 // recognition, and recognition without a model is not something to start and
 // retry later -- it is the whole application, unable to hear.
 //
-// What it is emphatically not is silent. She cannot see a progress bar, so
-// every stage is announced as it begins, and the one that matters most --
+// What it is emphatically not is silent. A progress bar says nothing out
+// loud, so every stage is announced as it begins, and the one that matters most --
 // being able to hear at all -- is announced again when it lands, before the
 // two large optional downloads that follow it.
 func (e *Engine) installAssets(ctx context.Context) {
@@ -427,7 +427,7 @@ func (e *Engine) announceStage(progress assets.Progress, wanted assets.Wanted) {
 // A switch rather than "assets.stage_" + stage, so all four keys are literals
 // inside a T() call. That is what the locale test scans for, and a key it
 // cannot see is a key that goes missing in one language and is discovered
-// aloud, mid-download, by the one person who cannot read the fallback.
+// aloud, mid-download, by the one person the fallback was never meant for.
 func (e *Engine) stageName(stage assets.Stage) string {
 	locale := e.Locale()
 	switch stage {
@@ -898,7 +898,7 @@ func (e *Engine) OnYouTubeConnected(ctx context.Context) {
 // restart.
 //
 // Telling someone to restart the application after saving a setting is a bad
-// answer generally, and a worse one here: she cannot see whether the restart
+// answer generally, and a worse one here: nothing says whether the restart
 // worked, so the next thing she hears has to be the answer either way.
 //
 // A live sign-in is left alone. Rebuilding it would drop the chat connection

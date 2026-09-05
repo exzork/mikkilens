@@ -173,8 +173,9 @@ func (c *Controller) DescribeImage(ctx context.Context, question string, jpegByt
 	encoded := base64.StdEncoding.EncodeToString(jpegBytes)
 
 	answer, err := c.llm.Complete(ctx, []llm.Message{
-		{Role: "system", Content: "You describe a computer screen for a blind live " +
-			"streamer. Lead with the single most important thing, then add detail. " +
+		{Role: "system", Content: "You describe a computer screen out loud to a live " +
+			"streamer who is not looking at it. Lead with the single most " +
+			"important thing, then add detail. " +
 			"Mention errors, dialogs and unread counts. If asked a specific question, " +
 			"answer only that. " + c.llm.LanguageInstruction()},
 		{Role: "user", Content: []any{

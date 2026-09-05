@@ -66,8 +66,8 @@ func initRuntime() error {
 // The common failure is not a corrupt file but the wrong version: the engine is
 // compiled against one ORT C API, and an older library answers a different one
 // and refuses with "Error setting ORT API base". Said as-is that names neither
-// the file at fault nor anything to do about it, which for someone who cannot
-// glance at a folder is the difference between a fixable problem and a wake
+// the file at fault nor anything to do about it, which when the message only
+// ever arrives by ear is the difference between a fixable problem and a wake
 // word that has simply stopped working.
 //
 // The file is named rather than deleted here. Removing something of hers on her

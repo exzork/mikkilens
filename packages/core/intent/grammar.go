@@ -1,10 +1,9 @@
 // Package intent turns what she said into a command.
 //
-// Matching is rule-based rather than model-based on purpose. Someone who
-// cannot see the screen has no way to check what the app thought she said, so
-// being predictable matters more than being clever: the same words always
-// produce the same command, it works offline, and it costs nothing per
-// utterance.
+// Matching is rule-based rather than model-based on purpose. Working by ear,
+// there is no way to check what the app thought she said, so being predictable
+// matters more than being clever: the same words always produce the same
+// command, it works offline, and it costs nothing per utterance.
 //
 // Speech recognition still mangles words, so matching is fuzzy rather than
 // exact, and the intended fix for a persistent mishearing is to add the

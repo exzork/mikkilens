@@ -1,7 +1,7 @@
 // Package i18n loads the strings MikkiLens speaks.
 //
-// A missing key must never produce silence: to someone who cannot see the
-// screen, silence is indistinguishable from a crash. So lookups fall back to
+// A missing key must never produce silence: when the only answer arrives by
+// ear, silence is indistinguishable from a crash. So lookups fall back to
 // English, and then to a spoken marker naming the key, which is at least
 // audible and diagnosable.
 //

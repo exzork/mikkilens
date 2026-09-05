@@ -4,8 +4,8 @@
  * The catalogue comes from the main process, which owns the files. This module
  * only decides what to do with it, and it follows the same rule the engine
  * does: a missing string is loud, never blank. A button with no label is
- * invisible to a screen reader, which is the exact failure this app exists to
- * avoid.
+ * silent when the page is read aloud, which is the exact failure this app
+ * exists to avoid.
  */
 
 export type Catalog = Record<string, string>

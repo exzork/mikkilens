@@ -11,7 +11,7 @@ import (
 	"github.com/exzork/mikkilens/packages/core/i18n"
 )
 
-// A missing key would surface to a blind user as either silence or a spoken
+// A missing key would surface as either silence or a spoken
 // placeholder in the middle of a stream, so the key set is checked
 // mechanically rather than by eye: every locale must carry the same keys, and
 // every key the code actually asks for must exist.

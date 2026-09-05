@@ -94,8 +94,8 @@ function numberFrom(id: string, fallback: number): number {
  * Sliders.
  *
  * Everything the engine calls a rate or a volume is a percentage, and typing
- * "+15%" into a box is both a spelling test and something she cannot check by
- * looking. A slider with the number beside it is one gesture, and it cannot be
+ * "+15%" into a box is both a spelling test and something that has to be read
+ * back to be checked. A slider with the number beside it is one gesture, and it cannot be
  * saved as nonsense.
  *
  * Two kinds share the treatment: a signed percentage the engine wants as a
@@ -770,7 +770,7 @@ element('save-language').addEventListener('click', async () => {
 
   // The engine takes both of these up immediately, so whether they actually
   // took is knowable now -- and a hotkey another application already owns is
-  // the one failure she cannot see from the field she just typed into.
+  // the one failure that says nothing from the field she just typed into.
   await refreshWake()
   await showHotkeyProblem()
 
@@ -1314,8 +1314,8 @@ async function refreshYouTube(): Promise<YouTubeStatus> {
 
   element('youtube-state').textContent = text
 
-  // Offering a button that cannot work is worse than offering none: she cannot
-  // see it fail, only hear nothing happen.
+  // Offering a button that cannot work is worse than offering none: pressing
+  // it just makes nothing happen, with nothing said about why.
   element<HTMLButtonElement>('connect-youtube').disabled =
     status.connected || status.has_client === false
   element<HTMLButtonElement>('disconnect-youtube').disabled = !status.connected
@@ -1475,7 +1475,7 @@ function renderChannels(): void {
       channel: channelName(channel),
     }))
     // Already there, or no sign-in to switch to: a button that cannot do
-    // anything is worse than none, because she cannot see it fail.
+    // anything is worse than none, because pressing it says nothing back.
     switchTo.disabled = channel.active || !channel.connected
     switchTo.addEventListener('click', () => switchToChannel(channel))
     buttons.append(switchTo)

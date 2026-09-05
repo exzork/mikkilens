@@ -109,7 +109,7 @@ func (c *Controller) LanguageInstruction() string {
 		name = c.locale.DisplayName()
 	}
 	return fmt.Sprintf("Answer only in %s. Keep it short and plain enough to be "+
-		"read aloud by a screen reader: no markdown, no lists, no emoji.", name)
+		"read aloud: no markdown, no lists, no emoji.", name)
 }
 
 type completionRequest struct {
@@ -203,7 +203,8 @@ func (c *Controller) SummarizeChat(ctx context.Context, messages [][2]string) (s
 	}
 
 	summary, err := c.Complete(ctx, []Message{
-		{Role: "system", Content: "You summarise a live stream chat for a blind streamer. " +
+		{Role: "system", Content: "You summarise a live stream chat for a streamer who is listening to it " +
+			"rather than reading it. " +
 			"Say what viewers are talking about, name anyone asking a direct question, " +
 			"and mention nothing else. Two or three sentences at most. " +
 			c.LanguageInstruction()},

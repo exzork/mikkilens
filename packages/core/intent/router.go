@@ -15,7 +15,7 @@ import (
 //
 // First, every outcome is spoken -- matched, unmatched, ambiguous, refused or
 // failed -- because an unacknowledged command is indistinguishable from a
-// broken app when you cannot see the screen.
+// broken app when the only answer you get is a spoken one.
 //
 // Second, anything that would end a stream or change what viewers see asks
 // first, and the answer is matched against the locale's own yes and no words

@@ -73,8 +73,8 @@ func (i *Installer) Cancel() {
 // when it finishes, and onProgress is called about twice a second in between;
 // both run on a background goroutine. The engine turns the first into speech
 // and the second into a number on the status page, because a download this
-// size with no feedback is indistinguishable from one that has died -- and she
-// cannot see a progress bar.
+// size with no feedback is indistinguishable from one that has died, and a
+// progress bar says nothing to somebody working by ear.
 func (i *Installer) Install(ctx context.Context, wanted Wanted, modelSize string,
 	onStage func(Progress), onProgress func(Progress)) error {
 

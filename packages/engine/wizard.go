@@ -18,8 +18,8 @@ import (
 
 // The wizard says everything it does.
 //
-// A device picker in particular is useless to someone who cannot see it, so
-// instead of showing a list it plays a tone through each device in turn and
+// A device picker in particular is useless read out as a list, so instead of
+// showing one it plays a tone through each device in turn and
 // names it: she chooses by hearing which one came out of her headphones.
 // Numbers are typed rather than spoken because speech recognition is not up
 // yet at this point in startup.

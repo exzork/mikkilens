@@ -1,5 +1,5 @@
 /*
-  The page is built for a screen reader first and eyes second, so the visual
+  The page is built to be used by ear first and by eye second, so the visual
   design stays out of the way: large text, strong contrast, visible focus, and
   no colour that carries meaning on its own.
 
@@ -29,7 +29,7 @@
 }
 
 /* High contrast is a real setting, not a filter: everything gets pure black
-   and white with heavier borders, which is what low vision usually wants. */
+   and white with heavier borders, for anyone who wants more contrast. */
 html[data-contrast='high'] {
   --bg: #000;
   --panel: #000;
@@ -428,8 +428,8 @@ fieldset p.buttons,
 }
 
 /* The level bars. Colour is never the message here -- the width is, and the
-   percentage beside it says the same thing again in words for anyone who
-   cannot see either. */
+   percentage beside it says the same thing again in words, for anyone not
+   watching it. */
 .level {
   position: relative;
   flex: 1 1 7rem;
@@ -544,7 +544,7 @@ input.capturing {
 }
 
 /* The badge carries a word as well as a colour, so it still reads correctly
-   in high contrast and to anyone who cannot tell the colours apart. */
+   in high contrast and anywhere the colour itself does not come across. */
 .badge {
   border: 1px solid currentColor;
   border-radius: 999px;
