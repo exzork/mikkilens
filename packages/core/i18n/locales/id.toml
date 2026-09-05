@@ -8,6 +8,9 @@ code = "id"
 voice = "id-ID-GadisNeural"
 yes = ["ya", "iya", "oke", "ok", "benar", "betul", "lanjut"]
 no = ["tidak", "ga", "gak", "nggak", "enggak", "batal", "jangan"]
+# Urutan dalam daftar yang dibacakan. Pengenalan suara menulis "dua" sesering
+# ia menulis "2", jadi "putar nomor dua" harus mengerti keduanya.
+numbers = ["satu", "dua", "tiga", "empat", "lima"]
 
 [app]
 ready = "MikkiLens siap."
@@ -38,6 +41,7 @@ mic_live = "Mikrofon menyala."
 viewers = "Penonton {count} orang."
 chat_backlog = "Ada {count} chat yang belum dibacakan."
 chat_empty = "Tidak ada chat yang tertunda."
+chat_muted = "Chat sedang dibisukan."
 summary = "{live} {scene} {mic} {viewers} {chat}"
 
 [obs]
@@ -77,6 +81,10 @@ paused = "Pembacaan chat dijeda."
 resumed = "Pembacaan chat dilanjutkan."
 already_paused = "Chat memang sedang dijeda."
 already_playing = "Chat memang sedang dibacakan."
+# Tombol bisu. Selama menyala tidak ada yang dibuang -- itu bagian yang perlu
+# dikatakan: yang berhenti pembacaannya, bukan penerimaannya.
+muted = "Chat dibisukan."
+unmuted = "Chat dibunyikan lagi."
 skipped = "Melompati {count} chat. Sekarang sudah paling baru."
 behind = "Kamu tertinggal {count} chat, sekitar {minutes} menit."
 up_to_date = "Chat sudah paling baru."
@@ -120,6 +128,28 @@ now = "Sekarang jam {time}."
 nothing_asked = "Saya tidak menangkap apa yang harus dicari."
 failed = "Saya tidak bisa menghubungi pencarian sekarang."
 nothing_found = "Saya tidak menemukan apa pun tentang {question}."
+
+[music]
+# Mencari lagu lalu memutarnya. Judulnya diketik, bukan diucapkan, karena nama
+# lagu dan penyanyi adalah hal yang paling sering salah didengar; {key} adalah
+# tombol yang membuka kotak ketiknya.
+nothing_asked = "Sebutkan judulnya sesudah perintahnya, atau tekan {key} untuk mengetiknya."
+# Kotaknya sudah terbuka dan menunggu. Dikatakan, bukan ditampilkan: kotak ini
+# justru satu-satunya yang tidak perlu dilihat.
+type_it = "Ketik judul lagunya, lalu tekan Enter."
+searching = "Mencari {query}."
+failed = "Saya tidak bisa menghubungi YouTube Music sekarang."
+nothing_found = "Saya tidak menemukan apa pun untuk {query}."
+found = "Ada {count} lagu."
+# Satu hasil. Dibacakan satu per satu, jadi tiap hasil satu kalimat utuh.
+result = "{number}. {title}, {artist}."
+result_timed = "{number}. {title}, {artist}, {minutes} menit {seconds}."
+pick = "Sebutkan putar nomor satu sampai {count}."
+playing = "Memutar {title} dari {artist}."
+nothing_to_play = "Belum ada hasil pencarian untuk diputar. Cari lagunya dulu."
+no_such_result = "Tidak ada nomor {number}. Hasilnya ada {count}."
+not_a_number = "Saya tidak menangkap nomornya: {number}."
+no_browser = "Saya tidak bisa membuka peramban untuk memutarnya."
 
 [vision]
 looking = "Sedang melihat layar kamu."

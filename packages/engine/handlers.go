@@ -255,6 +255,12 @@ func (e *Engine) status(map[string]string) error {
 		} else {
 			parts = append(parts, locale.T("status.chat_empty"))
 		}
+		// Said last, and only when it is on. A muted chat with a backlog
+		// behind it sounds exactly like a quiet one, and this is the sentence
+		// that tells the two apart.
+		if e.bus.ChatMuted() {
+			parts = append(parts, locale.T("status.chat_muted"))
+		}
 	}
 
 	e.bus.Say(strings.Join(parts, " "), feedback.Result)
@@ -366,6 +372,8 @@ func chatHandlers(e *Engine) map[string]intent.Handler {
 		"chat_skip_to_now": func(map[string]string) error { return e.withReaderInt((*chat.Reader).SkipToNow) },
 		"chat_behind":      func(map[string]string) error { return e.withReaderInt((*chat.Reader).ReportBacklog) },
 		"chat_summarize":   e.summarizeChat,
+		"chat_mute":        func(map[string]string) error { e.SetChatMute(true); return nil },
+		"chat_unmute":      func(map[string]string) error { e.SetChatMute(false); return nil },
 	}
 }
 

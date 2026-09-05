@@ -55,6 +55,11 @@ type App struct {
 	ChatReading ChatReading `json:"chat_reading"`
 	ChatBacklog int         `json:"chat_backlog"`
 
+	// ChatMuted is the mute key, not the reader. Muted chat is still being
+	// read -- collected, counted, queued -- and simply not spoken, so this and
+	// ChatReading are separately true and both worth showing.
+	ChatMuted bool `json:"chat_muted"`
+
 	Listening      bool    `json:"listening"`
 	LastTranscript string  `json:"last_transcript"`
 	LastCommand    string  `json:"last_command"`

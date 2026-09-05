@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MikkiLens</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+      /*
+       * One field and a list. Everything that matters here is said out loud by
+       * the engine, so this page is for whoever is helping her and for the
+       * screen reader -- not a thing she has to look at to use.
+       */
+      body {
+        padding: 18px 20px;
+      }
+      .box {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        height: calc(100vh - 36px);
+      }
+      #query {
+        font-size: 1.25rem;
+        padding: 12px 14px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      #results {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        overflow-y: auto;
+        flex: 1;
+      }
+      #results button {
+        width: 100%;
+        text-align: left;
+        display: flex;
+        gap: 10px;
+        align-items: baseline;
+        padding: 10px 12px;
+      }
+      .number {
+        font-weight: 700;
+        min-width: 1.4em;
+      }
+      .song {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .byline {
+        opacity: 0.75;
+        font-size: 0.9em;
+      }
+      .hint {
+        opacity: 0.75;
+        font-size: 0.9em;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="box">
+      <h1 id="title" class="visually-hidden">MikkiLens</h1>
+
+      <label for="query" id="prompt">Type a song</label>
+      <input
+        id="query"
+        type="text"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        autofocus
+      />
+
+      <p id="status" role="status" aria-live="polite"></p>
+
+      <ol id="results" aria-labelledby="resultsLabel"></ol>
+      <h2 id="resultsLabel" class="visually-hidden">Results</h2>
+
+      <p class="hint" id="hint"></p>
+    </main>
+
+    <script type="module" src="music.js"></script>
+  </body>
+</html>

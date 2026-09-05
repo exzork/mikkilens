@@ -291,6 +291,11 @@ const statusLabels: Array<[keyof Snapshot & string, string]> = [
   ['viewer_count', 'label.viewerCount'],
   ['chat_reading', 'label.chatReading'],
   ['chat_backlog', 'label.chatBacklog'],
+  // Worth its own row rather than folding into "chat reading": muted chat is
+  // still being read -- collected, counted, queued -- and simply not spoken, so
+  // the two are separately true and a backlog behind a mute is the state most
+  // easily mistaken for chat just being quiet.
+  ['chat_muted', 'label.chatMuted'],
   ['last_transcript', 'label.lastTranscript'],
   ['last_command', 'label.lastCommand'],
   ['installing', 'label.installing'],

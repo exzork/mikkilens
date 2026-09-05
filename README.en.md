@@ -37,7 +37,8 @@ packages/
   audio/        devices, earcons, text to speech, capture, recognition,
                 wake word, global hotkey, and the first-run asset downloads
   controllers/  OBS, YouTube, the OpenAI-compatible client, screen description,
-                and the Tako and Trakteer donation overlays
+                web and YouTube Music search, and the Tako and Trakteer
+                donation overlays
   chat/         live chat ingestion and the reader cursor
   engine/       the running application: wiring, handlers, the setup wizard
   httpapi/      the local API the desktop app talks to
@@ -143,6 +144,11 @@ AutoHotkey. Each binding gets its own `RegisterHotKey` watcher, so a
 combination another application already owns fails alone and takes none of the
 others with it, and says so.
 
+Two keys are their own thing rather than bindings, because both have to work
+when nothing else does. `[mute]` silences the chat being read aloud, and
+`[music]` opens the box she types a song name into -- the second watched by the
+desktop app rather than by the engine, since what it opens is a window.
+
 For devices that can only launch a program there is `mikkilensd do <command>`,
 which posts to `POST /api/command` on the running engine rather than starting a
 second one -- two engines would fight over the microphone and the hotkey, and
@@ -240,6 +246,87 @@ POST, not a GET -- the GET form answers with a challenge page containing no
 results, and the difference is silent. When the markup changes one day this
 returns nothing rather than nonsense, and nothing is a state the caller already
 handles.
+
+## Music
+
+`search_music` is the one command whose input is typed rather than spoken, and
+that is a decision about accuracy rather than a concession. Recognition is
+tuned for short sentences in her language; song and artist names are neither.
+They go through a speech model as approximately anything, and the failure is
+not a loud one -- five wrong songs, with no way to tell whether she was
+misheard or the search was. She types perfectly without looking, which makes
+the keyboard the accurate instrument here and the microphone the compromise.
+
+So the desktop app owns a small always-on-top window with one text field in it,
+opened by `[music] combination` or by saying "putar lagu" with nothing after
+it. Everything after the typing is spoken: `packages/controllers/music`
+searches, and the engine reads the five results back **one utterance each** --
+separately queued, so they are read with a breath between them, an error
+preempts at the next gap rather than after the whole list, and being cut off
+loses the rest of the list rather than the whole of it. Then a number, pressed
+in the window or said out loud, and it opens in YouTube Music in her browser.
+MikkiLens grows no player of its own: she has an account, a history and a
+subscription there, and a second player would be a second thing to control by
+voice for no gain.
+
+The search talks to the InnerTube endpoint `music.youtube.com` itself calls,
+with the client name it identifies itself by. Not the YouTube Data API, because
+`search.list` costs 100 units of a 10,000 unit day -- twenty searches during a
+stream would be a fifth of the allowance chat and the viewer count are also
+drawing on, and the failure would land on chat rather than on the search that
+caused it. Same trade as the web search: a shape observed rather than promised,
+written to come back empty rather than with nonsense.
+
+Two things about the results are not cosmetic. The running time comes back as
+`6:10` in English and `6.10` in Indonesian, so it is taken apart into minutes
+and seconds and said as a running time -- relayed as written, a voice reads the
+Indonesian form as "enam koma satu nol". And the ranking is the answer's own
+order, so parsing walks slices rather than maps: losing it would be invisible,
+five plausible songs in a different order every time.
+
+The window is opened two ways, and only one of them is a key it holds itself.
+The engine cannot open a window -- it has none, and a headless run has nothing
+to open one in -- so a spoken "putar lagu" parks the desktop app on a long poll
+at `GET /api/music/prompt?since=N`, which returns when the box is asked for.
+A long poll rather than a socket: this is the only message the main process
+ever needs pushed to it, and a WebSocket client for one message is a dependency
+to carry and a reconnect loop to get wrong. The count makes reconnecting safe
+in both directions -- a request that arrived while the window was away is
+answered immediately, and a count that has gone backwards means the engine
+restarted, so the window follows it back. It also tells the engine whether
+anybody is listening, which is the difference between telling her to press a
+key and telling her to say the song name instead.
+
+Keys are written `<ctrl>+<alt>+<f>` in config and `Control+Alt+F` in Electron.
+Config keeps the spelling she already knows and `toAccelerator` translates it,
+once, with tests -- `scripts/test-keys.mjs`. Anything it cannot read registers
+nothing and warns, because registering some other key would take a key she
+never asked for.
+
+## Muting chat
+
+`[mute] combination` silences the chat being read aloud, and gives it back.
+A key rather than a spoken command: the moment she wants this is a moment when
+something else needs to be heard, and saying a sentence over that is the
+opposite of the point.
+
+Held, not dropped. Chat queues up behind the mute and is read from where it
+left off, so muting to take a phone call does not cost her what arrived during
+it -- which is what makes muting something she is willing to do at all. A
+message being read when the key lands is cut off mid-word and requeued at its
+original place, so it is read again in full rather than resumed halfway.
+
+It gates the same tiers the donation hold gates, and is deliberately not the
+same mechanism. The hold is a few seconds of getting out of an alert's way and
+expires on its own; the mute stays until she says otherwise. Both have to be
+able to be true at once without either cancelling the other, which is what
+`TestTheMuteOutlastsADonationHold` and `TestUnmutingDoesNotBreakADonationHold`
+pin down. Her own voice -- errors, questions, answers she asked for -- speaks
+straight through both: a mute that swallowed "OBS is not responding" would be a
+way to go off the air quietly.
+
+Because it is a state she cannot see, `status` says so when it is on. A muted
+chat with a backlog behind it sounds exactly like a quiet one.
 
 ## Updating
 
@@ -342,6 +429,15 @@ file much harder to read for the one job it exists to do.
   is quota rather than silence.
 - A global hotkey is Windows-only. The wake word and the settings app work
   anywhere Go and Electron do.
+- The music search uses YouTube Music's own InnerTube endpoint, which is not a
+  published contract. It can change without notice, and when it does the parse
+  returns nothing rather than nonsense -- so the failure mode is "I could not
+  find anything", said out loud, rather than five results that do nothing when
+  chosen. The fixtures in `packages/controllers/music/testdata` are what makes
+  that change visible in a test run instead of mid-stream.
+- The typing box needs the desktop app running. `mikkilensd` on its own has no
+  window to open, so it answers a bare "putar lagu" by saying to say the song
+  name instead -- it knows, because nothing is parked on the long poll.
 
 ## Iterating
 
@@ -460,3 +556,15 @@ Nothing is code-signed, so Windows shows a SmartScreen warning either way.
 device tests report what they found and skip when there is nothing to find.
 Set `MIKKILENS_LIVE=1` to additionally exercise the online voice against the
 real service.
+
+The music search is tested against saved answers in
+`packages/controllers/music/testdata`, one per language, with the tracking
+parameters and thumbnails stripped. Two languages because the difference is not
+cosmetic: the Indonesian answer writes six minutes ten as `6.10`, and reading
+that as a decimal is exactly the bug those fixtures exist to keep out. Refresh
+them by hand when the endpoint changes shape.
+
+The TypeScript side has two check scripts rather than a test runner, both over
+the compiled output: `scripts/test-commands.mjs` for merging into a command
+file she owns, and `scripts/test-keys.mjs` for translating a config key into an
+Electron accelerator. `npm test` runs both.

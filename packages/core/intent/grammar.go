@@ -53,6 +53,10 @@ const (
 var KnownSlots = map[string]bool{
 	"scene": true, "source": true, "text": true, "question": true, "value": true,
 	"channel": true,
+	// query is a song name, and number is which of the five read back to play.
+	// Both belong to the music search, which is the one command whose input is
+	// typed rather than spoken.
+	"query": true, "number": true,
 }
 
 // Normalize lowercases, strips punctuation and collapses whitespace.

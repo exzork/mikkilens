@@ -111,6 +111,26 @@ phrases = ["how far behind am i", "how many messages did i miss", "how much chat
 [commands.chat_summarize]
 phrases = ["summarise my chat", "summarize my chat", "give me a chat summary"]
 
+
+# Silencing the chat for a moment, without stopping it being read.
+#
+# The key is what you normally use (Ctrl+Alt+M by default), because the moment
+# you want this is a moment when something else needs to be heard -- and saying
+# a sentence over that is the opposite of the point.
+#
+# Nothing is lost while it is muted: chat piles up behind it and is read once
+# you give it back.
+#
+# "Mute the chat" and "unmute the chat" differ by two letters, and getting that
+# backwards leaves the chat silent with nothing to notice -- the same trap the
+# microphone commands above avoid, and avoided the same way: the alternates are
+# deliberately different words rather than near-identical ones.
+[commands.chat_mute]
+phrases = ["mute the chat", "silence the chat", "chat off for a moment"]
+
+[commands.chat_unmute]
+phrases = ["let the chat talk again", "give the chat its voice back", "chat sound back on"]
+
 # ---------------------------------------------------------------- screen ----
 
 [commands.ask_screen]
@@ -145,3 +165,29 @@ phrases = ["what can i say", "list my commands", "help me", "what are my command
 
 [commands.reload_commands]
 phrases = ["reload my commands", "reload the commands"]
+
+# ----------------------------------------------------------------- music ----
+
+# Searching YouTube Music, then playing what you pick.
+#
+# Song and artist names are what speech recognition is worst at -- they are not
+# sentences in any language, and the model was not trained on them. So the name
+# is typed: say "play a song" on its own, the typing box opens, type the name
+# and press Enter. The results are read back one at a time; say a number to
+# play one.
+#
+# Saying the name outright still works, for a title that is easy to hear.
+#
+# Nothing here starts with "search for" or "find": those already belong to the
+# web search, and "search for the song X" would match both -- at which point
+# MikkiLens says the command is ambiguous and does nothing.
+[commands.search_music]
+phrases = ["play a song", "play the song {query}", "play some {query}", "put on {query}"]
+
+# Picking one of the results just read out. The number is the one you heard,
+# and 1 to 5 can be pressed in the typing box instead.
+[commands.play_song]
+phrases = ["play number {number}", "pick number {number}", "choose number {number}"]
+
+[commands.list_songs]
+phrases = ["read the songs again", "list those songs again", "what were the songs"]

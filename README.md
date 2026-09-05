@@ -106,6 +106,10 @@ Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
 | "cari harga bitcoin" | Dicari di internet, hasilnya dijawab singkat |
 | "status" | Semua keadaan dibacakan sekaligus |
 | "apa saja perintahnya" | Daftar perintah dibacakan |
+| "putar lagu" | Kotak ketik terbuka; ketik judulnya, lima hasil dibacakan |
+| "putar lagu monokrom" | Langsung dicari, hasilnya dibacakan satu per satu |
+| "putar nomor dua" | Hasil kedua diputar di YouTube Music |
+| "bisukan chat" | Pembacaan chat dibisukan; tidak ada yang hilang |
 
 Semua kalimat di atas **bisa diubah**. Lihat bagian
 [Perintah](#mengubah-perintah).
@@ -120,6 +124,10 @@ Tiga cara memicu perintah:
   tapi kadang aktif sendiri saat kamu sedang ngobrol dengan penonton.
 - **Tombol perintah** — satu tombol, satu perintah, tanpa bicara sama sekali.
   Lihat bagian di bawah.
+
+Dua tombol sudah terpasang sendiri: `Ctrl` + `Alt` + `M` untuk
+[membisukan chat](#membisukan-chat-sebentar), dan `Ctrl` + `Alt` + `F` untuk
+[mencari lagu](#mencari-lagu).
 
 Kamu akan dengar **nada pendek** begitu MikkiLens mulai mendengarkan — nada itu
 muncul seketika, jauh sebelum suara apa pun sempat menjawab.
@@ -187,6 +195,52 @@ didiamkan: tombol yang diam tidak bisa dibedakan dari tombol yang rusak.
 | Naik-turun-naik | Sedang bertanya, jawab "ya" atau "tidak" |
 | Blip pendek pelan | Chat masuk |
 | Tiga nada naik | Super chat |
+
+## Mencari lagu
+
+Tekan `Ctrl` + `Alt` + `F`. Kotak ketik terbuka dan langsung siap diketik —
+ketik judul lagunya, tekan `Enter`.
+
+Lima hasil teratas dibacakan **satu per satu**: nomor, judul, penyanyi, dan
+durasinya. Lalu tinggal pilih:
+
+- tekan **1** sampai **5** di kotak itu, atau
+- ucapkan **"putar nomor dua"**.
+
+Lagunya terbuka di YouTube Music di peramban — akun, riwayat, dan langganan
+yang sudah kamu punya, bukan pemutar baru yang harus dipelajari lagi.
+
+Kenapa diketik, bukan diucapkan? Judul lagu dan nama penyanyi adalah hal yang
+paling sering salah didengar. "Sisitipsi Buih Jadi Permadani" bukan kalimat
+bahasa Indonesia, dan model suaranya memang tidak dilatih untuk itu — salahnya
+pun tidak kentara: kamu dapat lima lagu yang salah tanpa tahu yang keliru itu
+pendengarannya atau pencariannya. Mengetik menghilangkan seluruh masalah itu.
+
+Kalau judulnya memang gampang didengar, ucapkan saja langsung: **"putar lagu
+monokrom"**. Ucapkan **"putar lagu"** saja, kotaknya yang terbuka. Untuk
+mendengar lima hasil tadi sekali lagi: **"sebutkan lagunya lagi"**.
+
+`Escape` menutup kotaknya. `Backspace` kembali ke kolom ketik untuk mencari
+yang lain.
+
+## Membisukan chat sebentar
+
+Tekan `Ctrl` + `Alt` + `M`. Suara yang sedang membaca chat berhenti seketika,
+di tengah kata kalau perlu. Tekan lagi untuk membunyikannya kembali.
+
+**Tidak ada yang hilang.** Chat tetap ditampung selama dibisukan, lalu
+dibacakan dari tempat berhenti tadi begitu dibunyikan lagi — jadi membisukan
+untuk menerima telepon tidak berarti kehilangan chat yang masuk saat itu.
+
+Yang tetap bersuara: error, pertanyaan, dan jawaban atas perintahmu. Itu semua
+tentang kamu, bukan tentang siaran — dan pembisuan yang ikut menelan "OBS tidak
+merespons" justru cara diam-diam turun dari siaran.
+
+Bedanya dengan "jeda chat": menjeda **menghentikan** pembacaannya, membisukan
+cuma **mendiamkan** suaranya. Kalau ragu, "status" menyebutkan mana yang
+sedang berlaku.
+
+Lewat suara juga bisa: **"bisukan chat"** dan **"bunyikan chat lagi"**.
 
 ## Pengaturan
 

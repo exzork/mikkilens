@@ -21,6 +21,8 @@ export interface MikkiLensBridge {
   version(): Promise<string>
   checkForUpdate(): Promise<UpdateCheck>
   onEngineStatus(listener: (status: EngineStatus) => void): void
+  closeMusicBox(): Promise<boolean>
+  onMusicBoxReopened(listener: () => void): void
 }
 
 /** What a check she asked for turned up. */
@@ -51,6 +53,8 @@ export interface Snapshot {
   viewer_count?: number
   chat_reading?: string
   chat_backlog?: number
+  /** The mute key, which is not the reader: muted chat is still being collected. */
+  chat_muted?: boolean
   listening?: boolean
   last_transcript?: string
   last_command?: string

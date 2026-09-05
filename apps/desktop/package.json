@@ -12,7 +12,8 @@
     "package": "npm run build && node scripts/package.mjs",
     "package:dir": "npm run build && node scripts/package.mjs --dir",
     "release": "npm run build && node scripts/package.mjs --publish always",
-    "test:commands": "node scripts/test-commands.mjs"
+    "test:commands": "node scripts/test-commands.mjs",
+    "test:keys": "node scripts/test-keys.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

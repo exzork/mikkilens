@@ -256,5 +256,17 @@
   "donations.readAloudWarning": "If you turn reading aloud on, switch the overlay’s own voice off in the Tako or Trakteer dashboard — otherwise every donation is read twice at once.",
   "donations.maxGiftRecipients": "Gift membership names to read",
   "donations.maxGiftRecipientsHint": "When somebody gifts memberships in bulk, read this many names and then “and 45 others”. Zero reads every one.",
-  "donations.saved": "Donation settings saved."
+  "donations.saved": "Donation settings saved.",
+  "menu.findSong": "Find a song",
+  "menu.toggleMute": "Mute or unmute chat",
+  "music.title": "MikkiLens — Find a song",
+  "music.prompt": "Type a song",
+  "music.resultsLabel": "Results",
+  "music.hint": "Enter to search. 1 to 5 plays one. Backspace to search again. Escape to close.",
+  "music.searching": "Searching for {query}…",
+  "music.found": "{count} songs. Press 1 to {count}, or say the number.",
+  "music.nothingFound": "Nothing found for {query}.",
+  "music.failed": "The search did not work: {reason}",
+  "music.resultLabel": "{number}. {title}, {artist}",
+  "label.chatMuted": "Chat muted"
 }

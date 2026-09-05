@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { Daemon } from './daemon.js'
 import { isDev, watchRenderer } from './dev.js'
 import { homeDirectory, logFile, seedHome } from './home.js'
+import { MusicBox } from './music.js'
 import { Updates } from './updates.js'
 import { availableLanguages, catalog, fallbackLanguage, translate, type Catalog } from './i18n.js'
 
@@ -42,6 +43,11 @@ const updates = new Updates(engineURL, daemon, (key, values) => t(key, values), 
   Menu.setApplicationMenu(buildMenu())
   applyTrayMenu()
 })
+
+// The box she types a song name into. It has its own window, opened over
+// whatever she is doing by a key or by asking out loud, because the settings
+// window is somewhere she went on purpose and this is not.
+const musicBox = new MusicBox(engineURL, () => language)
 
 let window: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -126,6 +132,9 @@ async function main(): Promise<void> {
   if (status.reachable) {
     await adoptEngineLanguage()
   }
+  // After the language, so the box opens in the one she reads, and after the
+  // engine is up, so the key it registers is the one her config asks for.
+  await musicBox.start()
   window?.webContents.send('engine-status', status)
 
   app.on('activate', () => {
@@ -230,6 +239,22 @@ function listenNow(): void {
   void fetch(`${engineURL}/api/listen`, { method: 'POST' }).catch(() => {})
 }
 
+/**
+ * Silence the chat being read aloud, or give it back.
+ *
+ * The key is how she uses this. The menu item is for whoever is helping her,
+ * who would rather press something than learn a keyboard shortcut on somebody
+ * else's machine -- and it is a toggle for the same reason the key is: there is
+ * no way to see which way it is set, and the engine says which it went.
+ */
+function toggleMute(): void {
+  void fetch(`${engineURL}/api/mute`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  }).catch(() => {})
+}
+
 function createTray(): void {
   // A one-pixel transparent image keeps the tray icon valid without shipping a
   // binary asset. The tooltip and the menu are what actually matter here: a
@@ -253,6 +278,8 @@ function applyTrayMenu(): void {
       { label: t('tray.openSettings'), click: () => showWindow() },
       { type: 'separator' },
       { label: t('menu.listenNow'), click: listenNow },
+      { label: t('menu.findSong'), click: () => musicBox.open() },
+      { label: t('menu.toggleMute'), click: toggleMute },
       { type: 'separator' },
       {
         label: updates.status().ready ? t('menu.installUpdate') : t('menu.noUpdate'),
@@ -281,6 +308,12 @@ function buildMenu(): Menu {
           accelerator: 'CommandOrControl+L',
           click: listenNow,
         },
+        // No accelerators on these two: both already have a global key of
+        // their own, taken from her config, and a second one that only works
+        // while this window has focus would be a different key for the same
+        // thing depending on where she is.
+        { label: t('menu.findSong'), click: () => musicBox.open() },
+        { label: t('menu.toggleMute'), click: toggleMute },
         { type: 'separator' },
         { label: t('menu.hideWindow'), accelerator: 'CommandOrControl+W', role: 'close' },
         {
@@ -412,6 +445,7 @@ ipcMain.handle('login-item', (_event, enabled: unknown) => {
 app.on('before-quit', () => {
   quitting = true
   updates.stop()
+  musicBox.stop()
   daemon.stop()
 })
 

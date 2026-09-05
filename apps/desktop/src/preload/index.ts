@@ -50,6 +50,20 @@ const api = {
   onEngineStatus: (listener: (status: EngineStatus) => void): void => {
     ipcRenderer.on('engine-status', (_event, status: EngineStatus) => listener(status))
   },
+
+  /** Put the typing box away. Escape and playing a song both use it. */
+  closeMusicBox: (): Promise<boolean> => ipcRenderer.invoke('music:close'),
+
+  /**
+   * The typing box was opened again.
+   *
+   * The window is kept rather than rebuilt, so the second press lands on a
+   * field that is already there -- which also means the page has to be put back
+   * to how it started, or she types a new song over the last one's results.
+   */
+  onMusicBoxReopened: (listener: () => void): void => {
+    ipcRenderer.on('music:reset', () => listener())
+  },
 }
 
 export interface CheckResult {

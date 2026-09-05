@@ -96,6 +96,7 @@ type Bus struct {
 	counter    int
 	current    *Utterance
 	chatHeld   time.Time
+	chatMuted  bool
 	running    bool
 	idle       chan struct{}
 	history    []Spoken
@@ -406,6 +407,64 @@ func (b *Bus) ClearAll() int {
 // InterruptCurrent cuts off whatever is being said right now.
 func (b *Bus) InterruptCurrent() { b.player.Stop() }
 
+// -- the mute -----------------------------------------------------------------
+
+// SetChatMuted holds chat back until it is turned off again, and cuts off a
+// message being read right now.
+//
+// Held, not dropped, and that is the whole design. Something happens in the
+// room -- a guest arrives, someone speaks to her, a song starts -- and what
+// she needs is for the voice in her ear to stop this second. What she does not
+// need is to have paid for that with the twenty messages that arrived while it
+// was quiet. Muting silences; unmuting reads the backlog, oldest first, exactly
+// as pausing the reader does.
+//
+// It is deliberately not the donation hold with a long deadline. The hold is a
+// few seconds of getting out of an alert's way and it expires on its own; this
+// stays until she says otherwise, and the two have to be able to be true at
+// once without either cancelling the other.
+//
+// Only chat and the paid tier are muted. An error, a confirmation, or an answer
+// she asked for still speaks straight through -- those are about her, not about
+// the stream, and a mute that swallowed "OBS is not responding" would be a way
+// to go off the air quietly.
+func (b *Bus) SetChatMuted(muted bool) {
+	b.mu.Lock()
+	if b.chatMuted == muted {
+		b.mu.Unlock()
+		return
+	}
+	b.chatMuted = muted
+	// Requeued by the worker and then kept there by the gate, so this
+	// interrupts the message rather than losing it.
+	interrupt := muted && b.current != nil && heldByHold(*b.current)
+	b.cond.Broadcast()
+	b.mu.Unlock()
+
+	if interrupt {
+		b.player.Stop()
+	}
+}
+
+// ToggleChatMuted flips the mute and reports what it is now, which is what one
+// key has to do: there is no second key for the other direction, and she
+// cannot see which way it is set.
+func (b *Bus) ToggleChatMuted() bool {
+	b.mu.Lock()
+	muted := !b.chatMuted
+	b.mu.Unlock()
+
+	b.SetChatMuted(muted)
+	return muted
+}
+
+// ChatMuted reports whether chat is being held back by the mute.
+func (b *Bus) ChatMuted() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.chatMuted
+}
+
 // -- the donation hold --------------------------------------------------------
 
 // HoldChat keeps chat messages queued but unspoken until the deadline passes,
@@ -496,7 +555,10 @@ func heldByHold(utterance Utterance) bool {
 	return utterance.Priority == Chat || utterance.Priority == Donation
 }
 func (b *Bus) chatBlockedLocked() bool {
-	if len(b.queue) == 0 || !time.Now().Before(b.chatHeld) {
+	if len(b.queue) == 0 {
+		return false
+	}
+	if !b.chatMuted && !time.Now().Before(b.chatHeld) {
 		return false
 	}
 	return heldByHold(b.queue[0].what)
@@ -619,7 +681,7 @@ func (b *Bus) speak(utterance Utterance) bool {
 	// place and is read from the start once the alert is over, exactly as an
 	// interrupted one is.
 	if heldByHold(utterance) {
-		if held, _ := b.ChatHeld(); held {
+		if held, _ := b.ChatHeld(); held || b.ChatMuted() {
 			return false
 		}
 	}

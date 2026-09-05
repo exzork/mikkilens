@@ -15,6 +15,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/feedback"
 	"github.com/exzork/mikkilens/packages/audio/tts"
 	"github.com/exzork/mikkilens/packages/audio/wake"
+	"github.com/exzork/mikkilens/packages/controllers/music"
 	"github.com/exzork/mikkilens/packages/controllers/vision"
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -72,6 +73,146 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/startup", s.handleStartup)
 	mux.HandleFunc("/api/listen", only(http.MethodPost, s.triggerListen))
 	mux.HandleFunc("/api/command", only(http.MethodPost, s.runCommand))
+
+	mux.HandleFunc("/api/music/search", only(http.MethodPost, s.searchMusic))
+	mux.HandleFunc("/api/music/songs", only(http.MethodGet, s.getSongs))
+	mux.HandleFunc("/api/music/play", only(http.MethodPost, s.playSong))
+	mux.HandleFunc("/api/music/prompt", only(http.MethodGet, s.waitForTyping))
+	mux.HandleFunc("/api/mute", s.handleMute)
+}
+
+// -- music --------------------------------------------------------------------
+//
+// The typing window is the only client of these, and it exists because the one
+// thing here that is typed rather than spoken is a song name -- the thing
+// speech recognition is worst at, and the thing that has to be exactly right
+// for the search to find it.
+//
+// Every one of these speaks as well as answering. The window shows the results
+// so a sighted person helping can see them, but the answer she gets is the
+// spoken one, and it is said whether or not the window is still open.
+
+// searchMusic looks up what she typed and answers with what was found.
+//
+// It waits for the search rather than answering straight away. The window has
+// a list to render and a "searching" state to come out of, and a request that
+// returned immediately would leave it with neither -- while the spoken results
+// arrived from somewhere it knew nothing about.
+func (s *Server) searchMusic(writer http.ResponseWriter, request *http.Request) {
+	var body struct {
+		Query string `json:"query"`
+	}
+	if !decode(writer, request, &body) {
+		return
+	}
+
+	songs, err := s.engine.FindSongs(request.Context(), body.Query)
+	if err != nil {
+		// Already said aloud by the engine, in her language. This is for the
+		// window, which needs to stop spinning and say why in writing.
+		fail(writer, http.StatusBadGateway, err.Error())
+		return
+	}
+	respond(writer, http.StatusOK, map[string]any{
+		"query": strings.TrimSpace(body.Query),
+		"songs": songsOrEmpty(songs),
+	})
+}
+
+// promptWait is how long a waiting window is left hanging before it is told
+// nothing happened. Short enough that a window closed without a word is
+// noticed within half a minute; long enough that reconnecting is rare.
+const promptWait = 25 * time.Second
+
+// waitForTyping is where the desktop app parks until the box she types a song
+// name into is asked for.
+//
+// A long poll rather than a socket, because this is the only thing the main
+// process ever needs pushed to it and a WebSocket client for one message is a
+// dependency to carry, a reconnect loop to get right and a failure mode that
+// looks like the key silently not working.
+//
+// The count in and out is what makes a reconnect safe: a window says which
+// request it last saw, and one that arrived while it was away is answered
+// straight away rather than lost.
+func (s *Server) waitForTyping(writer http.ResponseWriter, request *http.Request) {
+	since, _ := strconv.Atoi(request.URL.Query().Get("since"))
+
+	ctx, cancel := context.WithTimeout(request.Context(), promptWait)
+	defer cancel()
+
+	count := s.engine.WaitForTyping(ctx, since)
+	respond(writer, http.StatusOK, map[string]any{
+		"count": count,
+		// Whether this answer is the box being asked for, or the wait simply
+		// running out. The window opens on the first and asks again on the
+		// second.
+		"open": count > since,
+	})
+}
+
+// getSongs is what can still be picked, so a window opened again can offer the
+// last results rather than an empty box.
+func (s *Server) getSongs(writer http.ResponseWriter, _ *http.Request) {
+	respond(writer, http.StatusOK, map[string]any{"songs": songsOrEmpty(s.engine.Songs())})
+}
+
+// playSong starts the nth result, counting from one -- the same number she
+// heard read out, so the key she presses and the number she would say are the
+// same number.
+func (s *Server) playSong(writer http.ResponseWriter, request *http.Request) {
+	var body struct {
+		Number int `json:"number"`
+	}
+	if !decode(writer, request, &body) {
+		return
+	}
+
+	song, err := s.engine.PlaySong(body.Number)
+	if err != nil {
+		fail(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	respond(writer, http.StatusOK, map[string]any{"ok": true, "song": song})
+}
+
+func songsOrEmpty(songs []music.Song) []music.Song {
+	if songs == nil {
+		return []music.Song{}
+	}
+	return songs
+}
+
+// -- the mute -----------------------------------------------------------------
+
+// handleMute reads or sets whether chat is being read aloud.
+//
+// The key is the way she uses this; the route is for the tray menu and for
+// whoever is helping her, who would rather press something than learn a
+// keyboard shortcut on somebody else's machine.
+func (s *Server) handleMute(writer http.ResponseWriter, request *http.Request) {
+	switch request.Method {
+	case http.MethodGet:
+		respond(writer, http.StatusOK, map[string]any{"muted": s.engine.Bus().ChatMuted()})
+	case http.MethodPost:
+		var body struct {
+			// A pointer, so "toggle" and "set it to false" are different
+			// requests. The tray menu sets it; the key toggles it, and a key
+			// that has to read the state first is a key that can be wrong.
+			Muted *bool `json:"muted"`
+		}
+		if !decode(writer, request, &body) {
+			return
+		}
+		if body.Muted == nil {
+			s.engine.ToggleChatMute()
+		} else {
+			s.engine.SetChatMute(*body.Muted)
+		}
+		respond(writer, http.StatusOK, map[string]any{"muted": s.engine.Bus().ChatMuted()})
+	default:
+		fail(writer, http.StatusMethodNotAllowed, "use GET or POST for this")
+	}
 }
 
 // setStreaming starts or stops the broadcast in OBS.

@@ -91,6 +91,33 @@ type Hotkey struct {
 }
 
 // STT configures speech recognition.
+// Mute is the key that silences the chat being read aloud, and gives it back.
+//
+// Its own section rather than a binding, because it is the one key that has to
+// work when nothing else does. Chat reading is the thing most likely to be in
+// the way -- a guest arrives, someone asks her a question in the room, a song
+// starts -- and the answer to "stop talking for a moment" cannot be a sentence
+// she has to say over the talking.
+//
+// It silences rather than stops. Nothing is thrown away: the messages queue up
+// behind it and are read when she gives it back, so muting to take a phone
+// call does not cost her the chat that arrived during it.
+type Mute struct {
+	Enabled     bool   `toml:"enabled" json:"enabled"`
+	Combination string `toml:"combination" json:"combination"`
+}
+
+// Music is the key that opens the box she types a song name into.
+//
+// Watched by the desktop app rather than by the engine, because what it opens
+// is a window, and a key the engine held would have nowhere to put what she
+// typed. The combination lives here anyway so that every key MikkiLens answers
+// to is written in one file.
+type Music struct {
+	Enabled     bool   `toml:"enabled" json:"enabled"`
+	Combination string `toml:"combination" json:"combination"`
+}
+
 type STT struct {
 	Backend   string `toml:"backend" json:"backend"` // "auto" | "whispercpp" | "openai"
 	ModelSize string `toml:"model_size" json:"model_size"`
@@ -402,6 +429,8 @@ type Config struct {
 	Audio    Audio    `toml:"audio" json:"audio"`
 	Wake     Wake     `toml:"wake" json:"wake"`
 	Hotkey   Hotkey   `toml:"hotkey" json:"hotkey"`
+	Mute     Mute     `toml:"mute" json:"mute"`
+	Music    Music    `toml:"music" json:"music"`
 	STT      STT      `toml:"stt" json:"stt"`
 	OBS      OBS      `toml:"obs" json:"obs"`
 	YouTube  YouTube  `toml:"youtube" json:"youtube"`
@@ -444,6 +473,10 @@ func Default() Config {
 		// keeps the two honest.
 		Wake:   Wake{Enabled: true, Model: "mikkilens", Threshold: 0.8, CooldownS: 2.0},
 		Hotkey: Hotkey{Enabled: true, Combination: "<ctrl>+<alt>+<space>", PushToTalk: true},
+		// M for mute and F for find, both behind ctrl and alt so neither can
+		// be hit while typing in something else.
+		Mute:  Mute{Enabled: true, Combination: "<ctrl>+<alt>+<m>"},
+		Music: Music{Enabled: true, Combination: "<ctrl>+<alt>+<f>"},
 		STT: STT{
 			// small rather than base: base mishears enough of a short
 			// Indonesian command to be the difference between a command that

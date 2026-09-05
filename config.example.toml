@@ -92,6 +92,43 @@ enabled = true
 combination = "<ctrl>+<alt>+<space>"  # A foot pedal or Stream Deck key works too.
 push_to_talk = true                   # false = press once to start, once to stop.
 
+# The key that silences the chat being read aloud, and gives it back.
+#
+# One press to stop the voice in your ear, one to start it again. It is a key
+# rather than a spoken command because the moment you want it is a moment when
+# something else needs to be heard -- a guest arrives, someone in the room asks
+# you something, a song is about to start -- and saying "bisukan chat" over that
+# is the opposite of the point.
+#
+# Nothing is thrown away while it is on. Chat piles up behind it and is read
+# from where you left off once you give it back, so muting to take a phone call
+# does not cost you the chat that arrived during it. Errors, questions and
+# answers still speak straight through: those are about you, not about the
+# stream.
+#
+# "bisukan chat" and "bunyikan chat lagi" do the same thing out loud.
+[mute]
+enabled = true
+combination = "<ctrl>+<alt>+<m>"
+
+# The key that opens the box you type a song name into.
+#
+# Everything else here is spoken; this one thing is typed, and deliberately.
+# Song and artist names are what speech recognition is worst at -- they are not
+# sentences in any language -- and a misheard one does not fail loudly, it just
+# finds five wrong songs. Typing gets the spelling exactly right.
+#
+# Press it, type the name, press Enter. The five results are read out one at a
+# time; press 1 to 5, or say "putar nomor dua", and it opens in YouTube Music.
+# Saying "putar lagu" with nothing after it opens the same box.
+#
+# This one is watched by the MikkiLens window rather than by the engine, since
+# what it opens is a window. Running the engine on its own means no box -- and
+# "putar lagu monokrom", said in full, still works.
+[music]
+enabled = true
+combination = "<ctrl>+<alt>+<f>"
+
 # Keys that run one command, without a word being said.
 #
 # The hotkey above opens the microphone. These do not: each one runs its

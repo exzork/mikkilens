@@ -66,6 +66,11 @@ type Meta struct {
 	Voice string   `toml:"voice"`
 	Yes   []string `toml:"yes"`
 	No    []string `toml:"no"`
+
+	// Numbers are the words for one, two, three and so on, in order, so a
+	// spoken position can be understood in her language rather than only as a
+	// digit. Recognition writes "dua" about as often as it writes "2".
+	Numbers []string `toml:"numbers"`
 }
 
 // Locale is the strings for one language, with English behind it.
@@ -231,6 +236,18 @@ func (l *Locale) NoWords() []string {
 		return []string{"no"}
 	}
 	return l.Meta.No
+}
+
+// NumberWords are the words for the positions in a spoken list, first at
+// index zero, so "play number two" can be answered in her own language.
+//
+// English behind it rather than nothing: a locale that has not been given the
+// words should leave her worse at picking a song, not unable to.
+func (l *Locale) NumberWords() []string {
+	if len(l.Meta.Numbers) == 0 {
+		return []string{"one", "two", "three", "four", "five"}
+	}
+	return l.Meta.Numbers
 }
 
 func merge(args []Args) Args {

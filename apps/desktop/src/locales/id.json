@@ -256,5 +256,17 @@
   "donations.readAloudWarning": "Kalau pembacaan dinyalakan, matikan suara overlay di dashboard Tako atau Trakteer — kalau tidak, setiap donasi dibacakan dua kali sekaligus.",
   "donations.maxGiftRecipients": "Jumlah nama penerima hadiah yang dibacakan",
   "donations.maxGiftRecipientsHint": "Kalau ada yang menghadiahkan membership sekaligus banyak, bacakan sebanyak ini lalu “dan 45 orang lainnya”. Nol membacakan semuanya.",
-  "donations.saved": "Pengaturan donasi tersimpan."
+  "donations.saved": "Pengaturan donasi tersimpan.",
+  "menu.findSong": "Cari lagu",
+  "menu.toggleMute": "Bisukan atau bunyikan chat",
+  "music.title": "MikkiLens — Cari lagu",
+  "music.prompt": "Ketik judul lagunya",
+  "music.resultsLabel": "Hasil",
+  "music.hint": "Enter untuk mencari. 1 sampai 5 untuk memutar. Backspace untuk mencari lagi. Escape untuk menutup.",
+  "music.searching": "Mencari {query}…",
+  "music.found": "Ada {count} lagu. Tekan 1 sampai {count}, atau sebutkan nomornya.",
+  "music.nothingFound": "Tidak ada hasil untuk {query}.",
+  "music.failed": "Pencariannya gagal: {reason}",
+  "music.resultLabel": "{number}. {title}, {artist}",
+  "label.chatMuted": "Chat dibisukan"
 }

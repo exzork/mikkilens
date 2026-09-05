@@ -30,6 +30,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/stt"
 	"github.com/exzork/mikkilens/packages/audio/wake"
 	"github.com/exzork/mikkilens/packages/chat"
+	"github.com/exzork/mikkilens/packages/controllers/music"
 	"github.com/exzork/mikkilens/packages/controllers/obs"
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -66,6 +67,12 @@ type Engine interface {
 	ChatReader() *chat.Reader
 	BeginListening()
 	RunCommand(id string, confirm bool)
+	FindSongs(context.Context, string) ([]music.Song, error)
+	Songs() []music.Song
+	WaitForTyping(context.Context, int) int
+	PlaySong(number int) (music.Song, error)
+	ToggleChatMute()
+	SetChatMute(bool)
 	RefreshYouTube(context.Context)
 	ConnectYouTube(context.Context) error
 	ConnectChannel(context.Context) error

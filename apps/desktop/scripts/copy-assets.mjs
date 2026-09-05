@@ -14,6 +14,7 @@ const root = join(here, '..')
 
 const assets = [
   ['src/renderer/index.html', 'out/renderer/index.html'],
+  ['src/renderer/music.html', 'out/renderer/music.html'],
   ['src/renderer/style.css', 'out/renderer/style.css'],
   ['src/locales', 'out/locales'],
 ]

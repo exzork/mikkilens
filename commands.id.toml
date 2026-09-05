@@ -116,6 +116,21 @@ phrases = ["ketinggalan berapa chat", "berapa chat yang belum dibaca", "seberapa
 [commands.chat_summarize]
 phrases = ["rangkum chat", "ringkas chat", "rangkuman chat"]
 
+
+# Membisukan chat sementara, tanpa menghentikan pembacaannya.
+#
+# Yang biasanya kamu pakai adalah tombolnya (bawaannya Ctrl+Alt+M), karena saat
+# kamu butuh ini biasanya ada suara lain yang sedang perlu didengar -- dan
+# mengucapkan kalimat di atas suara itu justru melawan tujuannya.
+#
+# Tidak ada yang hilang selama dibisukan: chat tetap ditampung, lalu dibacakan
+# begitu dibunyikan lagi.
+[commands.chat_mute]
+phrases = ["bisukan chat", "diamkan chat dulu", "chat jangan bersuara dulu"]
+
+[commands.chat_unmute]
+phrases = ["bunyikan chat lagi", "chat boleh bersuara lagi", "lanjutkan suara chat"]
+
 # ---------------------------------------------------------------- layar ----
 
 [commands.ask_screen]
@@ -150,3 +165,32 @@ phrases = ["apa saja perintahnya", "perintah apa saja", "bantuan", "aku bisa bil
 
 [commands.reload_commands]
 phrases = ["muat ulang perintah", "reload perintah"]
+
+# ----------------------------------------------------------------- musik ----
+
+# Mencari lagu di YouTube Music, lalu memutarnya.
+#
+# Judul lagu adalah hal yang paling sering salah didengar -- nama penyanyi dan
+# judul album bukan kalimat bahasa Indonesia, dan model suaranya memang tidak
+# dilatih untuk itu. Jadi judulnya diketik: ucapkan "putar lagu" saja, kotak
+# ketiknya terbuka, ketik judulnya lalu tekan Enter. Hasilnya dibacakan satu
+# per satu, tinggal sebut nomornya.
+#
+# Menyebut judulnya langsung juga tetap bisa, kalau judulnya memang mudah
+# didengar.
+#
+# Tidak ada satu pun kalimat di sini yang diawali "cari": "cari {question}"
+# sudah dipakai pencarian web, dan "cari lagu monokrom" akan cocok untuk
+# keduanya -- MikkiLens lalu bilang perintahnya ambigu, dan tidak melakukan
+# apa-apa.
+[commands.search_music]
+phrases = ["putar lagu", "putar lagu {query}", "mainkan lagu {query}", "setel lagu {query}"]
+
+# Memilih salah satu dari hasil yang barusan dibacakan. Nomornya sama dengan
+# nomor yang kamu dengar, dan bisa juga ditekan langsung (1 sampai 5) di kotak
+# ketiknya.
+[commands.play_song]
+phrases = ["putar nomor {number}", "pilih nomor {number}", "mainkan nomor {number}"]
+
+[commands.list_songs]
+phrases = ["sebutkan lagunya lagi", "ulangi daftar lagunya", "tadi lagunya apa saja"]

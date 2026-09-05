@@ -65,6 +65,8 @@ type Engine struct {
 	wakeError   string
 	hotkey      hotkey.Watcher
 	hotkeyError string
+	muteKey     hotkey.Watcher
+	muteError   string
 	bindings    []hotkey.Watcher
 	obs         *obs.Controller
 	obsSeen     bool
@@ -85,6 +87,12 @@ type Engine struct {
 	trakteer        *trakteer.Watcher
 	trakteerWarned  bool
 	reader          *chat.Reader
+
+	// songs is the last music search, waiting for her to pick one of them, and
+	// typing is where the desktop app waits to be asked for the box she types
+	// the next search into.
+	songs  results
+	typing typing
 
 	listening  sync.Mutex
 	listenBusy bool
@@ -192,6 +200,19 @@ func (e *Engine) Hotkey() hotkey.Watcher {
 	return e.hotkey
 }
 
+// MuteKeyError is why the mute key is not watched, or "" when it is.
+func (e *Engine) MuteKeyError() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.muteError
+}
+
+func (e *Engine) MuteKey() hotkey.Watcher {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.muteKey
+}
+
 func (e *Engine) OBS() *obs.Controller {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -293,6 +314,7 @@ func (e *Engine) registerBuiltinHandlers() {
 	e.router.RegisterAll(channelHandlers(e))
 	e.router.RegisterAll(clockHandlers(e))
 	e.router.RegisterAll(searchHandlers(e))
+	e.router.RegisterAll(musicHandlers(e))
 }
 
 func (e *Engine) handleHelp(map[string]string) error {
@@ -327,6 +349,7 @@ func (e *Engine) Start(ctx context.Context) {
 	e.startMicrophone()
 	e.startWakeWord()
 	e.startHotkey()
+	e.startMuteKey()
 	e.startBindings()
 	e.startOBS()
 	e.startTako()
@@ -632,6 +655,95 @@ func (e *Engine) restartHotkey() {
 		watcher.Stop()
 	}
 	e.startHotkey()
+}
+
+// startMuteKey watches the key that silences the chat being read aloud.
+//
+// A key rather than a spoken command, and not only for speed. The moment she
+// wants this is the moment something else needs her voice -- a guest is
+// talking, someone in the room asked her a question, she is about to speak
+// over a song -- and "jeda chat" said into that is a sentence competing with
+// the thing it is trying to make room for.
+func (e *Engine) startMuteKey() {
+	settings := e.Config()
+	if !settings.Mute.Enabled {
+		e.mu.Lock()
+		e.muteError = ""
+		e.mu.Unlock()
+		return
+	}
+
+	watcher, err := hotkey.New(hotkey.Options{
+		Combination: settings.Mute.Combination,
+		Mode:        hotkey.Press,
+		OnActivate:  e.ToggleChatMute,
+	})
+	if err == nil {
+		err = watcher.Start()
+	}
+	if err != nil {
+		slog.Error("could not set up the mute key", "error", err)
+		e.mu.Lock()
+		e.muteError = err.Error()
+		e.mu.Unlock()
+		e.bus.SayKey("error.generic", feedback.Error, i18n.Args{"reason": err.Error()})
+		return
+	}
+
+	e.mu.Lock()
+	e.muteKey = watcher
+	e.muteError = ""
+	e.mu.Unlock()
+}
+
+// restartMuteKey rebinds it, giving the old combination back to Windows first
+// for the same reason restartHotkey does.
+func (e *Engine) restartMuteKey() {
+	e.mu.Lock()
+	watcher := e.muteKey
+	e.muteKey = nil
+	e.mu.Unlock()
+
+	if watcher != nil {
+		watcher.Stop()
+	}
+	e.startMuteKey()
+}
+
+// ToggleChatMute silences the chat being read aloud, or gives it back.
+//
+// The tone lands first, on the press, which is what makes the key feel like a
+// mute button rather than a request for one -- the sentence saying which way it
+// went arrives about a second later, over silence, and by then she already
+// knows. Both are said anyway: this is a state she cannot see, and coming back
+// after ten quiet minutes to work out whether chat is muted or simply quiet is
+// exactly the confusion this application exists to remove.
+func (e *Engine) ToggleChatMute() {
+	muted := e.bus.ToggleChatMuted()
+	e.applyChatMute(muted)
+}
+
+// SetChatMute puts the mute somewhere definite, for the settings page and for
+// anything that would rather say what it means than flip a switch.
+func (e *Engine) SetChatMute(muted bool) {
+	if muted == e.bus.ChatMuted() {
+		return
+	}
+	e.bus.SetChatMuted(muted)
+	e.applyChatMute(muted)
+}
+
+func (e *Engine) applyChatMute(muted bool) {
+	e.store.Update(state.Changes{"chat_muted": muted})
+	if muted {
+		// Cut in over the message that was being read: it has been put back on
+		// the queue, and hearing the end of it after the mute would be the one
+		// thing the key is for, not happening.
+		e.bus.Earcon("confirm")
+		e.bus.SayKey("chat.muted", feedback.Result)
+		return
+	}
+	e.bus.SayKey("chat.unmuted", feedback.Result)
 }
 
 // startBindings gives every bound key its own watcher.
@@ -1298,6 +1410,8 @@ func (e *Engine) Stop() {
 	e.stopping = true
 	reader, ingest := e.reader, e.ingest
 	controller, watcher := e.obs, e.hotkey
+	muteKey := e.muteKey
+	e.muteKey = nil
 	bindings := e.bindings
 	e.bindings = nil
 	removeWake, detector := e.removeWake, e.wake
@@ -1315,6 +1429,9 @@ func (e *Engine) Stop() {
 	}
 	if watcher != nil {
 		watcher.Stop()
+	}
+	if muteKey != nil {
+		muteKey.Stop()
 	}
 	for _, bound := range bindings {
 		bound.Stop()
@@ -1650,6 +1767,9 @@ func (e *Engine) ApplyConfig(updated config.Config) error {
 	}
 	if updated.Hotkey != previous.Hotkey {
 		e.restartHotkey()
+	}
+	if updated.Mute != previous.Mute {
+		e.restartMuteKey()
 	}
 
 	if controller := e.OBS(); controller != nil {

@@ -24,6 +24,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/tts"
 	"github.com/exzork/mikkilens/packages/audio/wake"
 	"github.com/exzork/mikkilens/packages/chat"
+	"github.com/exzork/mikkilens/packages/controllers/music"
 	"github.com/exzork/mikkilens/packages/controllers/obs"
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
 	"github.com/exzork/mikkilens/packages/core/config"
@@ -59,6 +60,13 @@ type stubEngine struct {
 	connects    int
 	disconnects int
 	switched    []string
+
+	searched []string
+	prompts  int
+	songs    []music.Song
+	played   []int
+	muted    bool
+	mutes    int
 }
 
 // ranCommand records a command a button or a key asked for.
@@ -150,6 +158,58 @@ func (e *stubEngine) BeginListening()               { e.listens++ }
 func (e *stubEngine) RunCommand(id string, confirm bool) {
 	e.ran = append(e.ran, ranCommand{id: id, confirm: confirm})
 }
+
+// The music stub finds one song for anything except "nothing", which finds
+// none, and refuses the empty query the way the engine does.
+func (e *stubEngine) FindSongs(_ context.Context, query string) ([]music.Song, error) {
+	e.searched = append(e.searched, query)
+	if strings.TrimSpace(query) == "" {
+		return nil, &music.Error{Reason: "there was nothing to search for"}
+	}
+	if query == "nothing" {
+		e.songs = nil
+		return nil, nil
+	}
+	e.songs = []music.Song{{
+		Title: "Monokrom", Artist: "Tulus", Album: "Monokrom",
+		Duration: "3.35", Minutes: 3, Seconds: 35, VideoID: "1RrF6Ee_io0",
+	}}
+	return e.songs, nil
+}
+
+func (e *stubEngine) Songs() []music.Song { return e.songs }
+
+// The typing box: the stub answers the first wait immediately, as if she had
+// just pressed the key, and blocks after that until the request is cancelled.
+func (e *stubEngine) WaitForTyping(ctx context.Context, since int) int {
+	e.prompts++
+	if since < 1 {
+		return 1
+	}
+	<-ctx.Done()
+	return since
+}
+
+func (e *stubEngine) PlaySong(number int) (music.Song, error) {
+	e.played = append(e.played, number)
+	if number < 1 || number > len(e.songs) {
+		return music.Song{}, &music.Error{Reason: "there is no result with that number"}
+	}
+	return e.songs[number-1], nil
+}
+
+func (e *stubEngine) ToggleChatMute() {
+	e.mutes++
+	e.muted = !e.muted
+	e.bus.SetChatMuted(e.muted)
+}
+
+func (e *stubEngine) SetChatMute(muted bool) {
+	e.mutes++
+	e.muted = muted
+	e.bus.SetChatMuted(muted)
+}
+
 func (e *stubEngine) OnYouTubeConnected(context.Context) {}
 func (e *stubEngine) OnYouTubeDisconnected()             {}
 func (e *stubEngine) RefreshYouTube(context.Context)     {}

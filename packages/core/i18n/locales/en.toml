@@ -6,6 +6,9 @@ code = "en"
 voice = "en-US-AriaNeural"
 yes = ["yes", "yeah", "yep", "ok", "okay", "correct", "go ahead"]
 no = ["no", "nope", "cancel", "stop", "don't"]
+# The positions in a spoken list, first to last. Recognition writes "two" about
+# as often as it writes "2", so "play number two" has to understand both.
+numbers = ["one", "two", "three", "four", "five"]
 
 [app]
 ready = "MikkiLens ready."
@@ -36,6 +39,7 @@ mic_live = "Microphone is live."
 viewers = "{count} viewers."
 chat_backlog = "{count} chat messages waiting."
 chat_empty = "No chat messages waiting."
+chat_muted = "Chat is muted."
 summary = "{live} {scene} {mic} {viewers} {chat}"
 
 [obs]
@@ -75,6 +79,10 @@ paused = "Chat reading paused."
 resumed = "Chat reading resumed."
 already_paused = "Chat is already paused."
 already_playing = "Chat is already being read."
+# The mute key. Nothing is thrown away while it is on, which is the part worth
+# saying: what stops is the reading, not the listening.
+muted = "Chat muted."
+unmuted = "Chat unmuted."
 skipped = "Skipped {count} messages. You are up to date."
 behind = "You are {count} messages behind, about {minutes} minutes."
 up_to_date = "Chat is up to date."
@@ -118,6 +126,28 @@ now = "It is {time}."
 nothing_asked = "I did not catch what to search for."
 failed = "I could not reach the search just now."
 nothing_found = "I could not find anything about {question}."
+
+[music]
+# Finding a song and playing it. The name is typed rather than spoken, because
+# song and artist names are what speech recognition is worst at; {key} is the
+# key that opens the box to type it in.
+nothing_asked = "Say the song after the command, or press {key} to type it."
+# The box is open and waiting. Said rather than shown, because the box is the
+# one thing here she is not meant to have to look at.
+type_it = "Type the song, then press Enter."
+searching = "Searching for {query}."
+failed = "I could not reach YouTube Music just now."
+nothing_found = "I could not find anything for {query}."
+found = "{count} songs."
+# One result. Read one at a time, so each is a sentence rather than an item.
+result = "{number}. {title}, {artist}."
+result_timed = "{number}. {title}, {artist}, {minutes} minutes {seconds}."
+pick = "Say play number one to {count}."
+playing = "Playing {title} by {artist}."
+nothing_to_play = "There are no search results to play. Search for a song first."
+no_such_result = "There is no number {number}. There are {count}."
+not_a_number = "I did not catch which number: {number}."
+no_browser = "I could not open a browser to play it in."
 
 [vision]
 looking = "Looking at your screen."
