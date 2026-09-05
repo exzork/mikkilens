@@ -168,6 +168,18 @@ nothing_to_play = "There are no search results to play. Search for a song first.
 no_such_result = "There is no number {number}. There are {count}."
 not_a_number = "I did not catch which number: {number}."
 
+[volume]
+# The answer to "set the speaking volume to fifty percent" and its neighbours.
+# Every one of these is spoken at the volume it is reporting, so if the answer
+# cannot be heard, that is the answer.
+speech = "Speaking volume {percent} percent."
+chat = "Chat reading volume {percent} percent."
+earcon = "Tone volume {percent} percent."
+music = "Music volume {percent} percent."
+not_a_number = "I did not catch the number: {amount}. Say zero to a hundred percent."
+failed = "The volume could not be changed: {reason}"
+not_saved = "The volume has changed, but it could not be saved: {reason}"
+
 [vision]
 looking = "Looking at your screen."
 failed = "Could not read the screen: {reason}"

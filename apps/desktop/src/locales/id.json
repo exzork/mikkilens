@@ -96,6 +96,7 @@
   "audio.sttProcessor": "Prosesor",
   "audio.sttRunning": "Sedang berjalan: {backend}",
   "audio.voiceLegend": "Suara bicara",
+  "audio.voiceHint": "Volume di sini nol sampai seratus, dan yang diatur adalah suara MikkiLens sendiri — bukan volume Windows, yang juga milik game dan yang direkam OBS. Sambil siaran bisa diucapkan: “atur volume bicara lima puluh persen”.",
   "audio.voice": "Suara",
   "audio.rate": "Kecepatan bicara",
   "audio.volume": "Volume bicara",

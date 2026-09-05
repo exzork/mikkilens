@@ -189,6 +189,7 @@
 
           <fieldset class="wide">
             <legend data-i18n="audio.voiceLegend">Speaking voice</legend>
+            <p class="hint" data-i18n="audio.voiceHint"></p>
             <p>
               <label for="voice" data-i18n="audio.voice">Voice</label>
               <select id="voice"></select>
@@ -200,12 +201,12 @@
             </p>
             <p>
               <label for="volume" data-i18n="audio.volume">Speaking volume</label>
-              <input type="range" id="volume" min="-50" max="50" step="5" data-unit="percent" />
+              <input type="range" id="volume" min="0" max="100" step="5" data-unit="level" />
               <output id="volume-out"></output>
             </p>
             <p>
               <label for="earcon-volume" data-i18n="audio.earconVolume">Tone volume</label>
-              <input type="range" id="earcon-volume" min="0" max="1" step="0.05" data-unit="fraction" />
+              <input type="range" id="earcon-volume" min="0" max="100" step="5" data-unit="level" />
               <output id="earcon-volume-out"></output>
             </p>
           </fieldset>
@@ -220,7 +221,7 @@
             </p>
             <p>
               <label for="chat-volume" data-i18n="audio.chatVolume">Chat reading volume</label>
-              <input type="range" id="chat-volume" min="-50" max="50" step="5" data-unit="percent" />
+              <input type="range" id="chat-volume" min="0" max="100" step="5" data-unit="level" />
               <output id="chat-volume-out"></output>
             </p>
           </fieldset>

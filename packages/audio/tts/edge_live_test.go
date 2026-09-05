@@ -18,7 +18,7 @@ func TestEdgeSynthesisLive(t *testing.T) {
 	defer cancel()
 
 	raw, err := SynthesizeEdge(ctx,
-		"Halo, ini contoh suara MikkiLens.", "id-ID-GadisNeural", "+0%", "+0%")
+		"Halo, ini contoh suara MikkiLens.", "id-ID-GadisNeural", "+0%")
 	if err != nil {
 		t.Fatalf("SynthesizeEdge: %v", err)
 	}

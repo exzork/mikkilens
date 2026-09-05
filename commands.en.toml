@@ -68,6 +68,28 @@ phrases = ["unmute my mic", "mic back on", "turn my mic on", "restore my audio"]
 [commands.mic_status]
 phrases = ["is my mic muted", "check my microphone", "microphone status"]
 
+# ---------------------------------------------------------------- volume ----
+
+# Zero to a hundred, said however it comes out: "fifty percent", "fifty", or
+# "50". This is how loud MikkiLens herself is, not how loud Windows is -- the
+# system volume carries the game and whatever OBS is capturing too, so turning
+# her down there turns the stream down with her.
+#
+# Each of these answers by saying the new volume at the new volume. If the
+# answer cannot be heard, it is too quiet.
+[commands.set_speech_volume]
+phrases = ["set the speaking volume to {amount}", "set your volume to {amount}", "speaking volume {amount}"]
+
+[commands.set_chat_volume]
+phrases = ["set the chat volume to {amount}", "set the chat reading volume to {amount}", "chat volume {amount}"]
+
+# The tones are the short sounds: listening, done, failed.
+[commands.set_earcon_volume]
+phrases = ["set the tone volume to {amount}", "set the tones to {amount}", "tone volume {amount}"]
+
+[commands.set_music_volume]
+phrases = ["set the music volume to {amount}", "set the song volume to {amount}", "music volume {amount}"]
+
 # --------------------------------------------------------------- sources ----
 
 [commands.show_source]

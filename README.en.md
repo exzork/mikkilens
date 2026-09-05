@@ -363,6 +363,37 @@ once, with tests -- `scripts/test-keys.mjs`. Anything it cannot read registers
 nothing and warns, because registering some other key would take a key she
 never asked for.
 
+## Volume
+
+Four of them -- her voice, chat, the tones, the music -- and all four are a
+plain 0 to 100 in `config.toml`, a percentage of that one sound's own level.
+None of them is the system volume, and that is the point: the system volume
+carries the game and whatever OBS is capturing as well, so turning her down
+there turns the stream down with her, and it cannot be reached mid-stream by
+someone working by ear.
+
+It is applied where the samples are, not where they came from. The online
+voice will honour a `prosody` volume -- asking for `-50%` really does come back
+at half the amplitude -- but asking makes the loudness part of what was
+rendered, and therefore part of the cache: it used to be in the cache key, so
+every warmed phrase was wrong the moment she changed the volume, and the
+offline Windows voice had no volume to ask for at all. `Audio.AtVolume` scales
+a copy on the way to the speaker instead, which is the same thing the earcons
+and the music already did. Cached speech, the offline voice and the sentence
+confirming the change all come out at the volume she just set.
+
+All four can be set by voice -- "atur volume bicara lima puluh persen" -- which
+is the only way to set one while the stream is running. The number is read as
+words or digits, added up rather than looked up, so ninety-five is as easy to
+say as fifty; anything above a hundred is refused rather than clamped, because
+hearing one means a word was misheard. Each command answers by saying the new
+volume at the new volume, which is the whole confirmation: too quiet to hear
+is the same answer as "that is now too quiet".
+
+A config written by an older version still works: `"-40%"` becomes 60 and the
+`0.25` fractions become 25, so upgrading does not quietly change how loud she
+is.
+
 ## Muting chat
 
 `[mute] combination` silences the chat being read aloud, and gives it back.

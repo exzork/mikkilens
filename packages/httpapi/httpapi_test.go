@@ -443,6 +443,24 @@ func TestConfigWriteBindsItsBodyAndAppliesLive(t *testing.T) {
 	}
 }
 
+// The settings page sends JSON, where 60 arrives as 60.0 and go-toml will not
+// put a float into an int field. A volume dragged on the slider has to survive
+// that trip, or saving it looks exactly like the slider doing nothing.
+func TestAVolumeFromTheSettingsPageIsSavedAsAWholePercent(t *testing.T) {
+	server, engine, _ := client(t)
+
+	status, _ := send(t, server, http.MethodPut, "/api/config", map[string]any{
+		"speech": map[string]any{"volume": 60.0, "earcon_volume": 40.0},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d", status)
+	}
+	if engine.settings.Speech.Volume != 60 || engine.settings.Speech.EarconVolume != 40 {
+		t.Errorf("volumes saved as %d and %d, want 60 and 40",
+			engine.settings.Speech.Volume, engine.settings.Speech.EarconVolume)
+	}
+}
+
 func TestConfigWriteKeepsUnmentionedValues(t *testing.T) {
 	server, engine, _ := client(t)
 	send(t, server, http.MethodPut, "/api/config", map[string]any{

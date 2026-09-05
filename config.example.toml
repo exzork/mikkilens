@@ -21,11 +21,19 @@ chat_tts = "follow" # "follow" reads chat in the output-language voice.
 voice = ""            # Empty uses the language default (id -> id-ID-GadisNeural).
                       # The other Indonesian voice is id-ID-ArdiNeural.
 rate = "+0%"          # Speed of confirmations. "+25%" is noticeably faster.
-volume = "+0%"        # Loudness of confirmations, from "-100%" to "+100%".
+
+# Every volume in this file is a plain 0 to 100: a percentage of that one
+# sound's own level, where 100 is untouched and 50 is half of it.
+#
+# Her own loudness, never the machine's. The system volume carries the game and
+# whatever OBS is capturing as well, so turning her down there turns the stream
+# down with her -- and it cannot be reached by voice mid-stream, which these
+# can: "atur volume bicara lima puluh persen".
+volume = 100          # Loudness of confirmations.
 chat_voice = ""       # Empty means the same voice as above.
 chat_rate = "+15%"    # Chat is usually wanted faster than system feedback.
-chat_volume = "+0%"   # Chat is often wanted quieter than confirmations, so it
-                      # sits under the stream instead of over it. "-30%".
+chat_volume = 100     # Chat is often wanted quieter than confirmations, so it
+                      # sits under the stream instead of over it. Try 70.
 
 # Donations are read above the chat backlog and below the app's own voice, so
 # one is heard while it is still current rather than twenty messages later.
@@ -33,11 +41,13 @@ donation_voice = ""   # Empty means the same voice as `voice` above -- not the
                       # chat voice, so a donation does not sound like chat.
                       # Set a different voice to make donations unmistakable.
 donation_rate = "+0%"
-donation_volume = "+0%"
+donation_volume = 100
 
 output_device = ""    # Part of the device name, e.g. "Headphones". Empty uses
                       # the Windows default -- but see the warning below.
-earcon_volume = 0.25  # Volume of the short tones (listening, ok, error).
+earcon_volume = 25    # Volume of the short tones (listening, ok, error).
+                      # These are the fastest thing you have for knowing what
+                      # happened, so keep them audible.
 confirm_timeout_s = 8.0
 lead_in_ms = 300      # Silence played before a sound when the speaker has been
                       # quiet for a while. Bluetooth headphones switch the audio
@@ -147,8 +157,8 @@ output_device = ""
 # browser: a browser cannot know the chat is being read over it, so the two
 # talk at once and neither can be followed. Quieter, never silent -- a song
 # that vanishes whenever a message is read sounds like the music stopping.
-volume = 0.7
-duck_volume = 0.25
+volume = 70
+duck_volume = 25
 
 # The two programs that play a song: yt-dlp works out the audio URL, ffmpeg
 # decodes it as it arrives. Nothing is downloaded to disk -- the song is

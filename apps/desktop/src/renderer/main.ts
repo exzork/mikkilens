@@ -98,9 +98,10 @@ function numberFrom(id: string, fallback: number): number {
  * back to be checked. A slider with the number beside it is one gesture, and it cannot be
  * saved as nonsense.
  *
- * Two kinds share the treatment: a signed percentage the engine wants as a
- * string ("+15%"), and a plain fraction it wants as a number (0.25), shown as
- * a percentage because that is what it means.
+ * Two kinds share the treatment: a rate, which is a signed percentage the
+ * engine wants as a string ("+15%"), and a volume, which is a plain number
+ * from 0 to 100 -- a percentage of that one sound's own level, never of the
+ * system volume, which belongs to the game and to OBS as much as to her.
  */
 function showSliderValue(slider: HTMLInputElement): void {
   const output = document.getElementById(`${slider.id}-out`)
@@ -108,10 +109,16 @@ function showSliderValue(slider: HTMLInputElement): void {
     return
   }
   const value = Number(slider.value)
-  output.textContent =
-    slider.dataset.unit === 'fraction'
-      ? `${Math.round(value * 100)}%`
-      : `${value > 0 ? '+' : ''}${value}%`
+  switch (slider.dataset.unit) {
+    case 'level':
+      output.textContent = `${value}%`
+      break
+    case 'fraction':
+      output.textContent = `${Math.round(value * 100)}%`
+      break
+    default:
+      output.textContent = `${value > 0 ? '+' : ''}${value}%`
+  }
 }
 
 for (const slider of document.querySelectorAll<HTMLInputElement>('input[type="range"]')) {
@@ -146,10 +153,27 @@ function percentFrom(id: string): string {
   return `${value >= 0 ? '+' : ''}${value}%`
 }
 
+/** The wake threshold, which is a real fraction of one rather than a volume. */
 function showFraction(id: string, value: number): void {
   const slider = element<HTMLInputElement>(id)
   slider.value = String(value)
   showSliderValue(slider)
+}
+
+/** Put a configured volume on its slider, which is the whole 0 to 100. */
+function showVolume(id: string, value: number): void {
+  const slider = element<HTMLInputElement>(id)
+  slider.value = String(volume(value))
+  showSliderValue(slider)
+}
+
+/** A volume slider's position: a whole percentage, and nothing outside it. */
+function volumeFrom(id: string, fallback: number): number {
+  return volume(numberFrom(id, fallback))
+}
+
+function volume(value: number): number {
+  return Math.min(100, Math.max(0, Math.round(value)))
 }
 
 // -- tabs ---------------------------------------------------------------------
@@ -681,10 +705,10 @@ element('save-audio').addEventListener('click', () => {
         output_device: output ? output.value : '',
         voice: element<HTMLSelectElement>('voice').value,
         rate: percentFrom('rate'),
-        volume: percentFrom('volume'),
+        volume: volumeFrom('volume', settings?.speech.volume ?? 100),
         chat_rate: percentFrom('chat-rate'),
-        chat_volume: percentFrom('chat-volume'),
-        earcon_volume: numberFrom('earcon-volume', settings?.speech.earcon_volume ?? 0.25),
+        chat_volume: volumeFrom('chat-volume', settings?.speech.chat_volume ?? 100),
+        earcon_volume: volumeFrom('earcon-volume', settings?.speech.earcon_volume ?? 25),
       },
       audio: { input_device: input ? input.value : '' },
       stt: {
@@ -698,11 +722,16 @@ element('save-audio').addEventListener('click', () => {
 
 element('preview-voice').addEventListener('click', async () => {
   try {
+    // The sliders as they stand rather than as they were saved: a sample that
+    // ignores the volume just dragged to is the same, to the ear, as a volume
+    // slider that does nothing.
     await api('/speak', {
       method: 'POST',
       body: JSON.stringify({
         text: t('audio.sampleText'),
         voice: element<HTMLSelectElement>('voice').value,
+        rate: percentFrom('rate'),
+        volume: volumeFrom('volume', settings?.speech.volume ?? 100),
       }),
     })
     announce(t('audio.playingSample'))
@@ -1875,10 +1904,10 @@ async function boot(): Promise<void> {
   }
 
   showPercent('rate', settings.speech.rate)
-  showPercent('volume', settings.speech.volume)
+  showVolume('volume', settings.speech.volume)
   showPercent('chat-rate', settings.speech.chat_rate)
-  showPercent('chat-volume', settings.speech.chat_volume)
-  showFraction('earcon-volume', settings.speech.earcon_volume)
+  showVolume('chat-volume', settings.speech.chat_volume)
+  showVolume('earcon-volume', settings.speech.earcon_volume)
 
   fillRecognitionChoices()
 

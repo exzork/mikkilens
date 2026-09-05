@@ -106,7 +106,13 @@ func edgeTimestamp(now time.Time) string {
 }
 
 // SynthesizeEdge renders text with an online Edge voice and returns raw MP3.
-func SynthesizeEdge(ctx context.Context, text, voice, rate, volume string) ([]byte, error) {
+//
+// Always at the voice's own level. The service does honour a prosody volume --
+// asking for "-50%" comes back at half the amplitude -- but asking is the
+// wrong place to do it: it reaches only the online voice, and it makes the
+// loudness part of what was rendered, so it belongs to the cache. Loudness is
+// applied to the samples instead, by [Audio.AtVolume].
+func SynthesizeEdge(ctx context.Context, text, voice, rate string) ([]byte, error) {
 	now := time.Now()
 	requestID := connectionID()
 
@@ -129,7 +135,7 @@ func SynthesizeEdge(ctx context.Context, text, voice, rate, volume string) ([]by
 		return nil, failure("could not configure the online voice: %v", err)
 	}
 	if err := connection.WriteMessage(websocket.TextMessage,
-		[]byte(ssmlRequest(requestID, now, text, voice, rate, volume))); err != nil {
+		[]byte(ssmlRequest(requestID, now, text, voice, rate))); err != nil {
 		return nil, failure("could not send text to the online voice: %v", err)
 	}
 
@@ -183,11 +189,11 @@ func speechConfig(now time.Time) string {
 		"Path:speech.config\r\n\r\n" + body
 }
 
-func ssmlRequest(requestID string, now time.Time, text, voice, rate, volume string) string {
+func ssmlRequest(requestID string, now time.Time, text, voice, rate string) string {
 	ssml := fmt.Sprintf(
 		`<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>`+
-			`<voice name='%s'><prosody pitch='+0Hz' rate='%s' volume='%s'>%s</prosody></voice></speak>`,
-		voice, orDefault(rate, "+0%"), orDefault(volume, "+0%"), html.EscapeString(text))
+			`<voice name='%s'><prosody pitch='+0Hz' rate='%s' volume='+0%%'>%s</prosody></voice></speak>`,
+		voice, orDefault(rate, "+0%"), html.EscapeString(text))
 
 	return "X-RequestId:" + requestID + "\r\n" +
 		"Content-Type:application/ssml+xml\r\n" +

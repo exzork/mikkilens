@@ -433,7 +433,9 @@ func (s *Server) testDevice(writer http.ResponseWriter, request *http.Request) {
 		if found[index].Index != body.Index {
 			continue
 		}
-		volume := s.engine.Config().Speech.EarconVolume + 0.1
+		// A little above her own tone volume: this one is being listened for
+		// on a device she is not sure is the right one.
+		volume := float64(config.ClampPercent(s.engine.Config().Speech.EarconVolume+10)) / 100
 		if err := devices.PlayTestTone(&found[index], volume); err != nil {
 			fail(writer, http.StatusInternalServerError, err.Error())
 			return
@@ -482,11 +484,18 @@ func (s *Server) getVoices(writer http.ResponseWriter, request *http.Request) {
 // donation alert will post through: "donation" queues above the chat backlog
 // and takes the donation voice, while anything else keeps the old behaviour of
 // speaking at result priority in the main voice.
+//
+// Rate and volume are optional and are what the sample button on the settings
+// page sends: the sliders as they stand, before Save. Hearing the saved volume
+// instead of the one just dragged to is indistinguishable from the slider
+// doing nothing.
 func (s *Server) speak(writer http.ResponseWriter, request *http.Request) {
 	var body struct {
 		Text     string `json:"text"`
 		Voice    string `json:"voice"`
 		Priority string `json:"priority"`
+		Rate     string `json:"rate"`
+		Volume   *int   `json:"volume"`
 	}
 	if !decode(writer, request, &body) {
 		return
@@ -503,7 +512,7 @@ func (s *Server) speak(writer http.ResponseWriter, request *http.Request) {
 		utterance.Priority = feedback.Donation
 		utterance.Earcon = "donation"
 		utterance.Rate = settings.Speech.DonationRate
-		utterance.Volume = settings.Speech.DonationVolume
+		utterance.Volume = feedback.At(settings.Speech.DonationVolume)
 		utterance.RequeueIfInterrupted = true
 		if utterance.Voice == "" {
 			utterance.Voice = settings.VoiceForDonation(s.engine.Locale().DefaultVoice())
@@ -511,6 +520,12 @@ func (s *Server) speak(writer http.ResponseWriter, request *http.Request) {
 	}
 	if utterance.Voice == "" {
 		utterance.Voice = settings.Voice(s.engine.Locale().DefaultVoice())
+	}
+	if body.Rate != "" {
+		utterance.Rate = body.Rate
+	}
+	if body.Volume != nil {
+		utterance.Volume = feedback.At(config.ClampPercent(*body.Volume))
 	}
 
 	s.engine.Bus().Enqueue(utterance)

@@ -13,6 +13,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/feedback"
 	"github.com/exzork/mikkilens/packages/controllers/music"
 	"github.com/exzork/mikkilens/packages/controllers/player"
+	"github.com/exzork/mikkilens/packages/core/config"
 	"github.com/exzork/mikkilens/packages/core/i18n"
 	"github.com/exzork/mikkilens/packages/core/intent"
 	"github.com/exzork/mikkilens/packages/core/state"
@@ -122,8 +123,7 @@ func (e *Engine) startSong(song music.Song) {
 	e.playing.stopped.Store(false)
 	e.playing.paused.Store(false)
 	e.playing.ducked.Store(false)
-	e.playing.volume.Store(math.Float64bits(clampVolume(settings.Music.Volume, 0.7)))
-	e.playing.duck.Store(math.Float64bits(clampVolume(settings.Music.DuckVolume, 0.25)))
+	e.applyMusicVolume(settings)
 
 	e.playing.mu.Lock()
 	e.playing.song, e.playing.live = song, true
@@ -377,12 +377,16 @@ func (e *Engine) fetchPlayerTools(ctx context.Context, wanted assets.Wanted) boo
 	}
 }
 
-func clampVolume(value, fallback float64) float64 {
-	if value <= 0 {
-		return fallback
-	}
-	if value > 1 {
-		return 1
-	}
-	return value
+// applyMusicVolume sets how loud the song is, and what it drops to under the
+// voice.
+//
+// Called when a song starts and again whenever either is changed, which is
+// what lets turning the music down land on the song already playing rather
+// than on the next one.
+func (e *Engine) applyMusicVolume(settings config.Config) {
+	e.playing.volume.Store(math.Float64bits(gain(settings.Music.Volume)))
+	e.playing.duck.Store(math.Float64bits(gain(settings.Music.DuckVolume)))
 }
+
+// gain turns a 0-to-100 volume into the multiplier every sample is scaled by.
+func gain(percent int) float64 { return float64(config.ClampPercent(percent)) / 100 }

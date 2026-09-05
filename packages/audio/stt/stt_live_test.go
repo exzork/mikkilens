@@ -83,7 +83,7 @@ func speak(t *testing.T, phrase string) []float32 {
 	defer cancel()
 
 	audio, err := tts.Synthesize(ctx, phrase, tts.Options{
-		Voice: "id-ID-GadisNeural", Rate: "+0%", Volume: "+0%",
+		Voice: "id-ID-GadisNeural", Rate: "+0%",
 	})
 	if err != nil {
 		t.Skipf("could not synthesize (offline?): %v", err)

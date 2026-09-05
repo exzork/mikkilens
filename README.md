@@ -112,6 +112,10 @@ Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
 | "hentikan lagunya" | Lagunya berhenti |
 | "lagu apa ini" | Judul lagu yang sedang diputar dibacakan |
 | "bisukan chat" | Pembacaan chat dibisukan; tidak ada yang hilang |
+| "atur volume bicara lima puluh persen" | Volume suaranya, nol sampai seratus |
+| "atur volume chat tujuh puluh persen" | Volume pembaca chat, terpisah |
+| "atur volume nada delapan puluh persen" | Volume nada-nada pendeknya |
+| "atur volume musik empat puluh persen" | Volume lagunya, langsung terasa |
 
 Semua kalimat di atas **bisa diubah**. Lihat bagian
 [Perintah](#mengubah-perintah).
@@ -315,6 +319,30 @@ perintah pendek.
 
 Kalau kamu lebih suka mengirim suara ke server, isi `[stt] base_url` di
 `config.toml` dengan endpoint apa pun yang kompatibel dengan OpenAI.
+
+### Volume
+
+Ada empat: **suaranya**, **pembaca chat**, **nada-nada pendek**, dan **musik**.
+Semuanya nol sampai seratus, di aplikasi Pengaturan tab **Audio** — dan
+semuanya bisa juga diucapkan sambil siaran:
+
+```
+"atur volume bicara lima puluh persen"
+"atur volume chat tujuh puluh persen"
+"atur volume nada delapan puluh persen"
+"atur volume musik empat puluh persen"
+```
+
+Angkanya boleh kata ("lima puluh") atau angka ("50"). MikkiLens menjawab dengan
+menyebut volumenya yang baru, **pada volume itu** — kalau jawabannya tidak
+terdengar, berarti kekecilan.
+
+Yang diatur adalah volume MikkiLens sendiri, bukan volume Windows. Volume
+Windows juga milik game dan milik yang direkam OBS, jadi mengecilkannya ikut
+mengecilkan siaranmu — dan tidak bisa dijangkau tanpa melihat layar.
+
+`config.toml` dari versi lama tetap jalan: `"-40%"` jadi `60`, dan `0.25` jadi
+`25`.
 
 ### Kata pemicu
 

@@ -24,6 +24,7 @@ type fakePlayer struct {
 	mu          sync.Mutex
 	playSeconds float64
 	played      []string
+	levels      map[string]float32 // loudest sample per phrase, which is the volume
 	interrupted []string
 	interrupt   chan struct{}
 	started     chan struct{}
@@ -70,9 +71,32 @@ func (p *fakePlayer) Play(audio tts.Audio) (bool, error) {
 	case <-timer.C:
 		p.mu.Lock()
 		p.played = append(p.played, audio.Text)
+		if p.levels == nil {
+			p.levels = map[string]float32{}
+		}
+		p.levels[audio.Text] = peak(audio)
 		p.mu.Unlock()
 		return true, nil
 	}
+}
+
+// level is how loud one phrase actually came out, which is the only place the
+// volume can be seen now that it is applied to the samples rather than asked
+// of the voice.
+func (p *fakePlayer) level(text string) float32 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.levels[text]
+}
+
+func peak(audio tts.Audio) float32 {
+	loudest := float32(0)
+	for _, sample := range audio.Samples {
+		if sample > loudest {
+			loudest = sample
+		}
+	}
+	return loudest
 }
 
 func (p *fakePlayer) playedTexts() []string {
@@ -100,6 +124,16 @@ func fakeSynthesize(_ context.Context, text string, _ tts.Options) (tts.Audio, e
 	return tts.Audio{
 		Samples: make([]float32, 10), SampleRate: 48000, Channels: 1, Text: text,
 	}, nil
+}
+
+// loudSynthesize speaks at full scale, so whatever comes out the other end is
+// the volume that was applied to it.
+func loudSynthesize(_ context.Context, text string, _ tts.Options) (tts.Audio, error) {
+	samples := make([]float32, 10)
+	for index := range samples {
+		samples[index] = 1
+	}
+	return tts.Audio{Samples: samples, SampleRate: 48000, Channels: 1, Text: text}, nil
 }
 
 func newBus(t *testing.T, playSeconds float64) (*feedback.Bus, *fakePlayer) {
@@ -324,25 +358,19 @@ func TestClearDropsOnlyTheNamedPriority(t *testing.T) {
 
 // Chat is read at its own volume and rate: it runs for hours under the stream,
 // where a confirmation is a short interruption meant to be heard over it.
-func TestChatIsSynthesizedAtTheChatVolumeAndConfirmationsAtTheSpeechVolume(t *testing.T) {
-	var mu sync.Mutex
-	spoken := map[string]tts.Options{}
-	recording := func(_ context.Context, text string, options tts.Options) (tts.Audio, error) {
-		mu.Lock()
-		spoken[text] = options
-		mu.Unlock()
-		return tts.Audio{
-			Samples: make([]float32, 10), SampleRate: 48000, Channels: 1, Text: text,
-		}, nil
-	}
-
+//
+// Checked on what was played rather than on what was asked of the voice. That
+// is the point of the change this tests: the online voice was being asked for
+// a quieter reading and not always giving one, and cached speech was never
+// asked at all.
+func TestChatIsPlayedAtTheChatVolumeAndConfirmationsAtTheSpeechVolume(t *testing.T) {
 	settings := config.Default()
 	settings.Speech.EarconVolume = 0
-	settings.Speech.Volume = "+10%"
-	settings.Speech.ChatVolume = "-30%"
+	settings.Speech.Volume = 100
+	settings.Speech.ChatVolume = 50
 
 	player := newFakePlayer(0.01)
-	bus := feedback.NewWith(settings, i18n.Load("id"), player, recording)
+	bus := feedback.NewWith(settings, i18n.Load("id"), player, loudSynthesize)
 	t.Cleanup(bus.Stop)
 
 	bus.SayChat("a chat message", false, nil)
@@ -350,47 +378,35 @@ func TestChatIsSynthesizedAtTheChatVolumeAndConfirmationsAtTheSpeechVolume(t *te
 	bus.Start()
 	drain(t, bus)
 
-	mu.Lock()
-	defer mu.Unlock()
-	if got := spoken["a chat message"].Volume; got != "-30%" {
-		t.Errorf("chat volume = %q, want the chat volume -30%%", got)
+	if got := player.level("a chat message"); got != 0.5 {
+		t.Errorf("chat played at %v, want half the voice", got)
 	}
-	if got := spoken["stop the stream?"].Volume; got != "+10%" {
-		t.Errorf("confirmation volume = %q, want the speech volume +10%%", got)
+	if got := player.level("stop the stream?"); got != 1 {
+		t.Errorf("confirmation played at %v, want the full speech volume", got)
 	}
 }
 
-// An unset chat volume is the ordinary case: it means "the same as everything
-// else", not silence.
-func TestChatFallsBackToTheSpeechVolumeWhenUnset(t *testing.T) {
-	var mu sync.Mutex
-	var volume string
-	recording := func(_ context.Context, text string, options tts.Options) (tts.Audio, error) {
-		mu.Lock()
-		volume = options.Volume
-		mu.Unlock()
-		return tts.Audio{
-			Samples: make([]float32, 10), SampleRate: 48000, Channels: 1, Text: text,
-		}, nil
-	}
-
+// Zero is silence, not a message that never gets read. The samples are still
+// played, so the queue moves at the speed it always does and a chat volume of
+// nought does not race an hour of backlog past in a second.
+func TestAVolumeOfZeroPlaysSilenceOfTheSameLength(t *testing.T) {
 	settings := config.Default()
 	settings.Speech.EarconVolume = 0
-	settings.Speech.Volume = "-20%"
-	settings.Speech.ChatVolume = ""
+	settings.Speech.ChatVolume = 0
 
 	player := newFakePlayer(0.01)
-	bus := feedback.NewWith(settings, i18n.Load("id"), player, recording)
+	bus := feedback.NewWith(settings, i18n.Load("id"), player, loudSynthesize)
 	t.Cleanup(bus.Stop)
 
 	bus.SayChat("a chat message", false, nil)
 	bus.Start()
 	drain(t, bus)
 
-	mu.Lock()
-	defer mu.Unlock()
-	if volume != "-20%" {
-		t.Errorf("chat volume = %q, want the speech volume -20%%", volume)
+	if got := player.level("a chat message"); got != 0 {
+		t.Errorf("chat played at %v, want silence", got)
+	}
+	if want := []string{"a chat message"}; !reflect.DeepEqual(player.playedTexts(), want) {
+		t.Errorf("played %v, want the message played through", player.playedTexts())
 	}
 }
 

@@ -68,6 +68,28 @@ phrases = ["nyalakan mikrofon", "nyalakan mic", "unmute mic", "hidupkan mikrofon
 [commands.mic_status]
 phrases = ["mikrofon mati atau tidak", "cek mikrofon", "status mikrofon"]
 
+# --------------------------------------------------------------- volume ----
+
+# Angkanya nol sampai seratus, dan boleh diucapkan bagaimana pun: "lima puluh
+# persen", "lima puluh", atau "50". Yang diatur adalah volume MikkiLens
+# sendiri, bukan volume Windows -- volume Windows juga milik game dan milik
+# yang direkam OBS, jadi mengecilkannya ikut mengecilkan siarannya.
+#
+# Setiap perintah menjawab dengan menyebut volumenya yang baru, pada volume
+# yang baru itu. Kalau jawabannya tidak terdengar, berarti kekecilan.
+[commands.set_speech_volume]
+phrases = ["atur volume bicara {amount}", "ubah volume bicara jadi {amount}", "volume bicara jadi {amount}", "set volume suara {amount}"]
+
+[commands.set_chat_volume]
+phrases = ["atur volume chat {amount}", "ubah volume chat jadi {amount}", "volume baca chat jadi {amount}"]
+
+# "Nada" adalah bunyi-bunyi pendek: mulai mendengarkan, berhasil, gagal.
+[commands.set_earcon_volume]
+phrases = ["atur volume nada {amount}", "ubah volume nada jadi {amount}", "volume nadanya jadi {amount}"]
+
+[commands.set_music_volume]
+phrases = ["atur volume musik {amount}", "ubah volume musik jadi {amount}", "volume lagunya jadi {amount}"]
+
 # --------------------------------------------------------------- sumber ----
 
 [commands.show_source]

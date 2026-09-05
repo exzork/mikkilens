@@ -39,12 +39,26 @@ type Language struct {
 
 // Speech covers everything about the voice that reads to her.
 type Speech struct {
-	Voice      string `toml:"voice" json:"voice"` // empty -> the locale default
-	Rate       string `toml:"rate" json:"rate"`
-	Volume     string `toml:"volume" json:"volume"`
-	ChatVoice  string `toml:"chat_voice" json:"chat_voice"`   // empty -> same as Voice
-	ChatRate   string `toml:"chat_rate" json:"chat_rate"`     // chat is usually wanted faster
-	ChatVolume string `toml:"chat_volume" json:"chat_volume"` // empty -> same as Volume
+	Voice string `toml:"voice" json:"voice"` // empty -> the locale default
+	Rate  string `toml:"rate" json:"rate"`
+
+	// Volume is how loud MikkiLens herself is, from 0 to 100, where 100 is the
+	// voice at its own level and 50 is half of it.
+	//
+	// Her own loudness rather than the machine's: the system volume belongs to
+	// the game and to what OBS is capturing as well, so turning her down by
+	// turning Windows down takes the stream down with her. Every volume in
+	// this file is that same 0-to-100 percentage of one particular sound.
+	//
+	// It is applied to the audio as it is played rather than asked of the
+	// online voice, which is what makes it hold for the offline voice, for
+	// everything already cached, and from the moment she changes it. The
+	// scaling itself is Audio.AtVolume, in packages/audio/tts.
+	Volume int `toml:"volume" json:"volume"`
+
+	ChatVoice  string `toml:"chat_voice" json:"chat_voice"` // empty -> same as Voice
+	ChatRate   string `toml:"chat_rate" json:"chat_rate"`   // chat is usually wanted faster
+	ChatVolume int    `toml:"chat_volume" json:"chat_volume"`
 
 	// The donation voice reads whatever someone paid to have read. Giving it
 	// its own voice is what makes a donation recognisable without looking at
@@ -52,10 +66,14 @@ type Speech struct {
 	// stays distinct from the stream of ordinary messages by default.
 	DonationVoice  string `toml:"donation_voice" json:"donation_voice"`
 	DonationRate   string `toml:"donation_rate" json:"donation_rate"`
-	DonationVolume string `toml:"donation_volume" json:"donation_volume"`
+	DonationVolume int    `toml:"donation_volume" json:"donation_volume"`
 
-	OutputDevice    string  `toml:"output_device" json:"output_device"`
-	EarconVolume    float64 `toml:"earcon_volume" json:"earcon_volume"`
+	OutputDevice string `toml:"output_device" json:"output_device"`
+
+	// EarconVolume is how loud the short tones are, on the same 0-to-100
+	// scale. They are the fastest thing she has for knowing what happened, so
+	// this is worth keeping above the voice rather than under it.
+	EarconVolume    int     `toml:"earcon_volume" json:"earcon_volume"`
 	ConfirmTimeoutS float64 `toml:"confirm_timeout_s" json:"confirm_timeout_s"`
 
 	// LeadInMs is silence played before a sound when the output device has
@@ -127,13 +145,13 @@ type Music struct {
 	OutputDevice string `toml:"output_device" json:"output_device"`
 
 	// Volume is how loud the song is, and DuckVolume what it drops to while
-	// MikkiLens is speaking.
+	// MikkiLens is speaking. Both are 0 to 100, like every other volume here.
 	//
 	// The ducking is the reason playing here beats handing the song to a
 	// browser: a browser cannot know that the chat is being read over it, so
 	// the two talk at once and neither can be followed.
-	Volume     float64 `toml:"volume" json:"volume"`
-	DuckVolume float64 `toml:"duck_volume" json:"duck_volume"`
+	Volume     int `toml:"volume" json:"volume"`
+	DuckVolume int `toml:"duck_volume" json:"duck_volume"`
 
 	// YtDlpPath and FFmpegPath override where the two programs are found.
 	//
@@ -479,9 +497,9 @@ func Default() Config {
 	return Config{
 		Language: Language{Output: "id", STT: "id", ChatTTS: "follow"},
 		Speech: Speech{
-			Rate: "+0%", Volume: "+0%", ChatRate: "+15%", ChatVolume: "+0%",
-			DonationRate: "+0%", DonationVolume: "+0%",
-			EarconVolume: 0.25, ConfirmTimeoutS: 8.0,
+			Rate: "+0%", Volume: 100, ChatRate: "+15%", ChatVolume: 100,
+			DonationRate: "+0%", DonationVolume: 100,
+			EarconVolume: 25, ConfirmTimeoutS: 8.0,
 			LeadInMs: 300,
 		},
 		Audio: Audio{
@@ -507,7 +525,7 @@ func Default() Config {
 		// would be its own kind of confusing on a stream.
 		Music: Music{
 			Enabled: true, Combination: "<ctrl>+<alt>+<f>",
-			Volume: 0.7, DuckVolume: 0.25,
+			Volume: 70, DuckVolume: 25,
 		},
 		STT: STT{
 			// small rather than base: base mishears enough of a short
@@ -568,6 +586,7 @@ func Load(path string) (Config, error) {
 		slog.Error("config file is not valid TOML", "path", path, "error", err)
 		return Default(), &Error{Reason: err.Error()}
 	}
+	migrateVolumes(document)
 	return FromMap(document), nil
 }
 
@@ -575,6 +594,7 @@ func Load(path string) (Config, error) {
 // recognise. Unknown sections and keys are warned about rather than fatal.
 func FromMap(document map[string]any) Config {
 	settings := Default()
+	coerceVolumes(document)
 
 	known := sectionFields(settings)
 	for section, body := range document {

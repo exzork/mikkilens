@@ -76,6 +76,8 @@ func sampleFor(slot string) string {
 		return "main game malam ini"
 	case "question":
 		return "ada tulisan merah"
+	case "amount":
+		return "lima puluh persen"
 	default:
 		return "sesuatu"
 	}
@@ -91,6 +93,8 @@ func sampleEnglishFor(slot string) string {
 		return "playing games tonight"
 	case "question":
 		return "is there an error"
+	case "amount":
+		return "fifty percent"
 	default:
 		return "something"
 	}
@@ -340,6 +344,31 @@ func TestInvalidTomlFailsLoudly(t *testing.T) {
 	}
 	if _, err := intent.SetFromFile(path); err == nil {
 		t.Error("expected an error")
+	}
+}
+
+// The four volumes are told apart by one word in the middle of an otherwise
+// identical sentence, which is exactly the shape recognition is worst at. If
+// "atur volume musik" ever starts turning her voice down, this is what says so.
+func TestTheVolumeCommandsAreNotConfusedWithEachOther(t *testing.T) {
+	set := shipped(t, "id")
+	for spoken, want := range map[string]string{
+		"atur volume bicara lima puluh persen": "set_speech_volume",
+		"atur volume chat lima puluh persen":   "set_chat_volume",
+		"atur volume nada lima puluh persen":   "set_earcon_volume",
+		"atur volume musik lima puluh persen":  "set_music_volume",
+	} {
+		match, rivals := set.Match(spoken)
+		if len(rivals) > 0 || match == nil {
+			t.Errorf("%q did not resolve to one command", spoken)
+			continue
+		}
+		if match.Command != want {
+			t.Errorf("%q matched %s, want %s", spoken, match.Command, want)
+		}
+		if got := match.Slots["amount"]; got != "lima puluh persen" {
+			t.Errorf("%q captured amount %q", spoken, got)
+		}
 	}
 }
 

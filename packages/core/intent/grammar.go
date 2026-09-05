@@ -57,6 +57,8 @@ var KnownSlots = map[string]bool{
 	// Both belong to the music search, which is the one command whose input is
 	// typed rather than spoken.
 	"query": true, "number": true,
+	// amount is a volume: "lima puluh persen", "fifty percent", or "50".
+	"amount": true,
 }
 
 // Normalize lowercases, strips punctuation and collapses whitespace.

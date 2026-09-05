@@ -166,13 +166,14 @@ export interface AppConfig {
   speech: {
     voice: string
     rate: string
-    volume: string
+    /** 0 to 100, a percentage of her own voice rather than of the system volume. */
+    volume: number
     chat_voice: string
     chat_rate: string
-    chat_volume: string
+    chat_volume: number
     donation_voice: string
     donation_rate: string
-    donation_volume: string
+    donation_volume: number
     output_device: string
     earcon_volume: number
     confirm_timeout_s: number

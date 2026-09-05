@@ -69,23 +69,23 @@ func TestStoppedAndPausedAreReadBack(t *testing.T) {
 	}
 }
 
-// A volume of zero in the config file is far more likely to be a field nobody
-// filled in than a deliberate choice to play music silently -- and silence is
-// indistinguishable from the song having failed.
-func TestVolumeFallsBackRatherThanPlayingSilently(t *testing.T) {
+// The music volume is a percentage of the song's own level, like every other
+// volume in the config. Nothing outside nought to a hundred can be played:
+// above full would clip, and below nought is not a sound.
+func TestTheMusicGainIsThePercentageOfFull(t *testing.T) {
 	for _, test := range []struct {
-		value, fallback, want float64
+		percent int
+		want    float64
 	}{
-		{0.5, 0.7, 0.5},
-		{0, 0.7, 0.7},
-		{-1, 0.7, 0.7},
-		{1, 0.7, 1},
-		// Louder than the device can go is clamped rather than allowed to clip.
-		{4, 0.7, 1},
+		{70, 0.7},
+		{25, 0.25},
+		{100, 1},
+		{0, 0},
+		{-10, 0},
+		{400, 1},
 	} {
-		if got := clampVolume(test.value, test.fallback); got != test.want {
-			t.Errorf("clampVolume(%v, %v) = %v, want %v",
-				test.value, test.fallback, got, test.want)
+		if got := gain(test.percent); got != test.want {
+			t.Errorf("gain(%d) = %v, want %v", test.percent, got, test.want)
 		}
 	}
 }

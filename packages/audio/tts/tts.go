@@ -35,10 +35,13 @@ var (
 )
 
 // Options are the knobs on one piece of synthesis.
+//
+// Loudness is deliberately not one of them. The online voice is asked for its
+// own level every time and the volume is applied to the samples afterwards, by
+// [Audio.AtVolume] -- see the comment there for why.
 type Options struct {
-	Voice  string
-	Rate   string
-	Volume string
+	Voice string
+	Rate  string
 
 	// NoCache skips both cache layers. Chat sets it: those phrases are never
 	// repeated, so caching them only evicts the ones that are.
@@ -72,7 +75,7 @@ func Synthesize(ctx context.Context, text string, options Options) (Audio, error
 		}
 	}
 
-	raw, err := SynthesizeEdge(ctx, text, options.Voice, options.Rate, options.Volume)
+	raw, err := SynthesizeEdge(ctx, text, options.Voice, options.Rate)
 	if err != nil {
 		slog.Warn("online voice failed, using the offline Windows voice", "error", err)
 		audio, offlineErr := SynthesizeSAPI(ctx, text, parsePercent(options.Rate))
@@ -140,7 +143,7 @@ func ClearCache() {
 
 func cacheKey(text string, options Options) string {
 	sum := sha256.Sum256([]byte(strings.Join(
-		[]string{text, options.Voice, options.Rate, options.Volume}, "\x00")))
+		[]string{text, options.Voice, options.Rate}, "\x00")))
 	return hex.EncodeToString(sum[:])[:32]
 }
 

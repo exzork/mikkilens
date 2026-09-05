@@ -22,6 +22,47 @@ type Audio struct {
 	Text string
 }
 
+// AtVolume returns the same speech at a percentage of its own loudness, 100
+// being untouched and 0 silence.
+//
+// Loudness is applied here, to the samples, rather than asked of the online
+// voice that made them. The service would honour the asking; the reason not to
+// ask is that the answer would then be part of what was rendered:
+//
+//   - The offline Windows voice has no volume to ask for, so a network that
+//     drops used to take the volume setting with it.
+//   - Loudness would belong to the cache. It used to be part of the cache key,
+//     which meant every stored phrase was wrong the moment she changed the
+//     volume, and every confirmation cost a round trip again until they had
+//     all been re-rendered.
+//   - It is a percentage of one sound rather than a percentage of everything.
+//     The tones and the music are already scaled here; doing the voice
+//     anywhere else would leave three volumes that mean three things.
+//
+// The cache is shared, so a scaled copy is made rather than the samples being
+// changed in place. Full volume returns the audio untouched and copies
+// nothing, which is the ordinary case.
+func (a Audio) AtVolume(percent int) Audio {
+	if percent >= 100 {
+		return a
+	}
+	if percent < 0 {
+		percent = 0
+	}
+
+	// Zero is silence rather than nothing: the same length of audio, played
+	// and timed and interruptible exactly as it would be, only inaudible.
+	// Dropping the samples instead would race the whole chat backlog through
+	// in a second.
+	gain := float32(percent) / 100
+	scaled := make([]float32, len(a.Samples))
+	for index, sample := range a.Samples {
+		scaled[index] = sample * gain
+	}
+	a.Samples = scaled
+	return a
+}
+
 // Duration is how long this audio takes to play.
 func (a Audio) Duration() float64 {
 	if a.SampleRate == 0 || a.Channels == 0 {

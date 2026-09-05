@@ -45,7 +45,11 @@ type Utterance struct {
 	Earcon   string
 	Voice    string // empty means chosen from the priority and config
 	Rate     string
-	Volume   string // empty means the configured speech volume
+
+	// Volume is 0 to 100, and nil means the configured speech volume. A
+	// pointer because zero is a volume she can choose -- chat turned all the
+	// way down is a real setting, and it must not read as "unset".
+	Volume *int
 
 	// RequeueIfInterrupted puts the utterance back at its original place in the
 	// queue when something preempts it. Chat sets it, so being cut off by an
@@ -76,6 +80,10 @@ type Utterance struct {
 
 	created time.Time
 }
+
+// At is a volume for one utterance, for the callers that read chat and
+// donations at a level of their own.
+func At(volume int) *int { return &volume }
 
 // Spoken is one line of the log page in the settings app.
 type Spoken struct {
@@ -274,7 +282,7 @@ func (b *Bus) SayDonation(text string, onSpoken func(bool)) {
 		ThroughHold:          true,
 		Voice:                settings.VoiceForDonation(locale.DefaultVoice()),
 		Rate:                 settings.Speech.DonationRate,
-		Volume:               settings.Speech.DonationVolume,
+		Volume:               At(settings.Speech.DonationVolume),
 		RequeueIfInterrupted: true,
 		OnSpoken:             onSpoken,
 	})
@@ -309,7 +317,7 @@ func (b *Bus) SayChat(text string, paid bool, onSpoken func(bool)) {
 		Earcon:               earcon,
 		Voice:                settings.VoiceForChat(locale.DefaultVoice()),
 		Rate:                 settings.Speech.ChatRate,
-		Volume:               settings.Speech.ChatVolume,
+		Volume:               At(settings.Speech.ChatVolume),
 		RequeueIfInterrupted: true,
 		OnSpoken:             onSpoken,
 	})
@@ -354,7 +362,7 @@ func (b *Bus) Enqueue(utterance Utterance) {
 // plays over whatever is already being said.
 func (b *Bus) Earcon(name string) {
 	settings := b.Config()
-	wave, err := earcons.Render(name, settings.Speech.EarconVolume)
+	wave, err := earcons.Render(name, float64(settings.Speech.EarconVolume)/100)
 	if err != nil {
 		slog.Error("unknown earcon", "name", name, "error", err)
 		return
@@ -714,16 +722,16 @@ func (b *Bus) speak(utterance Utterance) bool {
 	if rate == "" {
 		rate = settings.Speech.Rate
 	}
-	volume := utterance.Volume
-	if volume == "" {
-		volume = settings.Speech.Volume
+	volume := settings.Speech.Volume
+	if utterance.Volume != nil {
+		volume = *utterance.Volume
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	audio, err := b.synthesize(ctx, utterance.Text, tts.Options{
-		Voice: voice, Rate: rate, Volume: volume,
+		Voice: voice, Rate: rate,
 		NoCache: utterance.Priority == Chat || utterance.Priority == Donation,
 	})
 	if err != nil {
@@ -758,7 +766,10 @@ func (b *Bus) speak(utterance Utterance) bool {
 		defer hook(false)
 	}
 
-	completed, err := b.player.Play(audio)
+	// Loudness is applied here rather than asked of the voice, so that a
+	// volume she has just changed is heard on the next sentence -- including
+	// the sentence confirming she changed it, which comes back cached.
+	completed, err := b.player.Play(audio.AtVolume(volume))
 	if err != nil {
 		slog.Error("could not play speech", "error", err)
 		b.Earcon("error")

@@ -96,6 +96,7 @@
   "audio.sttProcessor": "The processor",
   "audio.sttRunning": "Now running: {backend}",
   "audio.voiceLegend": "Speaking voice",
+  "audio.voiceHint": "The volumes here are 0 to 100, and they are how loud MikkiLens is — not how loud Windows is, which carries the game and whatever OBS is capturing too. Mid-stream you can say it instead: “set the speaking volume to fifty percent”.",
   "audio.voice": "Voice",
   "audio.rate": "Speaking rate",
   "audio.volume": "Speaking volume",

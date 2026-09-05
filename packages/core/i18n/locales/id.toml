@@ -170,6 +170,18 @@ nothing_to_play = "Belum ada hasil pencarian untuk diputar. Cari lagunya dulu."
 no_such_result = "Tidak ada nomor {number}. Hasilnya ada {count}."
 not_a_number = "Saya tidak menangkap nomornya: {number}."
 
+[volume]
+# Jawaban dari "atur volume bicara lima puluh persen" dan sejenisnya. Setiap
+# jawaban diucapkan pada volume yang baru itu sendiri, jadi kalau jawabannya
+# tidak terdengar, itu jawabannya.
+speech = "Volume bicara {percent} persen."
+chat = "Volume baca chat {percent} persen."
+earcon = "Volume nada {percent} persen."
+music = "Volume musik {percent} persen."
+not_a_number = "Saya tidak menangkap angkanya: {amount}. Sebutkan nol sampai seratus persen."
+failed = "Volumenya tidak bisa diubah: {reason}"
+not_saved = "Volumenya sudah berubah, tapi tidak tersimpan: {reason}"
+
 [vision]
 looking = "Sedang melihat layar kamu."
 failed = "Gagal membaca layar: {reason}"

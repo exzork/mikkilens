@@ -334,6 +334,7 @@ func (e *Engine) registerBuiltinHandlers() {
 	e.router.RegisterAll(searchHandlers(e))
 	e.router.RegisterAll(musicHandlers(e))
 	e.router.RegisterAll(musicPlaybackHandlers(e))
+	e.router.RegisterAll(volumeHandlers(e))
 }
 
 func (e *Engine) handleHelp(map[string]string) error {
@@ -1761,10 +1762,19 @@ func (e *Engine) ApplyConfig(updated config.Config) error {
 	}
 
 	if updated.Speech.Voice != previous.Speech.Voice ||
-		updated.Speech.Rate != previous.Speech.Rate ||
-		updated.Speech.Volume != previous.Speech.Volume {
+		updated.Speech.Rate != previous.Speech.Rate {
 		// Cached audio was rendered with the previous voice.
+		//
+		// The volume is deliberately not in here: it is applied to the samples
+		// as they are played, so cached speech is already at whatever she has
+		// just set, and throwing the cache away would cost her a second on
+		// every confirmation for nothing.
 		tts.ClearCache()
+	}
+
+	if updated.Music.Volume != previous.Music.Volume ||
+		updated.Music.DuckVolume != previous.Music.DuckVolume {
+		e.applyMusicVolume(updated)
 	}
 
 	if updated.Speech.OutputDevice != previous.Speech.OutputDevice {
