@@ -139,16 +139,16 @@ func indexOf(haystack, needle string) int {
 // and the reply comes back as a command.
 func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 	var seen struct {
-		path             string
-		model            string
-		system           string
-		user             string
-		toolChoice       string
-		tools            []string
-		sceneDescription string
-		sceneRequired    []string
-		sceneClosed      bool
-		sceneHasSlot     bool
+		path               string
+		model              string
+		system             string
+		user               string
+		toolChoice         string
+		tools              []string
+		slottedDescription string
+		slottedRequired    []string
+		slottedClosed      bool
+		slottedHasSlot     bool
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(
@@ -192,11 +192,11 @@ func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 			}
 			for _, tool := range body.Tools {
 				seen.tools = append(seen.tools, tool.Function.Name)
-				if tool.Function.Name == "switch_scene" {
-					seen.sceneDescription = tool.Function.Description
-					seen.sceneRequired = tool.Function.Parameters.Required
-					seen.sceneClosed = !tool.Function.Parameters.AdditionalProperties
-					_, seen.sceneHasSlot = tool.Function.Parameters.Properties["scene"]
+				if tool.Function.Name == "switch_channel" {
+					seen.slottedDescription = tool.Function.Description
+					seen.slottedRequired = tool.Function.Parameters.Required
+					seen.slottedClosed = !tool.Function.Parameters.AdditionalProperties
+					_, seen.slottedHasSlot = tool.Function.Parameters.Properties["channel"]
 				}
 			}
 
@@ -216,8 +216,8 @@ func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 		[]CommandOption{
 			{ID: "chat_pause", Phrases: []string{"jeda chat"}},
 			{ID: "chat_resume", Phrases: []string{"lanjutkan chat"}},
-			{ID: "switch_scene", Phrases: []string{"ganti ke {scene}"},
-				Slots: []string{"scene"}, Required: []string{"scene"}},
+			{ID: "switch_channel", Phrases: []string{"ganti channel ke {channel}"},
+				Slots: []string{"channel"}, Required: []string{"channel"}},
 		})
 	if err != nil {
 		t.Fatalf("MatchCommand: %v", err)
@@ -246,16 +246,16 @@ func TestMatchCommandTalksToAnOpenAICompatibleServer(t *testing.T) {
 
 	// The phrases are the description: they are what tells a model when to
 	// call this rather than the one next to it.
-	if !contains(seen.sceneDescription, "ganti ke {scene}") {
-		t.Errorf("the phrases must describe the tool, got %q", seen.sceneDescription)
+	if !contains(seen.slottedDescription, "ganti channel ke {channel}") {
+		t.Errorf("the phrases must describe the tool, got %q", seen.slottedDescription)
 	}
-	if !seen.sceneHasSlot {
+	if !seen.slottedHasSlot {
 		t.Error("a slotted command must declare its slot as an argument")
 	}
-	if len(seen.sceneRequired) != 1 || seen.sceneRequired[0] != "scene" {
-		t.Errorf("required is %v, want [scene]", seen.sceneRequired)
+	if len(seen.slottedRequired) != 1 || seen.slottedRequired[0] != "channel" {
+		t.Errorf("required is %v, want [channel]", seen.slottedRequired)
 	}
-	if !seen.sceneClosed {
+	if !seen.slottedClosed {
 		t.Error("additionalProperties must be false so no argument can be invented")
 	}
 }

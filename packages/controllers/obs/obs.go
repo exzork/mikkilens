@@ -19,14 +19,13 @@ import (
 	"github.com/andreykaipov/goobs"
 	"github.com/andreykaipov/goobs/api/events"
 	"github.com/andreykaipov/goobs/api/requests/inputs"
-	"github.com/andreykaipov/goobs/api/requests/sceneitems"
-	"github.com/andreykaipov/goobs/api/requests/scenes"
 
 	"github.com/exzork/mikkilens/packages/core/fuzzy"
 )
 
 // nameMatchThreshold is how close a spoken name has to be before it counts as
-// referring to a scene or source that exists.
+// referring to something that exists -- a channel's OBS profile, or its scene
+// collection.
 const nameMatchThreshold = 65.0
 
 // responseTimeout is how long any one request may take.
@@ -85,13 +84,6 @@ func (e *ReloadingError) Error() string { return e.Reason }
 type StreamingError struct{ Reason string }
 
 func (e *StreamingError) Error() string { return e.Reason }
-
-// SceneItem is one source inside a scene.
-type SceneItem struct {
-	ID      int
-	Name    string
-	Enabled bool
-}
 
 // Event is a change she made in OBS directly, which the app mirrors so its
 // state never drifts from what is actually on screen.
@@ -474,111 +466,6 @@ func (c *Controller) CurrentScene() (string, error) {
 		return response.SceneName, nil
 	}
 	return response.CurrentProgramSceneName, nil
-}
-
-// ResolveScene finds the real scene name a spoken one refers to.
-func (c *Controller) ResolveScene(spoken string) (string, error) {
-	names, err := c.Scenes()
-	if err != nil {
-		return "", err
-	}
-	found, ok := bestName(spoken, names)
-	if !ok {
-		return "", nil
-	}
-	return found, nil
-}
-
-// SwitchScene switches to the scene whose name best matches, and returns the
-// real name so it can be read back to her.
-func (c *Controller) SwitchScene(spoken string) (string, error) {
-	actual, err := c.ResolveScene(spoken)
-	if err != nil {
-		return "", err
-	}
-	if actual == "" {
-		return "", &Error{Reason: fmt.Sprintf("no scene matching %q", spoken)}
-	}
-
-	client, err := c.request()
-	if err != nil {
-		return "", err
-	}
-	if _, err := client.Scenes.SetCurrentProgramScene(
-		scenes.NewSetCurrentProgramSceneParams().WithSceneName(actual)); err != nil {
-		return "", c.fail(err)
-	}
-	return actual, nil
-}
-
-// -- sources ------------------------------------------------------------------
-
-// SceneItems lists the sources in one scene, or in the current one.
-func (c *Controller) SceneItems(scene string) ([]SceneItem, error) {
-	client, err := c.request()
-	if err != nil {
-		return nil, err
-	}
-	if scene == "" {
-		if scene, err = c.CurrentScene(); err != nil {
-			return nil, err
-		}
-	}
-
-	response, err := client.SceneItems.GetSceneItemList(
-		sceneitems.NewGetSceneItemListParams().WithSceneName(scene))
-	if err != nil {
-		return nil, c.fail(err)
-	}
-
-	items := make([]SceneItem, 0, len(response.SceneItems))
-	for _, item := range response.SceneItems {
-		items = append(items, SceneItem{
-			ID: item.SceneItemID, Name: item.SourceName, Enabled: item.SceneItemEnabled,
-		})
-	}
-	return items, nil
-}
-
-// SetSourceVisible shows or hides a source, returning its real name.
-func (c *Controller) SetSourceVisible(spoken string, visible bool) (string, error) {
-	scene, err := c.CurrentScene()
-	if err != nil {
-		return "", err
-	}
-	items, err := c.SceneItems(scene)
-	if err != nil {
-		return "", err
-	}
-
-	names := make([]string, len(items))
-	for index, item := range items {
-		names[index] = item.Name
-	}
-	actual, ok := bestName(spoken, names)
-	if !ok {
-		return "", &Error{Reason: fmt.Sprintf("no source matching %q", spoken)}
-	}
-
-	client, err := c.request()
-	if err != nil {
-		return "", err
-	}
-	for _, item := range items {
-		if item.Name != actual {
-			continue
-		}
-		_, err := client.SceneItems.SetSceneItemEnabled(
-			sceneitems.NewSetSceneItemEnabledParams().
-				WithSceneName(scene).
-				WithSceneItemId(item.ID).
-				WithSceneItemEnabled(visible))
-		if err != nil {
-			return "", c.fail(err)
-		}
-		return actual, nil
-	}
-	return "", &Error{Reason: fmt.Sprintf("no source matching %q", spoken)}
 }
 
 // Inputs lists every input OBS has, with its kind.

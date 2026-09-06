@@ -28,17 +28,6 @@ confirm_prompt = "confirm.stop_stream"
 [commands.is_live]
 phrases = ["apakah saya sedang siaran", "apa saya sudah live", "saya sudah live belum", "cek siaran"]
 
-# ----------------------------------------------------------------- scene ----
-
-[commands.switch_scene]
-phrases = ["ganti ke {scene}", "pindah ke {scene}", "ganti scene ke {scene}", "buka scene {scene}"]
-
-[commands.current_scene]
-phrases = ["scene apa sekarang", "sekarang scene apa", "scene sekarang apa"]
-
-[commands.list_scenes]
-phrases = ["sebutkan scene", "daftar scene", "ada scene apa saja"]
-
 # --------------------------------------------------------------- channel ----
 
 # Channel di sini artinya profil OBS ditambah login YouTube sekaligus: sekali
@@ -89,14 +78,6 @@ phrases = ["atur volume nada {amount}", "ubah volume nada jadi {amount}", "volum
 
 [commands.set_music_volume]
 phrases = ["atur volume musik {amount}", "ubah volume musik jadi {amount}", "volume lagunya jadi {amount}"]
-
-# --------------------------------------------------------------- sumber ----
-
-[commands.show_source]
-phrases = ["tampilkan {source}", "munculkan {source}"]
-
-[commands.hide_source]
-phrases = ["sembunyikan {source}", "hilangkan {source}"]
 
 # -------------------------------------------------------------- youtube ----
 

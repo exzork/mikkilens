@@ -622,7 +622,7 @@
     </tbody>
   </table>
 
-  <p>Tekan <span class="ui">Tes koneksi</span>. Kalau berhasil, dia menyebutkan daftar scene-mu — sekaligus bukti bahwa nama scene yang nanti kamu ucapkan memang cocok. Lalu tekan <span class="ui">Simpan</span>.</p>
+  <p>Tekan <span class="ui">Tes koneksi</span>. Kalau berhasil, dia menyebutkan daftar scene-mu — bukti bahwa sambungannya benar-benar sampai ke OBS-mu, bukan ke OBS lain. Lalu tekan <span class="ui">Simpan</span>.</p>
 
   <div class="box warn">
     <span class="tag">Kalau gagal</span>
@@ -699,7 +699,7 @@
     <li>Tekan tombol pintasanmu. Kamu mendengar <b>satu nada tinggi</b> seketika.</li>
     <li>Ucapkan <span class="say">“apa saja perintahnya”</span>. Daftarnya dibacakan.</li>
     <li>Ucapkan <span class="say">“status”</span>. Seluruh keadaan dibacakan sekaligus.</li>
-    <li>Ucapkan <span class="say">“ganti ke”</span> lalu nama salah satu scene-mu. OBS berpindah, dan dia mengatakannya.</li>
+    <li>Ucapkan <span class="say">“cek mikrofon”</span>. Dijawab: mikrofonnya mati atau menyala.</li>
     <li>Ucapkan <span class="say">“matikan mikrofon”</span>, lalu <span class="say">“nyalakan mikrofon”</span>.</li>
     <li>Ucapkan <span class="say">“mulai siaran”</span>, lalu <span class="say">“hentikan siaran”</span>. Yang kedua bertanya dulu — jawab <span class="say">“ya”</span> atau <span class="say">“tidak”</span> dengan suara.</li>
     <li>Saat sedang siaran, chat yang masuk dibacakan sendiri.</li>
@@ -757,11 +757,8 @@
       <tr><td>“mulai siaran”</td><td>OBS mulai menyiarkan</td></tr>
       <tr><td>“hentikan siaran”</td><td>Tanya dulu, lalu berhenti</td></tr>
       <tr><td>“apakah saya sedang siaran”</td><td>Dijawab: sudah live atau belum</td></tr>
-      <tr><td>“ganti ke just chatting”</td><td>Pindah scene di OBS</td></tr>
-      <tr><td>“scene apa sekarang” / “sebutkan scene”</td><td>Scene yang sedang tampil, dan daftar semuanya</td></tr>
       <tr><td>“matikan mikrofon” / “nyalakan mikrofon”</td><td>Mikrofon di OBS dimatikan dan dinyalakan</td></tr>
       <tr><td>“cek mikrofon”</td><td>Dijawab: mikrofonnya mati atau menyala</td></tr>
-      <tr><td>“tampilkan kamera” / “sembunyikan kamera”</td><td>Sumber di scene ditampilkan dan disembunyikan</td></tr>
       <tr><td>“berapa penontonnya”</td><td>Jumlah penonton dibacakan</td></tr>
       <tr><td>“ganti judul jadi main valorant”</td><td>Tanya dulu, lalu ganti judul</td></tr>
       <tr><td>“judulnya apa sekarang”</td><td>Judul siaran yang sedang berjalan dibacakan</td></tr>
@@ -793,6 +790,13 @@
   </table>
 
   <p>Kalau lupa, tidak perlu membuka panduan ini: ucapkan saja <span class="say">“apa saja perintahnya”</span>.</p>
+
+  <div class="box">
+    <span class="tag">Scene tidak ada di daftar ini, dan itu disengaja</span>
+    <p>Pindah scene, menampilkan dan menyembunyikan sumber: semuanya jauh lebih enak lewat <b>Stream Deck</b> — satu tombol, satu scene, langsung jadi — daripada lewat kalimat yang harus memuat nama scene. Nama scene justru jenis kata yang paling sering salah didengar.</p>
+    <p>Tombol-tombol itu dipasang di OBS sendiri, bukan lewat MikkiLens. Yang tetap dipegang suara adalah yang tidak bisa dikerjakan satu tombol: hal yang perlu ditanya dulu, hal yang perlu dibacakan jawabannya, dan mikrofon.</p>
+    <p>Scene yang sedang tampil tetap disebutkan oleh <span class="say">“status”</span>, dan <span class="say">“ganti channel ke musik”</span> tetap memindahkan profil OBS berikut akun YouTube-nya sekaligus.</p>
+  </div>
 </section>
 
 <!-- 13 -->
@@ -884,7 +888,6 @@
       <tr><td>Perintahnya tidak dikenali</td><td>Tambahkan kalimat yang salah didengar itu. Langkah 13.</td></tr>
       <tr><td>Dia tidak bereaksi saat tombol ditekan</td><td>Kombinasinya mungkin dipakai aplikasi lain. Ganti di Langkah 6.</td></tr>
       <tr><td>“OBS tidak merespons”</td><td>OBS belum dibuka, atau WebSocket-nya mati. Langkah 7.</td></tr>
-      <tr><td>Nama scene tidak dikenali</td><td>Tekan Tes koneksi di halaman Koneksi untuk mendengar nama scene yang sebenarnya.</td></tr>
       <tr><td>“YouTube belum tersambung”</td><td>Sambungkan di halaman Koneksi. Langkah 8.</td></tr>
       <tr><td>Chat tidak dibacakan</td><td>Pastikan memang sedang ada siaran yang berjalan.</td></tr>
       <tr><td>Donasi tertimpa chat</td><td>Tautan overlay-nya belum diisi, atau kurang lengkap. Langkah 9.</td></tr>

@@ -138,15 +138,15 @@ func TestResolveAcceptsEitherAKeyOrLiteralText(t *testing.T) {
 
 func TestFormattingPlaceholdersAreFilled(t *testing.T) {
 	locale := i18n.Load("id")
-	got := locale.T("obs.scene_switched", i18n.Args{"scene": "Just Chatting"})
-	if !strings.Contains(got, "Just Chatting") {
+	got := locale.T("channel.switched", i18n.Args{"channel": "musik"})
+	if !strings.Contains(got, "musik") {
 		t.Errorf("T() = %q", got)
 	}
 }
 
 func TestABadPlaceholderReturnsTheTemplateNotAnError(t *testing.T) {
 	locale := i18n.Load("id")
-	if got, want := locale.T("obs.scene_switched"), locale.Strings["obs.scene_switched"]; got != want {
+	if got, want := locale.T("channel.switched"), locale.Strings["channel.switched"]; got != want {
 		t.Errorf("T() = %q, want the untouched template %q", got, want)
 	}
 }

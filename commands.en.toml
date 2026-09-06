@@ -22,17 +22,6 @@ confirm_prompt = "confirm.stop_stream"
 [commands.is_live]
 phrases = ["am i live", "am i streaming", "are we live right now"]
 
-# ----------------------------------------------------------------- scene ----
-
-[commands.switch_scene]
-phrases = ["switch to {scene}", "go to {scene}", "change scene to {scene}", "open scene {scene}"]
-
-[commands.current_scene]
-phrases = ["what scene am i on", "which scene is this", "what is the current scene"]
-
-[commands.list_scenes]
-phrases = ["list my scenes", "what scenes do i have", "name my scenes"]
-
 # --------------------------------------------------------------- channel ----
 
 # A channel is an OBS profile and a YouTube sign-in together: switching moves
@@ -89,14 +78,6 @@ phrases = ["set the tone volume to {amount}", "set the tones to {amount}", "tone
 
 [commands.set_music_volume]
 phrases = ["set the music volume to {amount}", "set the song volume to {amount}", "music volume {amount}"]
-
-# --------------------------------------------------------------- sources ----
-
-[commands.show_source]
-phrases = ["show {source}", "bring up {source}"]
-
-[commands.hide_source]
-phrases = ["hide {source}", "remove {source}"]
 
 # --------------------------------------------------------------- youtube ----
 

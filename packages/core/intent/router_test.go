@@ -80,8 +80,8 @@ func TestASimpleCommandRunsImmediately(t *testing.T) {
 
 func TestSlotsReachTheHandler(t *testing.T) {
 	router, _, calls := newRouter(t, 300*time.Millisecond)
-	router.HandleTranscript("ganti ke just chatting")
-	if len(*calls) != 1 || (*calls)[0].slots["scene"] != "just chatting" {
+	router.HandleTranscript("ganti channel ke musik")
+	if len(*calls) != 1 || (*calls)[0].slots["channel"] != "musik" {
 		t.Errorf("calls = %+v", *calls)
 	}
 }

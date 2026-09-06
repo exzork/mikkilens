@@ -28,18 +28,13 @@ import (
 
 func obsHandlers(e *Engine) map[string]intent.Handler {
 	return map[string]intent.Handler{
-		"go_live":       e.goLive,
-		"stop_stream":   e.stopStream,
-		"is_live":       e.isLive,
-		"switch_scene":  e.switchScene,
-		"current_scene": e.currentScene,
-		"list_scenes":   e.listScenes,
-		"mute_mic":      func(map[string]string) error { return e.setMicMuted(true) },
-		"unmute_mic":    func(map[string]string) error { return e.setMicMuted(false) },
-		"mic_status":    e.micStatus,
-		"show_source":   func(s map[string]string) error { return e.setSourceVisible(s, true) },
-		"hide_source":   func(s map[string]string) error { return e.setSourceVisible(s, false) },
-		"status":        e.status,
+		"go_live":     e.goLive,
+		"stop_stream": e.stopStream,
+		"is_live":     e.isLive,
+		"mute_mic":    func(map[string]string) error { return e.setMicMuted(true) },
+		"unmute_mic":  func(map[string]string) error { return e.setMicMuted(false) },
+		"mic_status":  e.micStatus,
+		"status":      e.status,
 	}
 }
 
@@ -118,48 +113,20 @@ func liveKey(live bool) string {
 	return "status.not_live"
 }
 
-func (e *Engine) switchScene(slots map[string]string) error {
-	if !e.requireOBS() {
-		return nil
-	}
-	spoken := strings.TrimSpace(slots["scene"])
-
-	actual, err := e.OBS().SwitchScene(spoken)
-	if err != nil || actual == "" {
-		e.bus.SayKey("obs.scene_not_found", feedback.Error, i18n.Args{"scene": spoken})
-		return nil
-	}
-	e.store.Update(state.Changes{"current_scene": actual})
-	e.bus.SayKey("obs.scene_switched", feedback.Result, i18n.Args{"scene": actual})
-	return nil
-}
-
-func (e *Engine) currentScene(map[string]string) error {
-	if !e.requireOBS() {
-		return nil
-	}
-	scene, err := e.OBS().CurrentScene()
-	if err != nil {
-		return err
-	}
-	e.store.Update(state.Changes{"current_scene": scene})
-	e.bus.SayKey("status.scene", feedback.Result, i18n.Args{"scene": scene})
-	return nil
-}
-
-func (e *Engine) listScenes(map[string]string) error {
-	if !e.requireOBS() {
-		return nil
-	}
-	scenes, err := e.OBS().Scenes()
-	if err != nil {
-		return err
-	}
-	e.store.Update(state.Changes{"scenes": scenes})
-	e.bus.SayKey("obs.scene_list", feedback.Result,
-		i18n.Args{"scenes": strings.Join(scenes, ", ")})
-	return nil
-}
+// Scenes and sources are not commands.
+//
+// They were, and taking them out is not a loss of function: scenes are on the
+// Stream Deck, one key each, and a key that switches a scene is faster and
+// more certain than a sentence about it -- especially a sentence containing a
+// scene name, which is exactly the kind of proper noun recognition is worst
+// at. What is left here is what a key cannot do as well: the things that need
+// a question asked first, the things that need an answer read back, and the
+// microphone.
+//
+// The scene still reaches her: "status" says which one is up, along with
+// everything else she cannot see. And switching a channel still moves the OBS
+// profile, because that is one thing meaning two, and neither half is any use
+// without the other.
 
 func (e *Engine) setMicMuted(muted bool) error {
 	if !e.requireOBS() {
@@ -190,25 +157,6 @@ func (e *Engine) micStatus(map[string]string) error {
 		e.bus.SayKey("status.mic_muted", feedback.Result)
 	} else {
 		e.bus.SayKey("status.mic_live", feedback.Result)
-	}
-	return nil
-}
-
-func (e *Engine) setSourceVisible(slots map[string]string, visible bool) error {
-	if !e.requireOBS() {
-		return nil
-	}
-	spoken := strings.TrimSpace(slots["source"])
-
-	actual, err := e.OBS().SetSourceVisible(spoken, visible)
-	if err != nil || actual == "" {
-		e.bus.SayKey("obs.source_not_found", feedback.Error, i18n.Args{"source": spoken})
-		return nil
-	}
-	if visible {
-		e.bus.SayKey("obs.source_shown", feedback.Result, i18n.Args{"source": actual})
-	} else {
-		e.bus.SayKey("obs.source_hidden", feedback.Result, i18n.Args{"source": actual})
 	}
 	return nil
 }

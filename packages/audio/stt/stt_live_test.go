@@ -141,7 +141,7 @@ func TestHearsItsOwnVoice(t *testing.T) {
 	spoken := []struct{ phrase, want string }{
 		{"matikan mikrofon", "mute_mic"},
 		{"berapa penontonnya", "viewer_count"},
-		{"ganti ke just chatting", "switch_scene"},
+		{"ganti channel ke musik", "switch_channel"},
 	}
 
 	for _, sample := range spoken {

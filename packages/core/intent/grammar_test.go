@@ -139,7 +139,7 @@ func TestRealAndMisheardPhrasesRouteCorrectly(t *testing.T) {
 	cases := []struct{ spoken, want string }{
 		{"matikan mikrofon", "mute_mic"},
 		{"mute mic", "mute_mic"},
-		{"ganti ke just chatting", "switch_scene"},
+		{"ganti channel ke musik", "switch_channel"},
 		{"berapa penontonnya", "viewer_count"},
 		{"hentikan siaran", "stop_stream"},
 		{"status", "status"},
@@ -215,10 +215,10 @@ func TestConfirmFlagIsReadFromTheFile(t *testing.T) {
 
 func TestTrailingSlotCapturesTheRemainder(t *testing.T) {
 	set := build(t, map[string]any{
-		"switch_scene": map[string]any{"phrases": phrases("ganti ke {scene}")},
+		"switch_channel": map[string]any{"phrases": phrases("ganti channel ke {channel}")},
 	})
-	match, _ := set.Match("ganti ke starting soon")
-	if match == nil || match.Slots["scene"] != "starting soon" {
+	match, _ := set.Match("ganti channel ke musik dan podcast")
+	if match == nil || match.Slots["channel"] != "musik dan podcast" {
 		t.Fatalf("got %+v", match)
 	}
 }
@@ -245,16 +245,16 @@ func TestSlotInTheMiddle(t *testing.T) {
 
 func TestAnEmptySlotDoesNotMatch(t *testing.T) {
 	set := build(t, map[string]any{
-		"switch_scene": map[string]any{"phrases": phrases("ganti ke {scene}")},
+		"search_music": map[string]any{"phrases": phrases("putar lagu {query}")},
 	})
-	if match, rivals := set.Match("ganti ke"); match != nil || len(rivals) > 0 {
+	if match, rivals := set.Match("putar lagu"); match != nil || len(rivals) > 0 {
 		t.Errorf("an empty slot must not match, got %+v", match)
 	}
 }
 
 func TestScoresStayWithinRange(t *testing.T) {
 	set := shipped(t, "id")
-	for _, spoken := range []string{"matikan mikrofon", "ganti ke just chatting", "apa yang ada di layar"} {
+	for _, spoken := range []string{"matikan mikrofon", "ganti channel ke musik", "apa yang ada di layar"} {
 		match, _ := set.Match(spoken)
 		if match == nil {
 			t.Fatalf("%q did not match", spoken)

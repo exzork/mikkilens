@@ -51,7 +51,7 @@ const (
 
 // KnownSlots are the placeholders the handlers understand.
 var KnownSlots = map[string]bool{
-	"scene": true, "source": true, "text": true, "question": true, "value": true,
+	"text": true, "question": true, "value": true,
 	"channel": true,
 	// query is a song name, and number is which of the five read back to play.
 	// Both belong to the music search, which is the one command whose input is

@@ -40,17 +40,17 @@ func optionsFrom(t *testing.T, document map[string]any) map[string]struct {
 
 func TestASlotEveryPhrasingTakesIsRequired(t *testing.T) {
 	built := optionsFrom(t, map[string]any{"commands": map[string]any{
-		"switch_scene": map[string]any{"phrases": []any{
-			"ganti ke {scene}", "pindah scene ke {scene}",
+		"switch_channel": map[string]any{"phrases": []any{
+			"ganti channel ke {channel}", "pindah channel ke {channel}",
 		}},
 	}})
 
-	scene := built["switch_scene"]
-	if len(scene.slots) != 1 || scene.slots[0] != "scene" {
-		t.Fatalf("slots are %v, want [scene]", scene.slots)
+	channel := built["switch_channel"]
+	if len(channel.slots) != 1 || channel.slots[0] != "channel" {
+		t.Fatalf("slots are %v, want [channel]", channel.slots)
 	}
-	if len(scene.required) != 1 || scene.required[0] != "scene" {
-		t.Errorf("required is %v, want [scene]", scene.required)
+	if len(channel.required) != 1 || channel.required[0] != "channel" {
+		t.Errorf("required is %v, want [channel]", channel.required)
 	}
 }
 

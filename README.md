@@ -91,10 +91,8 @@ Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
 |---|---|
 | "mulai siaran" | OBS mulai streaming |
 | "hentikan siaran" | Tanya dulu, lalu berhenti |
-| "ganti ke just chatting" | Pindah scene di OBS |
 | "ganti channel ke musik" | Pindah profil OBS **dan** akun YouTube sekaligus |
 | "matikan mikrofon" | Mikrofon OBS dimatikan |
-| "sembunyikan kamera" | Sumber di scene disembunyikan |
 | "berapa penontonnya" | Jumlah penonton dibacakan |
 | "ganti judul jadi main valorant" | Tanya dulu, lalu ganti judul |
 | "jeda chat" / "lanjutkan chat" | Berhenti dan lanjut membaca chat |
@@ -120,6 +118,16 @@ Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
 
 Semua kalimat di atas **bisa diubah**. Lihat bagian
 [Perintah](#mengubah-perintah).
+
+**Scene tidak ada di daftar itu, dan itu disengaja.** Pindah scene dan
+menampilkan atau menyembunyikan sumber jauh lebih enak lewat Stream Deck —
+satu tombol, satu scene, langsung jadi — daripada lewat kalimat yang harus
+memuat nama scene, dan nama scene justru jenis kata yang paling sering salah
+didengar. Yang tetap di suara adalah yang tidak bisa dikerjakan satu tombol:
+hal yang perlu ditanya dulu, hal yang perlu dibacakan jawabannya, dan
+mikrofon. Scene yang sedang tampil tetap disebut oleh **"status"**, dan
+**"ganti channel"** tetap memindahkan profil OBS berikut akun YouTube-nya
+sekaligus.
 
 ## Cara memakai
 
@@ -539,7 +547,8 @@ confirm = false
 
 - `phrases` — kalimat yang memicu perintah ini.
 - `confirm = true` — MikkiLens bertanya dulu sebelum menjalankan.
-- `{scene}`, `{source}`, `{text}`, `{question}` — bagian yang berubah-ubah.
+- `{channel}`, `{text}`, `{question}`, `{query}`, `{number}`, `{amount}` —
+  bagian yang berubah-ubah.
 
 Setelah menyimpan, ucapkan **"muat ulang perintah"**. Tidak perlu menutup
 MikkiLens. Halaman **Perintah** di Pengaturan juga bisa dipakai.
