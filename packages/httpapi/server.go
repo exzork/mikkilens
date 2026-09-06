@@ -77,6 +77,7 @@ type Engine interface {
 	ConnectYouTube(context.Context) error
 	ConnectChannel(context.Context) error
 	DisconnectYouTube() error
+	DisconnectChannel(channelID string) error
 	SwitchChannel(context.Context, string) error
 }
 

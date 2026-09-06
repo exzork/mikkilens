@@ -423,6 +423,12 @@ mengganti judul siaran.
 dan mematikan YouTube sampai kamu menekan Sambungkan lagi. Jadi keputusannya
 bertahan setelah MikkiLens ditutup.
 
+Tombol itu memutus **semua** channel sekaligus. Kalau yang ingin dilepas cuma
+satu, tiap baris di kotak **Channel** punya tombol **Putuskan channel ini**
+sendiri: tekan sekali, tombolnya berubah jadi pertanyaan, tekan lagi untuk
+benar-benar memutus. Yang hilang adalah loginnya dan pasangan profil OBS-nya —
+channel yang lain tetap tersambung.
+
 **Installer resminya sudah membawa OAuth client-nya, jadi Sambungkan langsung
 bisa ditekan.** Kredensialnya tidak ada di repositori ini: ia disimpan sebagai
 GitHub secret, dan hanya build rilis yang menyegelnya ke dalam mesinnya saat
@@ -480,6 +486,9 @@ dalam OBS.
    pilih channel yang dimaksud di browser. Ulangi per channel.
 3. Di kotak **Channel**, beri nama panggilan tiap channel ("utama", "musik")
    dan pilih profil OBS-nya dari daftar. Tekan **Simpan**.
+
+Tiap baris juga punya **Putuskan channel ini** untuk melepas satu channel saja,
+kalau kamu sudah tidak memakainya lagi.
 
 Setelah itu cukup diucapkan: **"ganti channel ke musik"**. Profil OBS dan akun
 YouTube pindah bersamaan — dan itu memang intinya. Pindah OBS saja berarti

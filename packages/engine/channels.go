@@ -367,6 +367,91 @@ func (e *Engine) rememberActiveChannel(channelID string) {
 	}
 }
 
+// DisconnectChannel signs one channel out and takes it off the list.
+//
+// The Disconnect in the YouTube box is every channel at once: the right answer
+// to "I am done with this machine", and the wrong one to "this is the channel I
+// no longer stream to" -- which on a machine with two would sign her out of the
+// one she still uses.
+//
+// The channel goes from both of the places it lives: the sign-in on disk, and
+// the pairing in config that says which OBS profile streams to it. Leaving the
+// pairing behind would leave a row that reads as a channel waiting to be
+// reconnected, which is exactly what this one is not. A sign-in with no pairing
+// at all is removed just the same -- that is a channel she connected and never
+// bound to a profile, and it is the one most likely to be here by mistake.
+//
+// Removing the last one lands on the same state as the Disconnect button,
+// including the old single-channel sign-in from before there were several.
+func (e *Engine) DisconnectChannel(channelID string) error {
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		return errors.New("no channel to disconnect")
+	}
+
+	spoken := e.channelSpokenName(channelID)
+
+	// If the open connection is that channel's, it has to be let go before the
+	// token is: signing out is what stops the chat reader and the polling that
+	// belong to it.
+	if controller := e.YouTube(); controller != nil && controller.ActiveChannelID() == channelID {
+		controller.SignOut()
+		e.OnYouTubeDisconnected()
+
+		e.mu.Lock()
+		e.youtube = nil
+		e.mu.Unlock()
+	}
+	youtube.ForgetAccount(channelID)
+
+	e.mu.Lock()
+	kept := make([]config.Channel, 0, len(e.settings.YouTube.Channels))
+	for _, channel := range e.settings.YouTube.Channels {
+		if channel.ChannelID != channelID {
+			kept = append(kept, channel)
+		}
+	}
+	e.settings.YouTube.Channels = kept
+	if e.settings.YouTube.Active == channelID {
+		e.settings.YouTube.Active = ""
+	}
+	settings := e.settings
+	e.mu.Unlock()
+
+	if _, err := settings.Save(""); err != nil {
+		return err
+	}
+
+	if len(kept) == 0 && !youtube.HasAccounts() {
+		// Nothing left to be signed in as. Cleared right down, so that what is
+		// on disk agrees with what the settings page now says.
+		youtube.ForgetAllAccounts()
+		if err := e.setYouTubeEnabled(false); err != nil {
+			return err
+		}
+	}
+
+	e.bus.SayKey("channel.disconnected", feedback.Result, i18n.Args{"channel": spoken})
+	return nil
+}
+
+// channelSpokenName is what to call a channel out loud: the name she gave it,
+// then what YouTube calls it, then the profile, and the id only if it has
+// nothing else -- which is the order of how much of it she wrote herself.
+func (e *Engine) channelSpokenName(channelID string) string {
+	if channel, ok := e.Config().YouTube.FindChannel(channelID); ok {
+		for _, candidate := range []string{channel.Name, channel.Profile} {
+			if strings.TrimSpace(candidate) != "" {
+				return candidate
+			}
+		}
+	}
+	if account, ok := youtube.LoadAccount(channelID); ok && account.ChannelTitle != "" {
+		return account.ChannelTitle
+	}
+	return channelID
+}
+
 // RegisterChannel records a channel she has just connected.
 //
 // The sign-in knows the channel id and its name; what it cannot know is which

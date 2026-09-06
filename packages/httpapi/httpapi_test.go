@@ -52,14 +52,15 @@ type stubEngine struct {
 	wakeError   string
 	hotkeyError string
 
-	applied     []config.Config
-	adopted     []*intent.Set
-	reloads     int
-	listens     int
-	ran         []ranCommand
-	connects    int
-	disconnects int
-	switched    []string
+	applied      []config.Config
+	adopted      []*intent.Set
+	reloads      int
+	listens      int
+	ran          []ranCommand
+	connects     int
+	disconnects  int
+	disconnected []string
+	switched     []string
 
 	searched []string
 	prompts  int
@@ -231,6 +232,11 @@ func (e *stubEngine) ConnectChannel(context.Context) error {
 
 func (e *stubEngine) DisconnectYouTube() error {
 	e.disconnects++
+	return nil
+}
+
+func (e *stubEngine) DisconnectChannel(channelID string) error {
+	e.disconnected = append(e.disconnected, channelID)
 	return nil
 }
 
@@ -884,19 +890,57 @@ func TestDisconnectingIsAcceptedAndReachesTheEngine(t *testing.T) {
 	}
 }
 
+// One channel rather than all of them, which is the difference between "I am
+// done with this machine" and "this is the channel I no longer stream to".
+func TestDisconnectingOneChannelNamesIt(t *testing.T) {
+	server, engine, _ := client(t)
+
+	status, _ := send(t, server, http.MethodPost, "/api/youtube/disconnect-channel",
+		map[string]any{"channel_id": "UCmusic"})
+
+	if status != http.StatusOK {
+		t.Errorf("status is %d, want %d", status, http.StatusOK)
+	}
+	if len(engine.disconnected) != 1 || engine.disconnected[0] != "UCmusic" {
+		t.Errorf("the engine was asked to disconnect %v", engine.disconnected)
+	}
+	if engine.disconnects != 0 {
+		t.Error("one channel must not take every channel with it")
+	}
+}
+
+// Without an id there is no way to know which sign-in was meant, and guessing
+// would delete the wrong one.
+func TestDisconnectingAChannelNeedsAnId(t *testing.T) {
+	server, engine, _ := client(t)
+
+	status, _ := send(t, server, http.MethodPost, "/api/youtube/disconnect-channel",
+		map[string]any{"channel_id": "  "})
+
+	if status != http.StatusBadRequest {
+		t.Errorf("status is %d, want %d", status, http.StatusBadRequest)
+	}
+	if len(engine.disconnected) != 0 {
+		t.Errorf("it reached the engine anyway: %v", engine.disconnected)
+	}
+}
+
 // Connecting opens a browser and signs into her channel, and disconnecting
 // throws the sign-in away. Neither may be reachable by anything that merely
 // follows a link.
 func TestTheYouTubeButtonsRejectGetRequests(t *testing.T) {
 	server, engine, _ := client(t)
 
-	for _, path := range []string{"/api/youtube/connect", "/api/youtube/disconnect"} {
+	paths := []string{
+		"/api/youtube/connect", "/api/youtube/disconnect", "/api/youtube/disconnect-channel",
+	}
+	for _, path := range paths {
 		status, _ := send(t, server, http.MethodGet, path, nil)
 		if status != http.StatusMethodNotAllowed {
 			t.Errorf("GET %s returned %d, want %d", path, status, http.StatusMethodNotAllowed)
 		}
 	}
-	if engine.connects != 0 || engine.disconnects != 0 {
+	if engine.connects != 0 || engine.disconnects != 0 || len(engine.disconnected) != 0 {
 		t.Error("a GET must not have reached the engine at all")
 	}
 }

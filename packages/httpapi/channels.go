@@ -11,6 +11,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
@@ -20,6 +21,7 @@ import (
 func (s *Server) channelRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/youtube/channels", s.handleChannels)
 	mux.HandleFunc("/api/youtube/connect-channel", only(http.MethodPost, s.connectChannel))
+	mux.HandleFunc("/api/youtube/disconnect-channel", only(http.MethodPost, s.disconnectChannel))
 	mux.HandleFunc("/api/youtube/switch", only(http.MethodPost, s.switchChannel))
 	mux.HandleFunc("/api/obs/profiles", only(http.MethodGet, s.obsProfiles))
 }
@@ -140,6 +142,26 @@ func (s *Server) saveChannels(writer http.ResponseWriter, request *http.Request)
 // engine keeps them apart: that one means "I have no sign-in", this one means
 // "I have one and want another", and only one of them should be reachable by
 // pressing the same button twice.
+// disconnectChannel signs one channel out and takes it off the list, as
+// against the Disconnect in the YouTube box, which is every channel at once.
+func (s *Server) disconnectChannel(writer http.ResponseWriter, request *http.Request) {
+	var body struct {
+		ChannelID string `json:"channel_id"`
+	}
+	if !decode(writer, request, &body) {
+		return
+	}
+	if strings.TrimSpace(body.ChannelID) == "" {
+		fail(writer, http.StatusBadRequest, "which channel?")
+		return
+	}
+	if err := s.engine.DisconnectChannel(body.ChannelID); err != nil {
+		fail(writer, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respond(writer, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (s *Server) connectChannel(writer http.ResponseWriter, request *http.Request) {
 	if err := s.engine.ConnectChannel(request.Context()); err != nil {
 		fail(writer, http.StatusBadGateway, err.Error())

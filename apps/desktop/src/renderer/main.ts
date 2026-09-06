@@ -1695,10 +1695,65 @@ function renderChannels(): void {
     switchTo.addEventListener('click', () => switchToChannel(channel))
     buttons.append(switchTo)
 
+    buttons.append(removeButton(channel))
+
     group.append(buttons)
     list.append(group)
   })
 }
+
+/**
+ * The button that takes one channel off this machine.
+ *
+ * It asks first, by becoming the question: the first press arms it and says so,
+ * the second does it, and it disarms itself after a few seconds. Every other
+ * button on this page is safe to press by accident; this one deletes a sign-in
+ * and the pairing that says which OBS profile streams to it, and getting both
+ * back means the consent screen again and picking the profile again.
+ *
+ * A confirmation she has to find on screen would be the wrong shape for this
+ * application. A button that says what pressing it again will do is announced
+ * by the screen reader as its own label, which is the same question asked in
+ * the place she already is.
+ */
+function removeButton(channel: ChannelInfo): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.type = 'button'
+
+  let armed = false
+  let disarm: ReturnType<typeof setTimeout> | undefined
+
+  const label = (): void => {
+    button.textContent = armed ? t('channels.removeAgain') : t('channels.remove')
+    button.setAttribute(
+      'aria-label',
+      t(armed ? 'channels.removeAgainNamed' : 'channels.removeNamed', {
+        channel: channelName(channel),
+      }),
+    )
+  }
+  label()
+
+  button.addEventListener('click', () => {
+    if (!armed) {
+      armed = true
+      label()
+      announce(t('channels.removeAgainNamed', { channel: channelName(channel) }))
+      disarm = setTimeout(() => {
+        armed = false
+        label()
+      }, armedSeconds * 1000)
+      return
+    }
+    clearTimeout(disarm)
+    void removeChannel(channel)
+  })
+
+  return button
+}
+
+/** How long the remove button stays armed before it goes back to asking. */
+const armedSeconds = 8
 
 function textRow(
   id: string,
@@ -1785,6 +1840,35 @@ async function switchToChannel(channel: ChannelInfo): Promise<void> {
   } catch (error) {
     result.textContent = t('channels.switchFailed', { reason: reason(error) })
     alarm(t('channels.switchFailed', { reason: reason(error) }))
+  }
+  await refreshChannels()
+  await refreshYouTube()
+}
+
+/**
+ * Remove one channel: its sign-in on this computer, and its pairing in config.
+ *
+ * As against the Disconnect in the YouTube box above, which is every channel at
+ * once. The engine says what happened out loud, so this waits for it and then
+ * re-reads the list rather than editing the row away on its own.
+ */
+async function removeChannel(channel: ChannelInfo): Promise<void> {
+  const result = element('channels-result')
+  const name = channelName(channel)
+
+  result.textContent = t('channels.removing', { channel: name })
+  announce(t('channels.removing', { channel: name }))
+
+  try {
+    await api('/youtube/disconnect-channel', {
+      method: 'POST',
+      body: JSON.stringify({ channel_id: channel.channel_id }),
+    })
+    result.textContent = t('channels.removed', { channel: name })
+    announce(t('channels.removed', { channel: name }))
+  } catch (error) {
+    result.textContent = t('channels.removeFailed', { reason: reason(error) })
+    alarm(t('channels.removeFailed', { reason: reason(error) }))
   }
   await refreshChannels()
   await refreshYouTube()

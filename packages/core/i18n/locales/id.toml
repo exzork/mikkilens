@@ -205,6 +205,9 @@ not_connected = "{channel} belum tersambung. Buka halaman pengaturan lalu sambun
 sign_in_expired = "Login {channel} sudah kedaluwarsa. Buka halaman pengaturan lalu sambungkan lagi."
 live = "Kamu sedang siaran. Hentikan siaran dulu sebelum pindah ke {channel}."
 busy = "OBS masih memuat scene. Coba lagi sebentar."
+# Diputus dari halaman pengaturan. Diucapkan karena penghapusannya terjadi di
+# layar yang tidak dia lihat, dan yang hilang adalah loginnya.
+disconnected = "{channel} sudah diputus."
 no_profile = "{channel} belum punya profil OBS."
 loading_scenes = "Memuat scene {channel}."
 obs_failed = "Tidak bisa mengganti OBS: {reason}"

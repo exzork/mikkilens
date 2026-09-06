@@ -206,6 +206,9 @@ busy = "OBS is still loading scenes. Try again in a moment."
 no_profile = "{channel} does not have an OBS profile set yet."
 loading_scenes = "Loading the {channel} scenes."
 obs_failed = "Could not switch OBS: {reason}"
+# Removed from the settings page. Said out loud because it happens on a screen
+# she is not looking at, and what goes is a sign-in.
+disconnected = "{channel} is disconnected."
 
 
 
