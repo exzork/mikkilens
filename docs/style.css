@@ -48,7 +48,7 @@ body {
 main, header, footer { max-width: 44rem; margin: 0 auto; }
 
 header {
-  padding: 3.5rem 0 0;
+  padding: 3.5rem 0 2.5rem;
 }
 
 .mark {
