@@ -335,9 +335,33 @@
     vertical-align: 0.25em;
     margin-left: 0.3cm;
   }
+  /* ---------- on screen only ---------- */
+
+  /*
+   * This document is a print document; the PDF next to it is what it is for.
+   * On the web it needs a way back to the rest of the site, and that way back
+   * must not appear on page one of the PDF.
+   */
+  .web-nav {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    font-size: 10pt;
+    padding: 0.8cm 0 0;
+    color: var(--soft);
+  }
+
+  .web-nav a { color: var(--accent); }
+
+  @media print {
+    .web-nav { display: none; }
+  }
 </style>
 </head>
 <body>
+
+<p class="web-nav">
+  <a href="./">MikkiLens</a> &nbsp;·&nbsp;
+  <a href="MikkiLens-Panduan-Setup.pdf">Unduh panduan ini sebagai PDF</a>
+</p>
 
 <div class="cover">
   <div class="mark">Panduan Pemakaian</div>
@@ -345,7 +369,7 @@
   <p class="sub">Yang perlu diatur setelah MikkiLens dipasang, satu langkah per halaman.</p>
   <hr>
   <p class="meta">
-    Untuk <b>MikkiLens 0.2</b> di Windows &nbsp;·&nbsp; Bahasa Indonesia
+    Untuk <b>MikkiLens 0.9</b> di Windows &nbsp;·&nbsp; Bahasa Indonesia
   </p>
   <div class="note">
     <p><b>Semua yang MikkiLens lakukan, dia ucapkan.</b> Setiap perintah, setiap hasil, dan setiap kesalahan dibacakan — jadi kamu tidak perlu melihat layar saat memakainya.</p>
@@ -406,6 +430,8 @@
     <p>Supaya MikkiLens bisa mendengar, ada beberapa berkas yang perlu diunduh —
     sekitar setengah giga. Itu berjalan sendiri, <b>dikatakan dengan suara</b> saat
     mulai, dan cuma sekali seumur pemasangan.</p>
+    <p>Dua program pemutar musik ikut diunduh sekalian di sini, jadi lagu pertama
+    yang kamu putar nanti tidak diawali menunggu.</p>
     <p>Tidak perlu ditunggu diam. Semua langkah di panduan ini bisa kamu kerjakan
     sambil menunggu — dan begitu selesai, MikkiLens memberitahumu bahwa dia sudah
     bisa mendengar.</p>
@@ -555,7 +581,7 @@
 
   <p>Kombinasinya harus mengandung <kbd>Ctrl</kbd>, <kbd>Alt</kbd>, <kbd>Shift</kbd>, atau tombol Windows. Tombol tunggal tidak bisa dipakai — ia akan diambil dari semua aplikasi lain.</p>
 
-  <p>Dua tombol lain sudah terpasang sendiri. Keduanya bisa diganti di halaman <span class="ui">Suara &amp; bahasa</span>, dengan cara yang sama seperti tombol di atas — tekan <span class="ui">Ubah</span>, lalu tekan tombol yang kamu mau:</p>
+  <p>Dua tombol lain sudah terpasang sendiri. Keduanya bisa diganti di halaman <span class="ui">Bahasa</span>, dengan cara yang sama seperti tombol di atas — tekan <span class="ui">Ubah</span>, lalu tekan tombol yang kamu mau:</p>
   <table class="tight">
     <tbody>
       <tr><td class="k"><kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>M</kbd></td><td>Mendiamkan suara pembaca chat, dan membunyikannya lagi. Chat yang masuk selama didiamkan tidak hilang — dibacakan setelahnya. Error dan pertanyaan tetap bersuara.</td></tr>
@@ -569,6 +595,7 @@
     <span class="tag">Kata pemicu — bebas tangan</span>
     <p>Kamu bisa memanggilnya dengan suara saja, tanpa menekan apa pun. Nyalakan lewat <span class="ui">Dengarkan kata pemicu</span> di halaman yang sama. Berkasnya sudah ikut di dalam pemasangnya, jadi tidak ada yang perlu diunduh dulu dan ini sudah bisa dipakai sejak hari pertama.</p>
     <p>Kalau sering menyala sendiri saat kamu sedang ngobrol dengan penonton, naikkan <span class="ui">Ambang kata pemicu</span>. Kalau dipanggil tapi tidak menjawab, turunkan.</p>
+    <p>Selagi MikkiLens bicara, kata pemicunya memang sengaja tidak mendengar — namanya sendiri ikut keluar dari speaker. Satu perkecualian: <b>saat daftar lagu sedang dibacakan</b>, dia tetap mendengar. Sebut namanya (atau tekan tombolnya) dan pembacaannya langsung berhenti, tinggal ucapkan nomornya.</p>
     <p><b>Tombol tetap yang paling andal untuk siaran.</b> Kata pemicu itu tambahan, bukan pengganti.</p>
   </div>
 </section>
@@ -624,12 +651,14 @@
 
   <p>Izin yang diminta hanya satu, untuk mengelola akun YouTube-mu. Satu-satunya perubahan yang MikkiLens lakukan di sana adalah <b>mengganti judul siaran</b>, dan itu pun selalu ditanyakan dulu.</p>
 
-  <p>Tombol <span class="ui">Putuskan</span> menghapus loginnya dari komputer ini kapan pun kamu mau.</p>
+  <p>Tombol <span class="ui">Putuskan</span> menghapus loginnya dari komputer ini kapan pun kamu mau. Izinnya juga bisa dicabut dari halaman izin akun Google-mu, di <b>myaccount.google.com/permissions</b>.</p>
+
+  <p>Apa saja yang disimpan MikkiLens, di mana disimpannya, dan ke mana saja dia terhubung, ditulis lengkap di kebijakan privasinya: <b>exzork.me/mikkilens/privacy.html</b>.</p>
 
   <div class="box warn">
-    <span class="tag">Kalau tombolnya tidak bisa ditekan</span>
-    <p>Berarti komputer ini belum punya berkas izin dari Google. Berkas itu dibuat sekali dari <b>Google Cloud Console</b> dan bukan sesuatu yang MikkiLens boleh sediakan sendiri.</p>
-    <p>Kalau kamu tidak terbiasa dengan itu, minta bantuan sekali — sesudah terpasang, tidak perlu disentuh lagi. Halaman Koneksi menyebutkan persis berkas apa yang dicari dan di mana harus ditaruh.</p>
+    <span class="tag">Izinnya sudah ikut di dalam pemasangnya</span>
+    <p>Tidak ada yang perlu disiapkan dari <b>Google Cloud Console</b>: tombol <span class="ui">Sambungkan YouTube</span> sudah bisa ditekan sejak hari pertama.</p>
+    <p>Kalau MikkiLens-nya dibangun sendiri dari kode sumber, izinnya tidak ikut — halaman Koneksi menyebutkan persis berkas apa yang dicari dan di mana harus ditaruh.</p>
   </div>
 </section>
 
@@ -686,7 +715,7 @@
 <!-- 11 -->
 <section class="page">
   <h2><span class="num">Langkah 11</span>Cara memakainya sehari-hari</h2>
-  <p class="lede">Tiga cara memanggil, dan enam nada yang perlu kamu kenali.</p>
+  <p class="lede">Tiga cara memanggil, dan delapan nada yang perlu kamu kenali.</p>
 
   <h3>Tiga cara memanggil</h3>
   <table class="tight">
@@ -706,6 +735,8 @@
       <tr><td class="k">Naik-turun-naik</td><td>Sedang bertanya — jawab “ya” atau “tidak”</td></tr>
       <tr><td class="k">Blip pendek pelan</td><td>Chat masuk</td></tr>
       <tr><td class="k">Tiga nada naik</td><td>Super chat</td></tr>
+      <tr><td class="k">Tiga nada naik, lebih tinggi</td><td>Donasi dari Tako atau Trakteer</td></tr>
+      <tr><td class="k">Dua nada datar</td><td>Sedang berpikir — pertanyaannya sedang dikerjakan</td></tr>
     </tbody>
   </table>
 
@@ -725,23 +756,32 @@
     <tbody>
       <tr><td>“mulai siaran”</td><td>OBS mulai menyiarkan</td></tr>
       <tr><td>“hentikan siaran”</td><td>Tanya dulu, lalu berhenti</td></tr>
+      <tr><td>“apakah saya sedang siaran”</td><td>Dijawab: sudah live atau belum</td></tr>
       <tr><td>“ganti ke just chatting”</td><td>Pindah scene di OBS</td></tr>
-      <tr><td>“matikan mikrofon”</td><td>Mikrofon di OBS dimatikan</td></tr>
-      <tr><td>“sembunyikan kamera”</td><td>Sumber di scene disembunyikan</td></tr>
+      <tr><td>“scene apa sekarang” / “sebutkan scene”</td><td>Scene yang sedang tampil, dan daftar semuanya</td></tr>
+      <tr><td>“matikan mikrofon” / “nyalakan mikrofon”</td><td>Mikrofon di OBS dimatikan dan dinyalakan</td></tr>
+      <tr><td>“cek mikrofon”</td><td>Dijawab: mikrofonnya mati atau menyala</td></tr>
+      <tr><td>“tampilkan kamera” / “sembunyikan kamera”</td><td>Sumber di scene ditampilkan dan disembunyikan</td></tr>
       <tr><td>“berapa penontonnya”</td><td>Jumlah penonton dibacakan</td></tr>
       <tr><td>“ganti judul jadi main valorant”</td><td>Tanya dulu, lalu ganti judul</td></tr>
+      <tr><td>“judulnya apa sekarang”</td><td>Judul siaran yang sedang berjalan dibacakan</td></tr>
       <tr><td>“jeda chat” / “lanjutkan chat”</td><td>Berhenti dan lanjut membaca chat</td></tr>
       <tr><td>“susul chat”</td><td>Lompat ke chat terbaru</td></tr>
+      <tr><td>“ketinggalan berapa chat”</td><td>Berapa chat yang belum sempat dibacakan</td></tr>
       <tr><td>“rangkum chat”</td><td>Ringkasan chat dibacakan</td></tr>
       <tr><td>“apa yang ada di layar”</td><td>Isi layar dijelaskan</td></tr>
+      <tr><td>“cari harga bitcoin”</td><td>Dicari di internet, jawabannya dibacakan singkat</td></tr>
+      <tr><td>“jam berapa sekarang”</td><td>Waktu di komputer dibacakan</td></tr>
       <tr><td>“ganti channel ke musik”</td><td>Pindah channel, lihat Langkah 15</td></tr>
+      <tr><td>“sekarang di channel apa” / “sebutkan channel”</td><td>Channel yang sedang dipakai, dan daftar semuanya</td></tr>
       <tr><td>“putar lagu”</td><td>Kotak ketik terbuka; ketik judulnya, lima hasil dibacakan</td></tr>
       <tr><td>“putar nomor dua”</td><td>Hasil kedua diputar di dalam MikkiLens</td></tr>
       <tr><td>“jeda lagunya” / “lanjutkan lagunya”</td><td>Lagunya dijeda dan dilanjutkan</td></tr>
       <tr><td>“ulangi lagunya dari awal”</td><td>Lagu yang sedang jalan diputar lagi dari awal</td></tr>
       <tr><td>“hentikan lagunya”</td><td>Lagunya berhenti</td></tr>
       <tr><td>“lagu apa ini”</td><td>Judul lagu yang sedang diputar dibacakan</td></tr>
-      <tr><td>“bisukan chat”</td><td>Suara pembaca chat didiamkan; tidak ada yang hilang</td></tr>
+      <tr><td>“sebutkan lagunya lagi”</td><td>Hasil pencarian tadi dibacakan ulang</td></tr>
+      <tr><td>“bisukan chat” / “bunyikan chat lagi”</td><td>Suara pembaca chat didiamkan, lalu dibunyikan; tidak ada yang hilang</td></tr>
       <tr><td>“atur volume bicara lima puluh persen”</td><td>Volume suaranya jadi 50 dari 100</td></tr>
       <tr><td>“atur volume chat tujuh puluh persen”</td><td>Volume pembaca chat, terpisah dari yang di atas</td></tr>
       <tr><td>“atur volume nada delapan puluh persen”</td><td>Volume nada-nada pendeknya</td></tr>
