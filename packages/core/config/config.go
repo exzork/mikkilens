@@ -634,7 +634,7 @@ func sectionFields(settings Config) map[string]map[string]bool {
 	outer := reflect.TypeOf(settings)
 	for i := 0; i < outer.NumField(); i++ {
 		field := outer.Field(i)
-		name := field.Tag.Get("toml")
+		name := tagName(field.Tag.Get("toml"))
 		if name == "" {
 			continue
 		}
@@ -649,13 +649,26 @@ func sectionFields(settings Config) map[string]map[string]bool {
 		keys := map[string]bool{}
 		inner := field.Type
 		for j := 0; j < inner.NumField(); j++ {
-			if key := inner.Field(j).Tag.Get("toml"); key != "" {
+			if key := tagName(inner.Field(j).Tag.Get("toml")); key != "" {
 				keys[key] = true
 			}
 		}
 		sections[name] = keys
 	}
 	return sections
+}
+
+// tagName is the key out of a toml tag, without the options after it.
+//
+// Without this, a field tagged `toml:"active,omitempty"` is recorded as the key
+// "active,omitempty", which nothing in a file ever matches -- so every start
+// warned about ignoring a key it had in fact read perfectly well. The value was
+// never lost; the warning was, and it is the kind she has read out to her.
+func tagName(tag string) string {
+	if comma := strings.Index(tag, ","); comma >= 0 {
+		return tag[:comma]
+	}
+	return tag
 }
 
 // ToMap renders the config as a plain document, which is what the settings API

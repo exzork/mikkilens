@@ -17,10 +17,21 @@ import { readFileSync, writeFileSync } from 'node:fs'
  * for a command that existed.
  *
  * So: additive. A section she does not have is appended; a section she does
- * have is left exactly as it is, phrasing and all. Nothing is ever rewritten
- * or removed, so an edit of hers cannot be lost by this, and the new commands
- * land in the same file she already edits rather than somewhere she cannot
- * see them.
+ * have is left exactly as it is, phrasing and all. Nothing is ever rewritten,
+ * so an edit of hers cannot be lost by this, and the new commands land in the
+ * same file she already edits rather than somewhere she cannot see them.
+ *
+ * Additive in one direction only was not enough. A command the application has
+ * since dropped stays in her file for ever, and it does not sit there quietly:
+ * its slots are no longer slots the application knows, so every start reads out
+ * "phrase uses unknown slot" for each one -- a file problem, announced by ear,
+ * that she cannot fix by ear. Removing scenes and sources in 0.10 turned that
+ * into eight of them.
+ *
+ * So a retired command is commented out rather than deleted. It stops being a
+ * command, which is the point; the phrases she wrote for it are still there to
+ * read, which is the courtesy; and doing it in the file she already edits means
+ * the change is somewhere she can see rather than somewhere she cannot.
  */
 
 /** One command as it is written in the file, with the comments that explain it. */
@@ -96,6 +107,38 @@ export function merged(mine: string, shipped: string, note: string): { text: str
 }
 
 /**
+ * Comment out any section of `mine` that `shipped` no longer defines.
+ *
+ * Not deleted. She may have spent an evening on those phrases, and a file that
+ * quietly loses text is a worse thing to own than one with a few dead lines in
+ * it -- which is also why the note above them says what happened rather than
+ * leaving her to work it out from a diff she cannot see.
+ */
+export function retired(
+  mine: string,
+  shipped: string,
+  note: string,
+): { text: string; retired: string[] } | null {
+  const known = new Set(commandIds(shipped))
+  const gone = sections(mine).filter((section) => !known.has(section.id))
+  if (gone.length === 0) {
+    return null
+  }
+
+  const newline = String.fromCharCode(10)
+
+  let text = mine
+  for (const section of gone) {
+    const commented = section.text
+      .split(newline)
+      .map((line) => (line.startsWith('#') ? line : `# ${line}`))
+      .join(newline)
+    text = text.replace(section.text, note + newline + commented)
+  }
+  return { text, retired: gone.map((section) => section.id) }
+}
+
+/**
  * Bring one command file up to date on disk.
  *
  * Failure is never fatal. A command file that could not be read or written
@@ -103,18 +146,37 @@ export function merged(mine: string, shipped: string, note: string): { text: str
  * application missing some newer commands -- worth a line in the log, and
  * nothing worth interrupting a stream over.
  */
-export function addNewCommands(mine: string, shipped: string, note: string): string[] {
+export function syncCommands(
+  mine: string,
+  shipped: string,
+  notes: { added: string; retired: string },
+): { added: string[]; retired: string[] } {
+  const nothing = { added: [], retired: [] }
   try {
-    const current = readFileSync(mine, 'utf8')
     const theirs = readFileSync(shipped, 'utf8')
-    const result = merged(current, theirs, note)
-    if (result === null) {
-      return []
+    let text = readFileSync(mine, 'utf8')
+    const result = { added: [] as string[], retired: [] as string[] }
+
+    // Retiring first, so a command that was removed and later brought back
+    // arrives as a new section rather than being commented out again.
+    const out = retired(text, theirs, notes.retired)
+    if (out !== null) {
+      text = out.text
+      result.retired = out.retired
     }
-    writeFileSync(mine, result.text, 'utf8')
-    return result.added
+    const inbound = merged(text, theirs, notes.added)
+    if (inbound !== null) {
+      text = inbound.text
+      result.added = inbound.added
+    }
+
+    if (result.added.length === 0 && result.retired.length === 0) {
+      return nothing
+    }
+    writeFileSync(mine, text, 'utf8')
+    return result
   } catch (error) {
-    console.warn(`could not add new commands to ${mine}`, error)
-    return []
+    console.warn(`could not bring ${mine} up to date`, error)
+    return nothing
   }
 }

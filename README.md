@@ -562,6 +562,12 @@ confirm = false
 Setelah menyimpan, ucapkan **"muat ulang perintah"**. Tidak perlu menutup
 MikkiLens. Halaman **Perintah** di Pengaturan juga bisa dipakai.
 
+Berkas ini milikmu, dan pembaruan tidak menimpanya. Yang dilakukan pembaruan
+cuma dua: perintah **baru** ditambahkan di bagian bawah, dan perintah yang
+sudah **tidak ada lagi** di MikkiLens dijadikan komentar — bukan dihapus, jadi
+kalimat yang pernah kamu tulis untuknya tetap bisa dibaca. Kalimatmu untuk
+perintah yang masih ada tidak pernah diubah.
+
 **Perintah pendek lebih sering salah didengar.** Kalimat dua kata seperti
 "jeda chat" kadang tidak terkenali; kalimat yang lebih panjang jauh lebih
 andal. Kalau ada perintah yang sulit, tambahkan versi panjangnya.

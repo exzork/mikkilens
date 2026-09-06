@@ -17,11 +17,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 // pathToFileURL, because a Windows absolute path is not a URL the ESM loader
 // will take: it reads "D:" as a protocol.
-const { merged, sections, commandIds } = await import(
+const { merged, retired, sections, commandIds } = await import(
   pathToFileURL(join(here, '..', 'out', 'main', 'commands.js')).href
 )
 
 const NOTE = '# added by an update'
+const GONE = '# retired by an update'
 
 const hers = `[commands.mute_mic]
 phrases = ["matiin mic dong", "bisukan mik"]
@@ -59,6 +60,51 @@ assert.ok(result.text.includes('The clock, asked out loud'), 'the comment comes 
 assert.equal(merged(result.text, shipped, NOTE), null, 'a second run must change nothing')
 assert.equal(merged(shipped, shipped, NOTE), null, 'an identical file must not be rewritten')
 assert.equal(merged(shipped, hers, NOTE), null, 'a file ahead of the shipped one is left alone')
+
+// -- retiring -----------------------------------------------------------------
+//
+// A command the application has dropped stays in her file for ever otherwise,
+// and it does not sit there quietly: its slots are no longer slots the engine
+// knows, so every start reads out "uses unknown slot" for each phrase.
+
+const withRetired = `[commands.mute_mic]
+phrases = ["matiin mic dong"]
+
+# Pindah scene, dengan nama scene-nya.
+[commands.switch_scene]
+phrases = ["ganti ke {scene}", "pindah ke {scene}"]
+
+[commands.status]
+phrases = ["status"]
+`
+
+const out = retired(withRetired, shipped, GONE)
+assert.ok(out, 'a command the application no longer has must be retired')
+assert.deepEqual(out.retired, ['switch_scene'], 'only the one that is gone')
+
+// Commented out, not deleted: she may have spent an evening on those phrases.
+assert.ok(out.text.includes('# [commands.switch_scene]'), 'the section is commented out')
+assert.ok(out.text.includes('ganti ke {scene}'), 'her phrases are still readable')
+assert.ok(out.text.includes(GONE), 'and the note says what happened')
+assert.deepEqual(commandIds(out.text), ['mute_mic', 'status'], 'it is no longer a command')
+
+// The comment above it was already a comment and must not be double-hashed.
+assert.ok(!out.text.includes('# # Pindah scene'), 'a comment line is left as one')
+
+// Everything else is untouched, including her own phrasing.
+assert.ok(out.text.includes('matiin mic dong'), 'her phrasing must survive')
+assert.ok(out.text.includes('[commands.status]'), 'a command she still has stays')
+
+// Running on every start, so a second pass must find nothing left to do.
+assert.equal(retired(out.text, shipped, GONE), null, 'a second run must change nothing')
+assert.equal(retired(shipped, shipped, GONE), null, 'an identical file must not be rewritten')
+
+// Retiring and adding in the same pass: the file that has one dropped command
+// and is missing one new one ends with both handled.
+const bothWays = retired(withRetired, shipped, GONE)
+const then = merged(bothWays.text, shipped, NOTE)
+assert.deepEqual(then.added, ['current_time'], 'the new one still arrives')
+assert.ok(then.text.includes('# [commands.switch_scene]'), 'the retired one stays retired')
 
 // The dividers the real files use must not be dragged along with a section.
 const withDivider = `[commands.a]

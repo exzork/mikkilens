@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
-import { addNewCommands } from './commands.js'
+import { syncCommands } from './commands.js'
 import { dirname, join } from 'node:path'
 
 /**
@@ -23,6 +23,14 @@ import { dirname, join } from 'node:path'
 const UPDATE_NOTE = [
   '# Added by a MikkiLens update. Edit the phrases freely: nothing here is',
   '# overwritten again, and everything above this line was left untouched.',
+].join(String.fromCharCode(10))
+
+/** The header written above a command an update has retired, so that a set of
+ * phrases turning into comments is explained where it happened. */
+const RETIRED_NOTE = [
+  '# Retired by a MikkiLens update: this command no longer exists, so the lines',
+  '# below it are commented out rather than deleted. Left as they were in case',
+  '# you want to read them; nothing here does anything now.',
 ].join(String.fromCharCode(10))
 
 /** Files the engine expects beside config.toml, seeded on a fresh install. */
@@ -157,15 +165,18 @@ export function seedHome(home: string): void {
   // A command file she already has is never overwritten -- the phrases in it
   // are hers. But a command added since she installed has to reach her
   // somehow, or it exists everywhere except the one file that decides what she
-  // can say.
+  // can say; and a command the application has dropped has to stop being one,
+  // or every start reads out a warning about a slot that no longer exists.
   for (const name of ['commands.en.toml', 'commands.id.toml']) {
-    const added = addNewCommands(
-      join(home, name),
-      join(process.resourcesPath, name),
-      UPDATE_NOTE,
-    )
-    if (added.length > 0) {
-      console.info(`added ${added.join(', ')} to ${name}`)
+    const changed = syncCommands(join(home, name), join(process.resourcesPath, name), {
+      added: UPDATE_NOTE,
+      retired: RETIRED_NOTE,
+    })
+    if (changed.added.length > 0) {
+      console.info(`added ${changed.added.join(', ')} to ${name}`)
+    }
+    if (changed.retired.length > 0) {
+      console.info(`retired ${changed.retired.join(', ')} in ${name}`)
     }
   }
 

@@ -1,6 +1,8 @@
 package config_test
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -293,5 +295,41 @@ func TestBindingsAreNotWarnedAboutAsAnUnknownSection(t *testing.T) {
 	})
 	if settings.Speech.Rate != "+20%" {
 		t.Errorf("rate = %q; the rest of the config must still load", settings.Speech.Rate)
+	}
+}
+
+// A key with options after it in the tag -- `toml:"active,omitempty"` -- is
+// still the key "active".
+//
+// The value was never lost; the warning was wrong. But it is a warning, on a
+// machine where warnings are read out loud, about a key she had set correctly
+// -- so it is worth pinning that it has stopped.
+func TestAKeyWithTagOptionsIsNotWarnedAbout(t *testing.T) {
+	var log bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&log, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	settings := config.FromMap(map[string]any{
+		"youtube":  map[string]any{"active": "UCmusic", "enabled": true},
+		"bindings": []any{},
+	})
+
+	if settings.YouTube.Active != "UCmusic" {
+		t.Errorf("active channel = %q, want UCmusic", settings.YouTube.Active)
+	}
+	if strings.Contains(log.String(), "unknown config key") {
+		t.Errorf("a key it read was warned about: %s", log.String())
+	}
+	if strings.Contains(log.String(), "unknown config section") {
+		t.Errorf("a section it read was warned about: %s", log.String())
+	}
+
+	// The tag really does carry options, or this test would pass for the wrong
+	// reason: it would be checking a key that was never in danger.
+	field, ok := reflect.TypeOf(config.YouTube{}).FieldByName("Active")
+	if !ok || !strings.Contains(field.Tag.Get("toml"), ",") {
+		t.Fatalf("active is tagged %q, so this test no longer covers anything",
+			field.Tag.Get("toml"))
 	}
 }
