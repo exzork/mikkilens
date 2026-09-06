@@ -306,6 +306,26 @@ when an utterance leaves the queue, and checks it again before playing -- about
 a second of every gap between two results, which is exactly where a number
 lands.
 
+Being able to cut it off is no use if there is no way to say so, and hands-free
+there was not. The wake word is deaf while MikkiLens talks -- her name is the
+trigger, and it comes back through the microphone like anyone else saying it --
+and it stays deaf for a second and a half afterwards, which is longer than the
+gap between two results. A list left it deaf from the first line to the last.
+So a list is the one exception: the detector keeps listening through it, which
+costs nothing, because nothing in a list of songs says her name.
+
+And starting a turn ends the reading, whichever way it was started. Pressing
+the key or saying her name during a list is an answer to it, whatever the
+answer turns out to be, and the rest of the list would otherwise be a voice
+talking over the person it is waiting for -- and in the recording, where it
+becomes words in what she said. The results are kept: the numbers still mean
+what they meant, and `list_songs` reads them again.
+
+`restart_music` starts the song again from the top. Started again rather than
+sought back to nothing, because there is nothing to seek in: the song is
+streamed, decoded a block at a time and dropped, so what has already been heard
+is not anywhere any more.
+
 Nothing is downloaded. yt-dlp only resolves a direct URL; ffmpeg reads it over
 HTTP and writes decoded PCM to a pipe as it arrives; `wasapi.Stream` pulls
 blocks from that on demand. So the song starts about three seconds after she

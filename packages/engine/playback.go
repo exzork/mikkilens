@@ -81,10 +81,11 @@ func (p *playback) Gain() float32 {
 
 func musicPlaybackHandlers(e *Engine) map[string]intent.Handler {
 	return map[string]intent.Handler{
-		"stop_music":   func(map[string]string) error { e.StopMusic(); return nil },
-		"pause_music":  func(map[string]string) error { e.PauseMusic(); return nil },
-		"resume_music": func(map[string]string) error { e.ResumeMusic(); return nil },
-		"now_playing":  func(map[string]string) error { e.SayNowPlaying(); return nil },
+		"restart_music": func(map[string]string) error { e.RestartMusic(); return nil },
+		"stop_music":    func(map[string]string) error { e.StopMusic(); return nil },
+		"pause_music":   func(map[string]string) error { e.PauseMusic(); return nil },
+		"resume_music":  func(map[string]string) error { e.ResumeMusic(); return nil },
+		"now_playing":   func(map[string]string) error { e.SayNowPlaying(); return nil },
 	}
 }
 
@@ -121,6 +122,16 @@ func (e *Engine) SayNowPlaying() {
 // caller is a command handler, and holding one open for four minutes would hold
 // the microphone with it.
 func (e *Engine) startSong(song music.Song) {
+	e.startSongSaying(song, "music.playing")
+}
+
+// startSongSaying is startSong with the sentence it announces itself with.
+//
+// Restarting says its own line rather than "playing X by Y" a second time:
+// what she needs to hear back is that this is the same song from the top, not
+// which song it is -- she just heard that, and it is still the answer to "lagu
+// apa ini".
+func (e *Engine) startSongSaying(song music.Song, key string) {
 	// Whatever was playing goes first, and silently: she asked for this song,
 	// not for a sentence about the last one.
 	e.stopSong(false)
@@ -137,7 +148,7 @@ func (e *Engine) startSong(song music.Song) {
 	e.playing.mu.Unlock()
 
 	e.store.Update(state.Changes{"now_playing": song.Title + " — " + song.Artist})
-	e.bus.SayKey("music.playing", feedback.Result,
+	e.bus.SayKey(key, feedback.Result,
 		i18n.Args{"title": song.Title, "artist": song.Artist})
 
 	go e.playSong(song)
@@ -251,6 +262,22 @@ func (e *Engine) stopSong(announce bool) {
 	if announce {
 		e.bus.SayKey("music.stopped", feedback.Result)
 	}
+}
+
+// RestartMusic plays the song that is playing again, from the beginning.
+//
+// Started again rather than sought back to nothing, because there is nothing
+// to seek in: the song is streamed, decoded a block at a time and dropped, so
+// the part that has already been heard is not anywhere any more. That costs
+// the couple of seconds any song costs to start, which is why the sentence
+// saying so lands first.
+func (e *Engine) RestartMusic() {
+	song, live := e.NowPlaying()
+	if !live {
+		e.bus.SayKey("music.nothing_playing", feedback.Result)
+		return
+	}
+	e.startSongSaying(song, "music.restarted")
 }
 
 // PauseMusic holds the song where it is. The stream stays open, so resuming

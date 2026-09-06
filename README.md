@@ -109,6 +109,7 @@ Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
 | "putar lagu" | Kotak ketik terbuka; ketik judulnya, lima hasil dibacakan |
 | "putar lagu monokrom" | Langsung dicari, hasilnya dibacakan satu per satu |
 | "putar nomor dua" | Hasil kedua diputar di dalam MikkiLens |
+| "ulangi lagunya dari awal" | Lagu yang sedang jalan diputar lagi dari awal |
 | "hentikan lagunya" | Lagunya berhenti |
 | "lagu apa ini" | Judul lagu yang sedang diputar dibacakan |
 | "bisukan chat" | Pembacaan chat dibisukan; tidak ada yang hilang |
@@ -230,6 +231,13 @@ Tidak ada berkas yang diunduh: lagunya dialirkan sambil diputar, dan menekan
 Menekan angka **saat hasilnya masih dibacakan** langsung memotong pembacaannya
 dan memulai lagunya — termasuk kalau kalimat berikutnya sudah mulai disiapkan.
 Tidak perlu menunggu daftar itu selesai: kamu sudah memilih.
+
+Lewat suara juga sama. Selama daftarnya dibacakan, **kata pemicu tetap
+mendengar** — di saat lain MikkiLens memang tuli sementara dia bicara, tapi
+daftar hasil justru satu-satunya hal yang memang untuk dijawab saat masih
+dibacakan. Begitu kamu menekan tombolnya atau menyebut namanya, pembacaannya
+langsung berhenti, lalu tinggal ucapkan **"putar nomor dua"**. Hasilnya tidak
+hilang: nomornya tetap berlaku, dan "sebutkan lagunya lagi" tetap bisa.
 
 Kenapa diketik, bukan diucapkan? Judul lagu dan nama penyanyi adalah hal yang
 paling sering salah didengar. "Sisitipsi Buih Jadi Permadani" bukan kalimat

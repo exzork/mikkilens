@@ -228,5 +228,10 @@ phrases = ["jeda lagunya", "tahan dulu lagunya"]
 [commands.resume_music]
 phrases = ["lanjutkan lagunya", "mainkan lagi lagunya"]
 
+# Mengulang lagu yang sedang diputar dari awal. Beda dengan "lanjutkan
+# lagunya", yang meneruskan dari tempat berhentinya.
+[commands.restart_music]
+phrases = ["ulangi lagunya dari awal", "putar ulang lagunya", "mulai lagunya dari awal", "restart lagunya"]
+
 [commands.now_playing]
 phrases = ["lagu apa ini", "ini lagu apa", "sedang memutar apa"]

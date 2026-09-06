@@ -152,6 +152,9 @@ playing_is = "{title} by {artist} is playing."
 paused_is = "{title} by {artist} is paused."
 nothing_playing = "Nothing is playing."
 stopped = "Music stopped."
+# From the top. The title is said because this doubles as the answer to
+# "did that actually start again".
+restarted = "{title}, from the start."
 paused = "Music paused."
 already_paused = "The music is already paused."
 resumed = "Music playing again."

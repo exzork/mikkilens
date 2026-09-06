@@ -225,5 +225,9 @@ phrases = ["pause the music", "hold the music"]
 [commands.resume_music]
 phrases = ["resume the music", "start the music again"]
 
+# The song from the top, as against resuming it from where it was paused.
+[commands.restart_music]
+phrases = ["restart the song", "restart this song", "start the song from the beginning"]
+
 [commands.now_playing]
 phrases = ["what song is this", "what is playing"]

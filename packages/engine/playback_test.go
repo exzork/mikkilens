@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/exzork/mikkilens/packages/audio/assets"
@@ -181,6 +182,83 @@ func (silentSpeaker) SetDevice(*devices.Device)    {}
 
 func silentVoice(_ context.Context, text string, _ tts.Options) (tts.Audio, error) {
 	return tts.Audio{Samples: make([]float32, 8), SampleRate: 48000, Channels: 1, Text: text}, nil
+}
+
+// She starts talking while the list is being read: pressing the key, or saying
+// MikkiLens's name. Whatever she is about to say, the list is over -- and it
+// must not be left holding the song that was playing before it.
+func TestStartingToTalkStopsTheListAndGivesTheSongBack(t *testing.T) {
+	t.Setenv("MIKKILENS_SILENT", "1")
+
+	engine := playingSomething()
+	engine.locale = i18n.Load("id")
+	engine.bus = feedback.NewWith(config.Default(), engine.locale, silentSpeaker{}, silentVoice)
+	t.Cleanup(engine.bus.Stop)
+
+	engine.pauseForList()
+	for _, line := range []string{"Ada 2 lagu.", "1. Monokrom.", "2. Sewindu."} {
+		engine.say(line)
+	}
+
+	engine.stopReadingTheList()
+
+	if engine.bus.PendingGroup(resultsGroup) {
+		t.Error("the rest of the list is still queued")
+	}
+	if engine.playing.Paused() {
+		t.Error("the song was left held by a reading that is over")
+	}
+}
+
+// Nothing being read, nothing to stop: starting a turn at any other moment
+// must not go near the song.
+func TestStartingToTalkWithNoListReadingLeavesTheSongAlone(t *testing.T) {
+	t.Setenv("MIKKILENS_SILENT", "1")
+
+	engine := playingSomething()
+	engine.locale = i18n.Load("id")
+	engine.bus = feedback.NewWith(config.Default(), engine.locale, silentSpeaker{}, silentVoice)
+	t.Cleanup(engine.bus.Stop)
+
+	engine.playing.paused.Store(true) // she paused it herself, a while ago
+
+	engine.stopReadingTheList()
+
+	if !engine.playing.Paused() {
+		t.Error("a turn with no list being read gave back a pause she asked for")
+	}
+}
+
+// -- restarting ---------------------------------------------------------------
+
+// Restarting has its own sentence: saying "playing X by Y" again would be
+// answering a question she did not ask, and would sound exactly like the
+// command having been misheard as "play it".
+func TestBothLanguagesSayWhatRestartingIs(t *testing.T) {
+	for _, language := range []string{"id", "en"} {
+		locale := i18n.Load(language)
+		line := locale.T("music.restarted", i18n.Args{"title": "Monokrom", "artist": "Tulus"})
+		if strings.Contains(line, "Missing text") || !strings.Contains(line, "Monokrom") {
+			t.Errorf("[%s] music.restarted = %q", language, line)
+		}
+	}
+}
+
+// A command that exists in code and in no command file is a command she cannot
+// say. Both shipped files have to carry all of these.
+func TestBothCommandFilesCarryTheMusicControls(t *testing.T) {
+	handlers := musicPlaybackHandlers(&Engine{})
+	for _, path := range []string{"../../commands.id.toml", "../../commands.en.toml"} {
+		set, err := intent.SetFromFile(path)
+		if err != nil {
+			t.Fatalf("%s: %v", path, err)
+		}
+		for id := range handlers {
+			if !set.Has(id) {
+				t.Errorf("%s has no %s command", path, id)
+			}
+		}
+	}
 }
 
 // -- the two programs ---------------------------------------------------------

@@ -154,6 +154,9 @@ playing_is = "Sedang memutar {title} dari {artist}."
 paused_is = "{title} dari {artist} sedang dijeda."
 nothing_playing = "Tidak ada lagu yang diputar."
 stopped = "Lagunya dihentikan."
+# Diulang dari awal. Judulnya disebut karena kalimat ini juga jadi jawaban
+# "yang barusan itu jadi diulang atau tidak".
+restarted = "Mengulang {title} dari awal."
 paused = "Lagunya dijeda."
 already_paused = "Lagunya memang sedang dijeda."
 resumed = "Lagunya dilanjutkan."

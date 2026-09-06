@@ -238,6 +238,12 @@ func (e *Engine) FindSongs(ctx context.Context, query string) ([]music.Song, err
 		return nil, &music.Error{Reason: "there was nothing to search for"}
 	}
 
+	// A list still being read is about the search before this one. It stops
+	// here rather than when the new results arrive, which is a round trip
+	// away -- and its song, if it took one, goes back to playing until the new
+	// reading takes it again.
+	e.stopReadingTheList()
+
 	// Announced before the round trip, not after: a couple of seconds of
 	// silence after she pressed Enter reads as having been ignored, and the
 	// window she typed into has closed by then.
@@ -291,6 +297,11 @@ const resultsGroup = "music.results"
 func (e *Engine) readResults(songs []music.Song) {
 	locale := e.Locale()
 
+	// A second search replaces the first rather than queueing behind it. What
+	// is left of the old list is about songs she is no longer choosing from,
+	// and the numbers in it are about to mean something else.
+	e.bus.ClearGroup(resultsGroup)
+
 	// The song steps aside for the whole reading rather than ducking under
 	// each line of it. See pauseForList.
 	e.pauseForList()
@@ -315,6 +326,31 @@ func (e *Engine) say(text string) {
 		Text: text, Priority: feedback.Result, Group: resultsGroup,
 		OnSpoken: func(bool) { e.resumeIfTheListIsRead() },
 	})
+}
+
+// readingAList reports whether a list of results is being read out right now.
+//
+// The wake word asks: it is deaf while MikkiLens speaks, and a list has to be
+// answerable while it is still being said.
+func (e *Engine) readingAList() bool {
+	return e.bus.SpeakingGroup() == resultsGroup
+}
+
+// stopReadingTheList ends a reading because she has started talking.
+//
+// Pressing the key or saying her name during a list is an answer to it,
+// whatever the answer turns out to be: she has heard the one she wanted, or
+// she wants something else entirely. Either way the rest of the list is a
+// voice talking over the person it is waiting for -- and it would be in the
+// recording, where it becomes words in what she said.
+//
+// The results themselves are kept. "Putar nomor dua" still works afterwards,
+// and so does asking for them again.
+func (e *Engine) stopReadingTheList() {
+	if e.bus.ClearGroup(resultsGroup) == 0 && !e.readingAList() {
+		return
+	}
+	e.resumeIfTheListIsRead()
 }
 
 // resumeIfTheListIsRead gives the song back once the last line has been said.

@@ -144,8 +144,16 @@ func New(settings config.Config, locale *i18n.Locale) *Engine {
 	// her name is the trigger, and it comes back through the microphone like
 	// anyone else saying it -- and the music steps back so the voice is not
 	// competing with it.
+	//
+	// A list of results is the exception, and it has to be: the detector stays
+	// off for a second and a half after each utterance, which is longer than
+	// the gap between two results, so a list left it deaf from the first line
+	// to the last. Hands-free, that is not "she has to wait" -- it is no way
+	// in at all, on the one thing MikkiLens says that exists to be answered
+	// while it is still being said. Nothing in a list of songs says her name,
+	// which is the whole reason the gate is there.
 	bus.OnSpeaking(func(speaking bool) {
-		if detector := engine.Wake(); detector != nil {
+		if detector := engine.Wake(); detector != nil && !engine.readingAList() {
 			detector.SetSpeaking(speaking)
 		}
 		engine.duckMusic(speaking)
@@ -1567,6 +1575,11 @@ func (e *Engine) listenOnce() {
 	defer e.endTurn()
 
 	settings := e.Config()
+
+	// She has started talking, so a list being read stops here rather than
+	// carrying on underneath it. Before the tone, so the tone lands in the
+	// quiet it is announcing.
+	e.stopReadingTheList()
 
 	// The tone is the acknowledgement: it lands immediately, about a second
 	// before any spoken reply could.
