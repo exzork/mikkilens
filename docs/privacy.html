@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy — MikkiLens</title>
+<meta name="description" content="What MikkiLens stores, where it stores it, and every service it talks to. It runs on your own computer; there is no MikkiLens server and no MikkiLens account.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="mark" href="./">MikkiLens</a>
+  <h1>Privacy policy</h1>
+  <p class="lede">
+    MikkiLens runs on your own computer. There is no MikkiLens account, no
+    MikkiLens server, and nothing about you is sent to us &mdash; because there
+    is no &ldquo;us&rdquo; for it to be sent to.
+  </p>
+  <p class="updated">Last updated 6 September 2026</p>
+</header>
+
+<main>
+  <h2>The short version</h2>
+
+  <ul>
+    <li>MikkiLens is a Windows application you install and run yourself. It has
+      no backend of its own.</li>
+    <li>We collect nothing. There is no analytics, no telemetry, no crash
+      reporting, and no account to sign up for.</li>
+    <li>Everything it saves &mdash; your settings, your YouTube sign-in, its
+      log &mdash; is saved in a folder on your computer.</li>
+    <li>It talks to other services because you asked it to: YouTube, the voice
+      that reads to you, and anything you configure yourself. Those are listed
+      below, with what each one receives.</li>
+    <li>Nothing is sold, shared, or used to train anything.</li>
+  </ul>
+
+  <h2>Google user data</h2>
+
+  <p>
+    When you press <em>Connect</em> and sign in, Google asks whether you want
+    to let MikkiLens manage your YouTube account. This section says exactly
+    what that means in practice.
+  </p>
+
+  <h3>What is requested, and why</h3>
+
+  <p>
+    MikkiLens requests one scope,
+    <code>https://www.googleapis.com/auth/youtube</code>, which Google
+    describes as &ldquo;manage your YouTube account&rdquo;. It is the narrowest
+    scope that covers everything the application does. In particular it does
+    <strong>not</strong> request <code>youtube.force-ssl</code>, which would
+    include the right to permanently delete your videos, ratings, comments and
+    captions &mdash; MikkiLens never needs that and never asks for it.
+  </p>
+
+  <p>These are all of the calls it makes, and what each one is for:</p>
+
+  <table>
+    <thead>
+      <tr><th>Call</th><th>What it is used for</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>liveBroadcasts.list</code></td>
+        <td>Answering &ldquo;am I live?&rdquo;, and finding the broadcast whose
+          chat should be read.</td>
+      </tr>
+      <tr>
+        <td><code>liveBroadcasts.update</code></td>
+        <td>Changing your stream title when you ask it to. This is the only
+          call that writes anything, and the title is the only thing it
+          writes.</td>
+      </tr>
+      <tr>
+        <td><code>liveChatMessages.list</code></td>
+        <td>Reading your live chat aloud. Used as a fallback: chat normally
+          comes from the public live chat page instead, to stay within the
+          YouTube API quota.</td>
+      </tr>
+      <tr>
+        <td><code>videos.list</code></td>
+        <td>The number of people watching.</td>
+      </tr>
+      <tr>
+        <td><code>channels.list</code></td>
+        <td>Which channel you are signed in as, so it can say the name back to
+          you and keep more than one channel apart.</td>
+      </tr>
+      <tr>
+        <td><code>search.list</code></td>
+        <td>Finding your current live broadcast when it is not otherwise
+          listed.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>What is stored, and where</h3>
+
+  <p>
+    Your Google sign-in is stored as a token file in MikkiLens&rsquo;s own
+    <code>data</code> folder on your computer
+    (<code>data\youtube_token.json</code>, or one file per channel under
+    <code>data\youtube\</code> if you connect more than one). Alongside it,
+    MikkiLens keeps the channel id and channel name so it can tell you which
+    account it is on.
+  </p>
+
+  <p>
+    That token is sent to Google, and to nobody else, ever. It is not uploaded,
+    backed up, or synchronised anywhere. Anyone with access to your computer
+    and that folder can use it, in the same way they could use your browser if
+    you were signed in there.
+  </p>
+
+  <h3>What is done with the data that comes back</h3>
+
+  <p>
+    Chat messages, viewer counts, broadcast titles and channel names are read
+    aloud to you and kept in memory while the application is running. Chat
+    messages are not written to disk. The application&rsquo;s log
+    (<code>data\mikkilens.log</code>) records what MikkiLens did and what it
+    said, which can include the text of a message it read out; it stays on your
+    computer and you can delete it at any time.
+  </p>
+
+  <p>
+    Text that MikkiLens speaks aloud is turned into speech by Microsoft&rsquo;s
+    Edge read-aloud service, which means the words being spoken are sent there.
+    That includes chat messages and donation messages while they are being
+    read. See <a href="#services">the list of services</a> below.
+  </p>
+
+  <h3>Taking it back</h3>
+
+  <p>
+    You can withdraw MikkiLens&rsquo;s access to your Google account at any
+    time at
+    <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.
+    Inside the application, the settings page has a <em>Disconnect</em> button
+    that deletes the stored token from your computer. Deleting the
+    <code>data</code> folder, or uninstalling MikkiLens, removes it as well.
+  </p>
+
+  <h3>Limited Use</h3>
+
+  <div class="note">
+    <p>
+      MikkiLens&rsquo;s use and transfer of information received from Google
+      APIs to any other app will adhere to the
+      <a href="https://developers.google.com/terms/api-services-user-data-policy">Google
+      API Services User Data Policy</a>, including the Limited Use
+      requirements.
+    </p>
+  </div>
+
+  <p>
+    In plain terms: data from Google is used only to provide the features you
+    asked for, on your own machine. It is not sold, not transferred to anyone,
+    not used for advertising, and not used to train any model. No human at
+    MikkiLens reads it, because MikkiLens never receives it.
+  </p>
+
+  <h3>YouTube API Services</h3>
+
+  <p>
+    MikkiLens uses YouTube API Services. By using it you also agree to the
+    <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>, and
+    Google&rsquo;s own handling of your data is described in the
+    <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.
+  </p>
+
+  <h2 id="services">Everything MikkiLens talks to</h2>
+
+  <p>
+    MikkiLens is your own client for other people&rsquo;s services. Each of
+    these is contacted directly from your computer, and only for the feature
+    next to it.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Service</th><th>What it receives, and when</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>YouTube / Google</td>
+        <td>Your signed-in requests, as described above. Live chat is normally
+          read from the public live chat page of your own broadcast.</td>
+      </tr>
+      <tr>
+        <td>Microsoft (Edge read-aloud)</td>
+        <td>The text to be spoken, every time MikkiLens says something &mdash;
+          confirmations, chat messages, donation messages. No account is used
+          and nothing identifies you beyond the request itself. Spoken phrases
+          are cached in <code>data\tts_cache</code> so repeated ones are not
+          sent again.</td>
+      </tr>
+      <tr>
+        <td>YouTube Music</td>
+        <td>The song title you searched for, when you search for music.</td>
+      </tr>
+      <tr>
+        <td>DuckDuckGo</td>
+        <td>The search text, when you ask MikkiLens to look something up on the
+          web.</td>
+      </tr>
+      <tr>
+        <td>An AI endpoint you configure</td>
+        <td>Only if you fill one in. It receives a screenshot when you ask what
+          is on the screen, chat text when you ask for a summary, and the
+          sentence you said when no command matched it. Empty by default, in
+          which case those features are off.</td>
+      </tr>
+      <tr>
+        <td>Tako, Trakteer</td>
+        <td>Only if you paste your overlay link. MikkiLens watches that link
+          for donation alerts, exactly as the browser source in OBS does.</td>
+      </tr>
+      <tr>
+        <td>GitHub</td>
+        <td>An update check against MikkiLens&rsquo;s public releases, and the
+          download of the update if you accept it. Also where the two music
+          programs (yt-dlp and ffmpeg) come from.</td>
+      </tr>
+      <tr>
+        <td>Hugging Face</td>
+        <td>The download of the speech-recognition model, once, at first
+          launch.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Your microphone</h3>
+
+  <p>
+    Speech recognition runs on your own computer by default: the audio of what
+    you said is turned into text locally and is not sent anywhere. It is not
+    recorded to disk. If you deliberately configure a remote speech-recognition
+    endpoint in the settings, the audio goes to that endpoint instead &mdash;
+    that is the only case in which your voice leaves the machine.
+  </p>
+
+  <h3>Your screen</h3>
+
+  <p>
+    A screenshot is taken only when you ask what is on the screen, and only
+    then. It is sent to the AI endpoint you configured, and not stored. With no
+    endpoint configured &mdash; the state MikkiLens ships in &mdash; nothing is
+    captured at all.
+  </p>
+
+  <h2>What is kept on your computer</h2>
+
+  <p>Everything MikkiLens writes lives in its own folder:</p>
+
+  <table>
+    <tbody>
+      <tr><td><code>config.toml</code></td><td>Your settings.</td></tr>
+      <tr><td><code>data\youtube_token.json</code><br><code>data\youtube\</code></td><td>Your YouTube sign-in, one file per channel.</td></tr>
+      <tr><td><code>data\secrets.toml</code></td><td>API keys you entered, kept out of the settings file so that file stays safe to share when you need help.</td></tr>
+      <tr><td><code>data\mikkilens.log</code></td><td>What the application did, for working out what went wrong.</td></tr>
+      <tr><td><code>data\tts_cache</code></td><td>Spoken phrases, so common ones are instant.</td></tr>
+      <tr><td><code>data\models</code></td><td>The speech-recognition and wake-word files.</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    All of it is removed by deleting that folder or uninstalling the
+    application. Nothing is kept anywhere else, because there is nowhere else.
+  </p>
+
+  <h2>Children</h2>
+
+  <p>
+    MikkiLens is not directed at children and is not intended for use by anyone
+    under 13.
+  </p>
+
+  <h2>Changes</h2>
+
+  <p>
+    If this policy changes, the new version is published on this page with a
+    new date at the top, and every previous version stays visible in
+    <a href="https://github.com/exzork/mikkilens/commits/main/docs/privacy.html">the
+    page&rsquo;s history on GitHub</a>.
+  </p>
+
+  <h2>Contact</h2>
+
+  <p>
+    Questions about this policy, or about anything MikkiLens does with your
+    data, can be raised at
+    <a href="https://github.com/exzork/mikkilens/issues">github.com/exzork/mikkilens/issues</a>.
+  </p>
+</main>
+
+<footer>
+  <p>
+    <a href="./">Home</a> &middot;
+    <a href="terms.html">Terms of service</a> &middot;
+    <a href="https://github.com/exzork/mikkilens">GitHub</a>
+  </p>
+</footer>
+
+</body>
+</html>

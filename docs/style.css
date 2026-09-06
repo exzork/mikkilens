@@ -1,0 +1,173 @@
+/*
+ * The web half of the documentation: the home page and the two policies.
+ *
+ * The setup guide next door is a print document with its own A4 styling; this
+ * is for pages that are read in a browser, by two audiences who could not be
+ * more different -- someone deciding whether to install this, and a reviewer
+ * at Google checking that what the consent screen asks for is what the
+ * application does. Both are served by the same thing: plain prose, wide
+ * enough to read, in the colours the rest of MikkiLens uses.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --ink: #1c1a17;
+  --soft: #55504a;
+  --line: #d9d2c8;
+  --accent: #7a3b12;
+  --accent-soft: #f4ece3;
+  --paper: #fffdfa;
+  --card: #f7f3ed;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #ece7e0;
+    --soft: #b0a89e;
+    --line: #3a3531;
+    --accent: #e0a06a;
+    --accent-soft: #2a221c;
+    --paper: #171513;
+    --card: #201c19;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 1.25rem 5rem;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+main, header, footer { max-width: 44rem; margin: 0 auto; }
+
+header {
+  padding: 3.5rem 0 0;
+}
+
+.mark {
+  font-size: 0.8rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+h1 {
+  font-size: 2.4rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0.6rem 0 0;
+}
+
+.lede {
+  font-size: 1.2rem;
+  color: var(--soft);
+  line-height: 1.5;
+  margin: 1rem 0 0;
+}
+
+.updated {
+  font-size: 0.9rem;
+  color: var(--soft);
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 3px solid var(--accent);
+  display: inline-block;
+}
+
+h2 {
+  font-size: 1.4rem;
+  margin: 3rem 0 0.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+h3 {
+  font-size: 1.1rem;
+  margin: 2rem 0 0.5rem;
+}
+
+p, ul, ol { margin: 0 0 1rem; }
+ul, ol { padding-left: 1.4rem; }
+li { margin-bottom: 0.4rem; }
+
+a { color: var(--accent); }
+a:hover { text-decoration: none; }
+
+code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 0.92em;
+  background: var(--card);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+.note {
+  background: var(--accent-soft);
+  border-left: 4px solid var(--accent);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.note p:last-child, .note ul:last-child { margin-bottom: 0; }
+
+.cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin: 2rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cards li { margin: 0; }
+
+.cards a {
+  display: block;
+  height: 100%;
+  padding: 1.1rem 1.25rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.cards a:hover { border-color: var(--accent); }
+.cards strong { display: block; color: var(--accent); }
+.cards span { color: var(--soft); font-size: 0.95rem; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.98rem;
+}
+
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.6rem 0.75rem 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+th { color: var(--soft); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; }
+td:first-child { width: 34%; font-weight: 600; }
+
+footer {
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.95rem;
+  color: var(--soft);
+}
+
+footer a { color: var(--soft); }

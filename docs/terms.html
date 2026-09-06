@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of service — MikkiLens</title>
+<meta name="description" content="The terms for using MikkiLens: a free Windows application you run on your own computer, with no hosted service behind it.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <a class="mark" href="./">MikkiLens</a>
+  <h1>Terms of service</h1>
+  <p class="lede">
+    MikkiLens is a free application you install and run yourself. These terms
+    cover what you can expect from it, and what it expects from you.
+  </p>
+  <p class="updated">Last updated 6 September 2026</p>
+</header>
+
+<main>
+  <h2>1. What MikkiLens is</h2>
+
+  <p>
+    MikkiLens is a Windows application that lets you operate OBS and your own
+    YouTube live stream by voice, and that reads what is happening back to you
+    out loud. It runs entirely on your computer. There is no hosted service
+    behind it, no account to create, and nothing of yours is stored anywhere
+    but on your own machine &mdash; see the
+    <a href="privacy.html">privacy policy</a> for the detail.
+  </p>
+
+  <p>
+    It is provided free of charge, for personal use, by exzork. Using it means
+    accepting these terms; if you do not accept them, do not install it.
+  </p>
+
+  <h2>2. Your accounts, and other people&rsquo;s services</h2>
+
+  <p>
+    MikkiLens acts as a client for services you already have. Connecting them
+    is your decision and their terms continue to apply to you:
+  </p>
+
+  <ul>
+    <li>
+      Connecting YouTube means agreeing to the
+      <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>.
+      MikkiLens uses YouTube API Services; Google&rsquo;s handling of your data
+      is described in the
+      <a href="https://policies.google.com/privacy">Google Privacy Policy</a>,
+      and you can withdraw MikkiLens&rsquo;s access at any time at
+      <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.
+    </li>
+    <li>
+      If you configure an AI endpoint, a donation overlay, or a remote
+      speech-recognition service, you are responsible for your account there
+      and bound by that provider&rsquo;s terms. Any cost they charge is yours.
+    </li>
+  </ul>
+
+  <p>
+    You are responsible for what you use MikkiLens to do: use it only on
+    channels and accounts you are entitled to operate, and do not use it to
+    break the terms of any service it connects to, or any law that applies to
+    you.
+  </p>
+
+  <h2>3. Quotas and limits</h2>
+
+  <p>
+    The YouTube Data API has a daily quota. MikkiLens is written to stay well
+    inside it &mdash; live chat is normally read from the public chat page
+    rather than the API, and the application tracks its own usage &mdash; but
+    the quota belongs to the Google Cloud project the sign-in was issued
+    against, and running out of it means some features stop answering until it
+    resets. That is a limit of the service, not a fault in the application.
+  </p>
+
+  <h2>4. What is not promised</h2>
+
+  <p>
+    MikkiLens is provided &ldquo;as is&rdquo;, without warranty of any kind,
+    express or implied, including but not limited to the warranties of
+    merchantability, fitness for a particular purpose, and non-infringement.
+  </p>
+
+  <p>
+    It depends on things nobody here controls: OBS, YouTube and its API, the
+    online voice, the network, your microphone, and whatever else you have
+    configured. Any of them can change or stop working, and features that
+    depend on them will stop working with them. Speech recognition mishears
+    words. Commands can be misheard as other commands. Nothing here is
+    certified for any use where a failure would be dangerous.
+  </p>
+
+  <div class="note">
+    <p>
+      Two consequences worth saying plainly, because they happen on a live
+      stream: a command may not be heard, and a command may be heard as a
+      different one. Anything that would be costly to get wrong &mdash; ending
+      a stream, changing a title &mdash; asks first and is answered out loud,
+      but you should keep a way to reach OBS and YouTube directly, and someone
+      who can help if something goes wrong mid-stream.
+    </p>
+  </div>
+
+  <h2>5. Liability</h2>
+
+  <p>
+    To the fullest extent permitted by law, the author is not liable for any
+    indirect, incidental, special or consequential damages, or for any loss of
+    revenue, viewers, data or goodwill, arising out of your use of or inability
+    to use MikkiLens &mdash; including a stream that did not start, did not
+    stop, or went out with the wrong title on it.
+  </p>
+
+  <p>
+    Nothing in these terms limits any liability that cannot be limited under
+    the law that applies to you.
+  </p>
+
+  <h2>6. The software itself</h2>
+
+  <p>
+    The source code is published at
+    <a href="https://github.com/exzork/mikkilens">github.com/exzork/mikkilens</a>
+    and remains the property of its author. You may install and use the
+    application, and read and build the source, for your own use. The
+    MikkiLens name is not licensed for use on other applications.
+  </p>
+
+  <h2>7. Updates</h2>
+
+  <p>
+    MikkiLens checks for new versions and can install them when you ask it to.
+    Updates are optional, and an update never installs itself while you are
+    live. Features can change or be removed between versions; what a version
+    does is described in its release notes.
+  </p>
+
+  <h2>8. Stopping</h2>
+
+  <p>
+    You can stop using MikkiLens at any time: disconnect the YouTube account in
+    the settings, revoke its access at
+    <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>,
+    and uninstall the application. That removes everything it kept, because
+    everything it kept was on your computer.
+  </p>
+
+  <h2>9. Changes to these terms</h2>
+
+  <p>
+    These terms may change. The current version is always the one on this page,
+    with its date at the top, and every previous version stays visible in
+    <a href="https://github.com/exzork/mikkilens/commits/main/docs/terms.html">the
+    page&rsquo;s history on GitHub</a>. Continuing to use MikkiLens after a
+    change means accepting the new version.
+  </p>
+
+  <h2>10. Governing law</h2>
+
+  <p>
+    These terms are governed by the laws of the Republic of Indonesia, without
+    regard to conflict-of-law rules.
+  </p>
+
+  <h2>11. Contact</h2>
+
+  <p>
+    Questions about these terms can be raised at
+    <a href="https://github.com/exzork/mikkilens/issues">github.com/exzork/mikkilens/issues</a>.
+  </p>
+</main>
+
+<footer>
+  <p>
+    <a href="./">Home</a> &middot;
+    <a href="privacy.html">Privacy policy</a> &middot;
+    <a href="https://github.com/exzork/mikkilens">GitHub</a>
+  </p>
+</footer>
+
+</body>
+</html>

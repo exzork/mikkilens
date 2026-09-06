@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MikkiLens — hands-free stream control, by voice</title>
+<meta name="description" content="MikkiLens is a Windows application that lets a streamer run OBS and a YouTube live stream by voice, with everything answered out loud. It runs entirely on her own computer.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <span class="mark">MikkiLens</span>
+  <h1>Run the stream by voice, and hear it answer.</h1>
+  <p class="lede">
+    A Windows application for streamers who cannot watch the screen while they
+    stream. Say what you want; MikkiLens does it and says back what happened.
+  </p>
+</header>
+
+<main>
+  <p>
+    MikkiLens was written for one streamer who is blind, and for the people who
+    help her set up. Everything it does has to work by ear: there is a tone for
+    every state, a sentence for every result, and nothing that has to be found
+    on a screen. It controls OBS, reads her YouTube live chat aloud, announces
+    donations, describes what is on the screen when she asks, and finds and
+    plays music — all from spoken commands and a few keys.
+  </p>
+
+  <p>
+    It runs on her own computer. There is no MikkiLens account, no MikkiLens
+    server, and nothing is sent anywhere except to the services she connects it
+    to herself.
+  </p>
+
+  <ul class="cards">
+    <li>
+      <a href="https://github.com/exzork/mikkilens/releases/latest">
+        <strong>Download</strong>
+        <span>The Windows installer, from GitHub Releases.</span>
+      </a>
+    </li>
+    <li>
+      <a href="panduan-setup.html">
+        <strong>Panduan setup</strong>
+        <span>The setup guide, in Indonesian, written to be read aloud.</span>
+      </a>
+    </li>
+    <li>
+      <a href="https://github.com/exzork/mikkilens">
+        <strong>Source code</strong>
+        <span>The whole application, on GitHub.</span>
+      </a>
+    </li>
+    <li>
+      <a href="privacy.html">
+        <strong>Privacy policy</strong>
+        <span>What it stores, and everything it talks to.</span>
+      </a>
+    </li>
+  </ul>
+
+  <h2>What it does</h2>
+
+  <table>
+    <tbody>
+      <tr>
+        <td>Runs the stream</td>
+        <td>Starts and stops the broadcast, switches OBS scenes, mutes the
+          microphone, shows and hides sources, changes the stream title, reads
+          out the viewer count.</td>
+      </tr>
+      <tr>
+        <td>Reads the chat</td>
+        <td>Reads YouTube live chat aloud, at its own speed and volume, with a
+          key to silence it for a moment without losing anything.</td>
+      </tr>
+      <tr>
+        <td>Announces donations</td>
+        <td>Waits for the alert on screen to finish, then reads out who gave
+          and what they said.</td>
+      </tr>
+      <tr>
+        <td>Describes the screen</td>
+        <td>Sends a screenshot to the AI endpoint you configure, and says back
+          what is on it. Nothing is configured by default.</td>
+      </tr>
+      <tr>
+        <td>Plays music</td>
+        <td>Finds a song on YouTube Music and plays it inside MikkiLens, so it
+          can be paused, restarted, and turned down under her voice.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Connecting YouTube</h2>
+
+  <p>
+    MikkiLens asks to sign in to YouTube so that it can do the things above on
+    your own channel: read whether you are live, read your live chat, tell you
+    how many people are watching, and change your stream title when you ask it
+    to. It asks for the narrowest permission that covers those, and it never
+    asks for the right to delete anything.
+  </p>
+
+  <p>
+    Your Google sign-in is stored on your own computer and used only to talk to
+    YouTube. You can take it back at any time from
+    <a href="https://myaccount.google.com/permissions">your Google account's
+    permissions page</a>. The
+    <a href="privacy.html">privacy policy</a> says exactly what is stored,
+    where, and who else the application talks to.
+  </p>
+</main>
+
+<footer>
+  <p>
+    <a href="privacy.html">Privacy policy</a> ·
+    <a href="terms.html">Terms of service</a> ·
+    <a href="https://github.com/exzork/mikkilens">GitHub</a> ·
+    <a href="https://github.com/exzork/mikkilens/issues">Support</a>
+  </p>
+  <p>MikkiLens is free software for personal use, made by exzork.</p>
+</footer>
+
+</body>
+</html>
