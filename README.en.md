@@ -58,7 +58,10 @@ Windows otherwise lists seven devices thirty-one times, which is unusable read
 aloud. WASAPI's own format conversion does the resampling, so nothing above it
 has to care that the hardware runs at 48 kHz.
 
-Only the wake word uses cgo, for ONNX Runtime. That link needs
+The wake word and the local voice both use cgo, for ONNX Runtime, and both go
+through `packages/audio/onnx` — the runtime is a process-wide singleton that
+can only be initialised once, so finding the library and starting it lives in
+one place and whichever subsystem asks first pays for it. That link needs
 `-Wl,--strip-debug`, which the Makefile, the npm script and `install.bat` all
 pass: a C toolchain old enough to emit debug sections at a virtual address
 outside the image produces an executable Windows refuses to start, reporting
@@ -66,19 +69,53 @@ only "not a valid application for this OS platform" — an error that points
 nowhere near the cause. Audio stays pure Go regardless, because WASAPI is a
 smaller surface than any binding to it.
 
-ONNX Runtime is told to use one thread and not to spin. Its default is a
-thread pool per session sized to the core count, and those threads busy-wait;
-three sessions of that pegged every core and made typing lag in other
-applications, which on a streaming machine is the one thing MikkiLens must
-never do.
+ONNX Runtime is told not to spin, and to use one thread for the wake word and
+two for the voice. Its default is a thread pool per session sized to the core
+count, and those threads busy-wait; three sessions of that pegged every core
+and made typing lag in other applications, which on a streaming machine is the
+one thing MikkiLens must never do. The wake word gets one thread because its
+models are tiny — one scores a chunk in about six milliseconds against the
+eighty milliseconds of audio it represents, so a pool has nothing to do but
+burn power. The voice gets two because the work is real and a second core
+roughly halves the wait, and stops there for the same reason.
 
-Speech synthesis speaks Microsoft's Edge voice protocol directly, with a
-Windows SAPI fallback so a dropped connection cannot produce silence. Speech
-recognition is an interface with two implementations: a local whisper.cpp
-build driven as a child process, and any OpenAI-compatible transcription
-endpoint. Running whisper.cpp out of process costs a few tens of milliseconds
-per command and buys a build that needs no CUDA SDK on the streaming machine —
-you drop in whichever prebuilt binary suits your GPU.
+Speech synthesis has three engines, in `packages/audio/tts`, and the rule
+between them is that a dropped connection must never produce silence. Whichever
+is configured, the others stand behind it in order, and a substitute result is
+never cached — keeping it would hold the wrong voice long after the right one
+came back.
+
+The default is **local**: Supertone's [Supertonic
+3](https://huggingface.co/Supertone/supertonic-3), four ONNX models run here
+through the same runtime the wake word uses. Thirty-one languages including
+Indonesian, ten voices, 44.1 kHz, and no dependency on anything outside the
+machine. `packages/audio/tts/supertonic` is a port of the reference Go example
+rather than a wrapper on it: batch mode is gone because the speech bus says one
+thing at a time, the denoising loop reuses one flat buffer instead of
+reallocating a three-dimensional `float64` latent every step, and the context
+is checked between steps so an interrupted utterance stops being made rather
+than finishing and being thrown away. Text goes in as Unicode — the model
+indexes code points directly through a 65 536-entry table, so there is no
+grapheme-to-phoneme dependency to ship — wrapped in a language tag that the
+encoder reads as part of the text.
+
+Behind it, **online** speaks Microsoft's Edge voice protocol directly, and
+**windows** is SAPI, which is the floor rather than a choice. The two naming
+schemes do not overlap ("F1" against "id-ID-GadisNeural"), which is what lets
+`onlineVoice` tell from the shape of a string whether a configured voice
+belongs to the service standing in.
+
+Cost is why the local voice loads lazily and is released the moment she
+switches away: four hundred megabytes of weights, about 450 MB resident with
+all ten voices loaded, a second and a half to open the sessions, and roughly a
+fifth of a second of CPU per second of speech at eight denoising steps on two
+threads. Nothing loads until something actually asks to be spoken.
+
+Speech recognition is an interface with two implementations: a local
+whisper.cpp build driven as a child process, and any OpenAI-compatible
+transcription endpoint. Running whisper.cpp out of process costs a few tens of
+milliseconds per command and buys a build that needs no CUDA SDK on the
+streaming machine — you drop in whichever prebuilt binary suits your GPU.
 
 Neither the build nor the model ships inside the installer, and neither is a
 manual step either: `packages/audio/assets` fetches what is missing on the
@@ -88,9 +125,15 @@ is the opposite of what this application is for.
 
 The staging is the design. The processor build (8 MB) comes first so there is
 something runnable, then the model (488 MB) so it can hear, then the wake word
-files, and only then — and only where there is a driver to run it — the CUDA
-build (670 MB), into `data/models/whisper` where `chooseBuild` picks it up with
-no restart. Every stage is announced through the speech bus rather than shown,
+files, then the local voice (401 MB) so she can speak without the network, and
+only then — and only where there is a driver to run it — the CUDA build
+(670 MB), into `data/models/whisper` where `chooseBuild` picks it up with no
+restart. The voice is skipped entirely by anyone who has chosen the online
+engine, and goes in front of the CUDA build because a voice that does not exist
+yet should not wait on an upgrade to recognition that already works. Within the
+stage, the small tables come down before the large models: interrupted the
+other way round, what is left on disk is 250 MB of estimator and no character
+table to use it with. Every stage is announced through the speech bus rather than shown,
 because the person waiting is listening rather than watching a bar; downloads resume rather
 than restart, and a file is renamed into place only once it is whole, so an
 interrupted download is never mistaken on the next start for a model that can

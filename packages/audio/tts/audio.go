@@ -170,6 +170,65 @@ func decodeWAV(data []byte) (Audio, error) {
 	}
 }
 
+// EncodeWAV turns PCM back into bytes, for the disk cache.
+//
+// The online voice hands over MP3 and is stored as it arrived; the local voice
+// produces samples and has nothing to store unless they are wrapped in
+// something Decode can read back. WAV rather than MP3 because encoding MP3
+// would mean carrying an encoder to make cached speech slightly smaller and
+// slightly worse, and this cache is a few megabytes of short phrases.
+//
+// 16-bit, which is what Decode reads and what the samples came from anyway.
+func EncodeWAV(audio Audio) []byte {
+	channels := audio.Channels
+	if channels <= 0 {
+		channels = 1
+	}
+	rate := audio.SampleRate
+	if rate <= 0 {
+		rate = 44100
+	}
+
+	const headerSize = 44
+	body := len(audio.Samples) * 2
+	out := make([]byte, headerSize, headerSize+body)
+
+	copy(out[0:], "RIFF")
+	binary.LittleEndian.PutUint32(out[4:], uint32(36+body))
+	copy(out[8:], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(out[16:], 16)
+	binary.LittleEndian.PutUint16(out[20:], 1) // uncompressed PCM
+	binary.LittleEndian.PutUint16(out[22:], uint16(channels))
+	binary.LittleEndian.PutUint32(out[24:], uint32(rate))
+	binary.LittleEndian.PutUint32(out[28:], uint32(rate*channels*2))
+	binary.LittleEndian.PutUint16(out[32:], uint16(channels*2))
+	binary.LittleEndian.PutUint16(out[34:], 16)
+	copy(out[36:], "data")
+	binary.LittleEndian.PutUint32(out[40:], uint32(body))
+
+	frame := make([]byte, 2)
+	for _, sample := range audio.Samples {
+		// Scaled by 32768 and clamped, rather than by 32767, so that this is
+		// the exact inverse of int16ToFloat32 above. The other convention is
+		// off by one part in 32768 -- inaudible, but it means a phrase that
+		// went through the cache is not quite the phrase that did not, which
+		// is a difference with no reason to exist.
+		//
+		// Clamping is what makes 32768 safe: full scale would overflow int16,
+		// and a sample slightly over full scale is a rounding artefact that
+		// wrapping would turn into a click.
+		value := int(sample * 32768)
+		if value > math.MaxInt16 {
+			value = math.MaxInt16
+		} else if value < math.MinInt16 {
+			value = math.MinInt16
+		}
+		binary.LittleEndian.PutUint16(frame, uint16(int16(value)))
+		out = append(out, frame...)
+	}
+	return out
+}
+
 func int16ToFloat32(raw []byte) []float32 {
 	count := len(raw) / 2
 	samples := make([]float32, count)

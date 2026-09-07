@@ -451,7 +451,31 @@ var (
 	voiceCache []tts.Voice
 )
 
+// getVoices fills the voice dropdown for whichever engine is in question.
+//
+// The engine comes from the query rather than from the saved configuration,
+// because the page asks again the moment she changes the dropdown and before
+// she saves anything -- a list that still describes the previous engine is a
+// list of names the new one has never heard of.
 func (s *Server) getVoices(writer http.ResponseWriter, request *http.Request) {
+	engine := request.URL.Query().Get("engine")
+	if engine == "" {
+		engine = s.engine.Config().Speech.Engine
+	}
+	if engine == "" || engine == tts.EngineLocal {
+		// Read from disk every time rather than cached: a voice arrives when a
+		// download finishes or when somebody drops a file in, and a list that
+		// needed a restart to notice would be wrong exactly when it mattered.
+		respond(writer, http.StatusOK, tts.LocalVoices())
+		return
+	}
+	if engine == tts.EngineWindows {
+		// The Windows synthesizer takes whatever voice Windows is set to. There
+		// is nothing to choose here, and an empty list is the honest answer.
+		respond(writer, http.StatusOK, []tts.Voice{})
+		return
+	}
+
 	voiceOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(request.Context(), 20*time.Second)
 		defer cancel()
@@ -496,6 +520,7 @@ func (s *Server) speak(writer http.ResponseWriter, request *http.Request) {
 		Priority string `json:"priority"`
 		Rate     string `json:"rate"`
 		Volume   *int   `json:"volume"`
+		Engine   string `json:"engine"`
 	}
 	if !decode(writer, request, &body) {
 		return
@@ -506,7 +531,10 @@ func (s *Server) speak(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	settings := s.engine.Config()
-	utterance := feedback.Utterance{Text: body.Text, Priority: feedback.Result, Voice: body.Voice}
+	utterance := feedback.Utterance{
+		Text: body.Text, Priority: feedback.Result,
+		Voice: body.Voice, Engine: body.Engine,
+	}
 
 	if strings.EqualFold(strings.TrimSpace(body.Priority), "donation") {
 		utterance.Priority = feedback.Donation

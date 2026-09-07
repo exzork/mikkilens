@@ -28,6 +28,7 @@ failed = "Could not download {what}: {reason}. It will try again next time Mikki
 stage_engine = "the speech recognition engine"
 stage_model = "the speech model"
 stage_wake = "the wake word files"
+stage_voice = "her own voice, so she can speak without the internet"
 stage_gpu = "the graphics card build, which answers far faster"
 stage_player = "the music downloader"
 stage_ffmpeg = "the audio decoder"

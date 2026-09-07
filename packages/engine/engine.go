@@ -419,6 +419,14 @@ func (e *Engine) installAssets(ctx context.Context) {
 	speech := settings.STT.AutoInstall && wantsLocalRecognition(settings.STT)
 	wanted := assets.Missing(speech, settings.Wake.Enabled, settings.STT.ModelSize)
 
+	// The local voice, when it is the one she has chosen. Fetched now rather
+	// than at the first sentence, for the same reason as everything else here:
+	// the first sentence is the one that explains the download.
+	//
+	// Before the music, because this is how MikkiLens talks and that is a
+	// feature. Both go in front of the graphics build; see WithVoice.
+	wanted = assets.WithVoice(wanted, assets.MissingVoice(settings.Speech.Engine))
+
 	// The two music programs come down with everything else rather than at the
 	// first song. Fetched lazily, the first "putar nomor dua" of a machine's
 	// life spent a minute and a half downloading before any music came out --
@@ -497,7 +505,7 @@ func (e *Engine) announceStage(progress assets.Progress, wanted assets.Wanted) {
 
 // stageName is what one download stage is called out loud.
 //
-// A switch rather than "assets.stage_" + stage, so all four keys are literals
+// A switch rather than "assets.stage_" + stage, so every key is a literal
 // inside a T() call. That is what the locale test scans for, and a key it
 // cannot see is a key that goes missing in one language and is discovered
 // aloud, mid-download, by the one person the fallback was never meant for.
@@ -512,6 +520,17 @@ func (e *Engine) stageName(stage assets.Stage) string {
 		return locale.T("assets.stage_wake")
 	case assets.StageGPU:
 		return locale.T("assets.stage_gpu")
+	case assets.StageVoice:
+		return locale.T("assets.stage_voice")
+
+	// These two have had their names in the locale files since music landed
+	// and were never reached, so both downloads announced themselves with the
+	// English name of the program -- "player", "ffmpeg" -- to somebody who is
+	// working by ear and had no reason to know either word.
+	case assets.StagePlayer:
+		return locale.T("assets.stage_player")
+	case assets.StageFFmpeg:
+		return locale.T("assets.stage_ffmpeg")
 	}
 	return string(stage)
 }
@@ -1774,7 +1793,15 @@ func (e *Engine) ApplyConfig(updated config.Config) error {
 		e.AdoptCommands(e.loadCommands())
 	}
 
-	if updated.Speech.Voice != previous.Speech.Voice ||
+	if updated.Speech.Engine != previous.Speech.Engine {
+		// The local voice holds four hundred megabytes open while it is loaded.
+		// Switching away from it should give that back to the game and to
+		// whatever is encoding video, not wait for a restart.
+		tts.ReleaseLocal()
+	}
+
+	if updated.Speech.Engine != previous.Speech.Engine ||
+		updated.Speech.Voice != previous.Speech.Voice ||
 		updated.Speech.Rate != previous.Speech.Rate {
 		// Cached audio was rendered with the previous voice.
 		//

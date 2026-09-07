@@ -191,6 +191,15 @@
             <legend data-i18n="audio.voiceLegend">Speaking voice</legend>
             <p class="hint" data-i18n="audio.voiceHint"></p>
             <p>
+              <label for="voice-engine" data-i18n="audio.engine">Voice engine</label>
+              <select id="voice-engine">
+                <option value="local" data-i18n="audio.engineLocal">On this computer</option>
+                <option value="online" data-i18n="audio.engineOnline">Online</option>
+                <option value="windows" data-i18n="audio.engineWindows">Windows</option>
+              </select>
+            </p>
+            <p class="hint" id="voice-engine-hint"></p>
+            <p>
               <label for="voice" data-i18n="audio.voice">Voice</label>
               <select id="voice"></select>
             </p>

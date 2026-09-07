@@ -39,7 +39,26 @@ type Language struct {
 
 // Speech covers everything about the voice that reads to her.
 type Speech struct {
-	Voice string `toml:"voice" json:"voice"` // empty -> the locale default
+	// Engine is which voice reads: "local", "online" or "windows".
+	//
+	// "local" is Supertonic 3, running here. It is the default because it is
+	// the only one that cannot be taken away mid-stream: no network, no clock,
+	// nobody else's service. It costs four hundred megabytes to download and
+	// about as much again in memory while it is loaded.
+	//
+	// "online" is the Edge voices, which are free and natural and somebody
+	// else's to withdraw. "windows" is the synthesizer built into Windows,
+	// which is the floor rather than a choice.
+	//
+	// Whichever is set, the others stand behind it, so none of these is a way
+	// to end up with silence. Empty means "local".
+	Engine string `toml:"engine" json:"engine"`
+
+	// Voice is a name in whatever scheme Engine uses: "F1" for the local voice,
+	// "id-ID-GadisNeural" for the online one. Empty means the locale default,
+	// and a name the chosen engine does not know falls back to that engine's
+	// own default rather than failing.
+	Voice string `toml:"voice" json:"voice"`
 	Rate  string `toml:"rate" json:"rate"`
 
 	// Volume is how loud MikkiLens herself is, from 0 to 100, where 100 is the
@@ -497,7 +516,11 @@ func Default() Config {
 	return Config{
 		Language: Language{Output: "id", STT: "id", ChatTTS: "follow"},
 		Speech: Speech{
-			Rate: "+0%", Volume: 100, ChatRate: "+15%", ChatVolume: 100,
+			// "local" rather than tts.EngineLocal: this package sits under the
+			// audio packages, not above them, and one string constant is not
+			// worth turning that around for.
+			Engine: "local",
+			Rate:   "+0%", Volume: 100, ChatRate: "+15%", ChatVolume: 100,
 			DonationRate: "+0%", DonationVolume: 100,
 			EarconVolume: 25, ConfirmTimeoutS: 8.0,
 			LeadInMs: 300,

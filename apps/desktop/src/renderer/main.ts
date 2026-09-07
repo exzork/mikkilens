@@ -703,6 +703,7 @@ element('save-audio').addEventListener('click', () => {
     {
       speech: {
         output_device: output ? output.value : '',
+        engine: element<HTMLSelectElement>('voice-engine').value,
         voice: element<HTMLSelectElement>('voice').value,
         rate: percentFrom('rate'),
         volume: volumeFrom('volume', settings?.speech.volume ?? 100),
@@ -720,6 +721,57 @@ element('save-audio').addEventListener('click', () => {
   )
 })
 
+/**
+ * Fills the voice dropdown for whichever engine is selected.
+ *
+ * The two engines do not share a naming scheme -- "F1" against
+ * "id-ID-GadisNeural" -- so the list is refetched whenever the engine changes
+ * rather than only at startup. `keep` is the voice to reselect if it is still
+ * in the new list, which it will not be across a change of engine; falling back
+ * to the first entry is what makes switching engines leave a usable voice
+ * selected rather than an empty box.
+ */
+async function fillVoices(keep: string): Promise<void> {
+  const engine = element<HTMLSelectElement>('voice-engine').value
+  const language = settings?.language.output ?? ''
+  const voices = await api<VoiceInfo[]>(
+    `/voices?engine=${encodeURIComponent(engine)}&language=${encodeURIComponent(language)}`,
+  ).catch(() => [])
+
+  const select = element<HTMLSelectElement>('voice')
+  select.replaceChildren()
+
+  const available = voices ?? []
+  // The Windows engine has nothing to choose, and an empty dropdown says so
+  // more honestly than a list of names it will ignore.
+  select.disabled = engine === 'windows'
+
+  const options = available.length > 0 ? available : keep ? [{ name: keep, gender: '', locale: '' }] : []
+  for (const voice of options) {
+    const option = document.createElement('option')
+    option.value = voice.name
+    option.textContent = voice.gender ? `${voice.name} (${voice.gender})` : voice.name
+    select.append(option)
+  }
+  if (keep && options.some((voice) => voice.name === keep)) {
+    select.value = keep
+  }
+
+  const hint = element('voice-engine-hint')
+  hint.textContent =
+    engine === 'local'
+      ? available.length > 0
+        ? t('audio.engineLocalReady')
+        : t('audio.engineLocalMissing')
+      : engine === 'windows'
+        ? t('audio.engineWindowsHint')
+        : t('audio.engineOnlineHint')
+}
+
+element('voice-engine').addEventListener('change', () => {
+  void fillVoices(element<HTMLSelectElement>('voice').value)
+})
+
 element('preview-voice').addEventListener('click', async () => {
   try {
     // The sliders as they stand rather than as they were saved: a sample that
@@ -729,6 +781,7 @@ element('preview-voice').addEventListener('click', async () => {
       method: 'POST',
       body: JSON.stringify({
         text: t('audio.sampleText'),
+        engine: element<HTMLSelectElement>('voice-engine').value,
         voice: element<HTMLSelectElement>('voice').value,
         rate: percentFrom('rate'),
         volume: volumeFrom('volume', settings?.speech.volume ?? 100),
@@ -1968,24 +2021,8 @@ async function boot(): Promise<void> {
   renderDevices(element('output-devices'), devices.output ?? [], 'output', settings.speech.output_device)
   renderDevices(element('input-devices'), devices.input ?? [], 'input', settings.audio.input_device)
 
-  const voices = await api<VoiceInfo[]>(
-    `/voices?language=${encodeURIComponent(settings.language.output)}`,
-  )
-  const voiceSelect = element<HTMLSelectElement>('voice')
-  voiceSelect.replaceChildren()
-
-  const available = voices ?? []
-  const options =
-    available.length > 0 ? available : [{ name: settings.speech.voice, gender: '', locale: '' }]
-  for (const voice of options) {
-    const option = document.createElement('option')
-    option.value = voice.name
-    option.textContent = voice.gender ? `${voice.name} (${voice.gender})` : voice.name
-    voiceSelect.append(option)
-  }
-  if (settings.speech.voice) {
-    voiceSelect.value = settings.speech.voice
-  }
+  element<HTMLSelectElement>('voice-engine').value = settings.speech.engine || 'local'
+  await fillVoices(settings.speech.voice)
 
   showPercent('rate', settings.speech.rate)
   showVolume('volume', settings.speech.volume)

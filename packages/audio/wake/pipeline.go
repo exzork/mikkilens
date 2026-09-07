@@ -2,15 +2,11 @@ package wake
 
 import (
 	"fmt"
-	"log/slog"
-	"os"
 	"path/filepath"
-	"strings"
-	"sync"
 
 	ort "github.com/yalue/onnxruntime_go"
 
-	"github.com/exzork/mikkilens/packages/audio/assets"
+	"github.com/exzork/mikkilens/packages/audio/onnx"
 	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
@@ -33,76 +29,6 @@ const (
 	melFramesPerChunk = ChunkSamples / melHop // 8
 )
 
-var (
-	runtimeOnce sync.Once
-	runtimeErr  error
-)
-
-// initRuntime loads the ONNX runtime shared library.
-//
-// It is a separate download rather than something linked in, because the build
-// that suits her machine (CPU, CUDA, DirectML) is her choice, and shipping one
-// would be shipping the wrong one.
-func initRuntime() error {
-	runtimeOnce.Do(func() {
-		if ort.IsInitialized() {
-			return
-		}
-		library, err := findRuntimeLibrary()
-		if err != nil {
-			runtimeErr = err
-			return
-		}
-		ort.SetSharedLibraryPath(library)
-		if err := ort.InitializeEnvironment(); err != nil {
-			runtimeErr = &Error{Reason: startupReason(library, err)}
-		}
-	})
-	return runtimeErr
-}
-
-// startupReason turns the runtime's own refusal into something worth hearing.
-//
-// The common failure is not a corrupt file but the wrong version: the engine is
-// compiled against one ORT C API, and an older library answers a different one
-// and refuses with "Error setting ORT API base". Said as-is that names neither
-// the file at fault nor anything to do about it, which when the message only
-// ever arrives by ear is the difference between a fixable problem and a wake
-// word that has simply stopped working.
-//
-// The file is named rather than deleted here. Removing something of hers on her
-// behalf, at startup, because a library disagreed about a version number, is
-// not a decision this code should be making on its own.
-func startupReason(library string, err error) string {
-	reason := "the ONNX runtime could not start: " + err.Error()
-	if !strings.Contains(err.Error(), "ORT API base") {
-		return reason
-	}
-	return fmt.Sprintf("%s in %s is not the version MikkiLens needs (%s). "+
-		"Delete it and start again to fetch the right one; the hotkey works meanwhile.",
-		filepath.Base(library), filepath.Dir(library), assets.RuntimeVersion)
-}
-
-func findRuntimeLibrary() (string, error) {
-	names := []string{"onnxruntime.dll", "libonnxruntime.so", "libonnxruntime.dylib"}
-	directories := []string{
-		paths.ModelsDir(),
-		filepath.Join(paths.ModelsDir(), "onnxruntime"),
-		filepath.Join(paths.Root(), "vendor", "onnxruntime"),
-		paths.Root(),
-	}
-	for _, directory := range directories {
-		for _, name := range names {
-			candidate := filepath.Join(directory, name)
-			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-				return candidate, nil
-			}
-		}
-	}
-	return "", &Error{Reason: "onnxruntime.dll was not found; put it in data/models to " +
-		"use a wake word. The hotkey works without it."}
-}
-
 // model wraps one ONNX session with the input and output names the file
 // itself declares.
 type model struct {
@@ -123,9 +49,11 @@ func loadModel(path string) (*model, error) {
 		return nil, &Error{Reason: filepath.Base(path) + " has no usable inputs or outputs"}
 	}
 
-	options, err := modestOptions()
+	// One thread: these models are tiny, and the machine is also encoding
+	// video. See onnx.Options for why that matters.
+	options, err := onnx.Options(1)
 	if err != nil {
-		return nil, err
+		return nil, &Error{Reason: err.Error()}
 	}
 	defer options.Destroy()
 
@@ -135,54 +63,6 @@ func loadModel(path string) (*model, error) {
 		return nil, &Error{Reason: fmt.Sprintf("could not load %s: %v", filepath.Base(path), err)}
 	}
 	return &model{session: session, input: inputs[0].Name, output: outputs[0].Name}, nil
-}
-
-// modestOptions keep the runtime from taking the whole machine.
-//
-// By default ONNX Runtime sizes a thread pool to the core count for every
-// session, and those threads spin rather than sleep while waiting for work.
-// Three sessions of that pegged every core on this machine and made typing lag
-// in other applications -- on a box that is also encoding video, which is the
-// one thing MikkiLens must never disturb.
-//
-// These models are tiny: one thread scores a chunk in about six milliseconds,
-// against the eighty milliseconds of audio it represents. There is nothing for
-// a pool to do but burn power.
-func modestOptions() (*ort.SessionOptions, error) {
-	options, err := ort.NewSessionOptions()
-	if err != nil {
-		return nil, &Error{Reason: "could not configure the ONNX runtime: " + err.Error()}
-	}
-
-	failed := func(err error) (*ort.SessionOptions, error) {
-		options.Destroy()
-		return nil, &Error{Reason: "could not configure the ONNX runtime: " + err.Error()}
-	}
-
-	if err := options.SetIntraOpNumThreads(1); err != nil {
-		return failed(err)
-	}
-	if err := options.SetInterOpNumThreads(1); err != nil {
-		return failed(err)
-	}
-	if err := options.SetExecutionMode(ort.ExecutionModeSequential); err != nil {
-		return failed(err)
-	}
-
-	// Spinning is what actually burns the cores. It is a performance knob for
-	// servers running back-to-back batches, and the opposite of what a
-	// background listener wants.
-	for key, value := range map[string]string{
-		"session.intra_op.allow_spinning": "0",
-		"session.inter_op.allow_spinning": "0",
-	} {
-		if err := options.AddSessionConfigEntry(key, value); err != nil {
-			// An older runtime may not know the key. Not worth failing over:
-			// the thread limits above already do most of the work.
-			slog.Debug("the ONNX runtime did not accept a setting", "key", key, "error", err)
-		}
-	}
-	return options, nil
 }
 
 // run feeds one float32 tensor through and returns the flattened output.
@@ -230,8 +110,8 @@ type pipeline struct {
 }
 
 func newPipeline(wakeword string) (*pipeline, error) {
-	if err := initRuntime(); err != nil {
-		return nil, err
+	if err := onnx.Start(); err != nil {
+		return nil, &Error{Reason: err.Error() + "; the hotkey works without it"}
 	}
 	root := paths.ModelsDir()
 

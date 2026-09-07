@@ -30,6 +30,7 @@ failed = "Gagal mengunduh {what}: {reason}. MikkiLens akan mencoba lagi saat dij
 stage_engine = "mesin pengenalan suara"
 stage_model = "model suaranya"
 stage_wake = "berkas kata pemicu"
+stage_voice = "suaranya sendiri, supaya dia bisa bicara tanpa internet"
 stage_gpu = "versi kartu grafis, supaya dia menjawab jauh lebih cepat"
 stage_player = "pengunduh musiknya"
 stage_ffmpeg = "pengurai audionya"

@@ -46,6 +46,12 @@ type Utterance struct {
 	Voice    string // empty means chosen from the priority and config
 	Rate     string
 
+	// Engine overrides the configured voice engine for this one utterance.
+	// The settings page sends it so the sample button reads in the engine
+	// just picked from the dropdown rather than the one last saved -- hearing
+	// the old voice is indistinguishable from the dropdown doing nothing.
+	Engine string
+
 	// Volume is 0 to 100, and nil means the configured speech volume. A
 	// pointer because zero is a volume she can choose -- chat turned all the
 	// way down is a real setting, and it must not read as "unset".
@@ -772,8 +778,23 @@ func (b *Bus) speak(utterance Utterance, wanted int) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	engine := utterance.Engine
+	if engine == "" {
+		engine = settings.Speech.Engine
+	}
+
 	audio, err := b.synthesize(ctx, utterance.Text, tts.Options{
-		Voice: voice, Rate: rate,
+		Engine: engine,
+		Voice:  voice,
+		Rate:   rate,
+
+		// The language the local voice reads in, and the online voice to fall
+		// back to if it cannot run. The locale's own voice rather than the
+		// configured one: that setting may well name a local voice, which the
+		// online service has never heard of.
+		Language:    settings.Language.Output,
+		OnlineVoice: locale.DefaultVoice(),
+
 		NoCache: utterance.Priority == Chat || utterance.Priority == Donation,
 	})
 	if err != nil {

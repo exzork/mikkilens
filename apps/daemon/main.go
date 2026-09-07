@@ -458,8 +458,11 @@ func commandWarmup(languageOverride string) int {
 
 	fmt.Println("Warming the voice...")
 	warmed := tts.Prewarm(context.Background(), commonPhrases(locale), tts.Options{
-		Voice: settings.Voice(locale.DefaultVoice()),
-		Rate:  settings.Speech.Rate,
+		Engine:      settings.Speech.Engine,
+		Voice:       settings.Voice(locale.DefaultVoice()),
+		Rate:        settings.Speech.Rate,
+		Language:    settings.Language.Output,
+		OnlineVoice: locale.DefaultVoice(),
 	})
 	fmt.Printf("  cached %d phrases\n", warmed)
 

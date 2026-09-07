@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/exzork/mikkilens/packages/audio/onnx"
 	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
@@ -414,6 +415,8 @@ func WakeWordName(file string) string {
 // explained as "the runtime is missing" rather than shown as a dropdown with
 // nothing in it.
 func RuntimeReady() error {
-	_, err := findRuntimeLibrary()
-	return err
+	if err := onnx.Found(); err != nil {
+		return &Error{Reason: err.Error() + " to use a wake word. The hotkey works without it."}
+	}
+	return nil
 }

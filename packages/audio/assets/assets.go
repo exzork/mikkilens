@@ -20,11 +20,15 @@
 //  1. the processor build      8 MB   -- something that can run at all
 //  2. the speech model       488 MB   -- and now it can hear
 //  3. the wake word           78 MB   -- and now it answers hands-free
-//  4. the graphics build     670 MB   -- and now it answers in a fifth of a second
+//  4. the local voice        401 MB   -- and now it speaks without the network
+//  5. the graphics build     670 MB   -- and now it answers in a fifth of a second
 //
-// Step 4 only happens on a machine with a graphics driver to run it, and it is
-// last because it is an upgrade to something already working rather than a
-// prerequisite for anything. chooseBuild in the stt package prefers it the
+// Step 4 is skipped by somebody who has chosen the online voices, and comes
+// before the graphics build because a voice that does not exist yet should not
+// wait on an upgrade to recognition that already works. Step 5 only happens on
+// a machine with a graphics driver to run it, and it is last because it is an
+// upgrade to something already working rather than a prerequisite for
+// anything. chooseBuild in the stt package prefers it the
 // moment it lands, with no restart and nothing to configure.
 package assets
 
@@ -33,6 +37,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/exzork/mikkilens/packages/audio/onnx"
 	"github.com/exzork/mikkilens/packages/audio/stt"
 	"github.com/exzork/mikkilens/packages/core/paths"
 )
@@ -45,12 +50,9 @@ import (
 const (
 	whisperRelease = "v1.9.2"
 
-	// onnxRuntime must match the ORT C API version that onnxruntime_go was
-	// built against -- ORT_API_VERSION 29 in v1.35.0, which is runtime 1.29.
-	// An older runtime loads and then refuses at startup with "Error setting
-	// ORT API base", which reads as a broken wake word rather than as a
-	// version that needs bumping alongside the Go dependency.
-	onnxRuntime = RuntimeVersion
+	// onnxRuntime is the version the loader links against. It lives in the
+	// onnx package, next to the code that would have to explain a mismatch.
+	onnxRuntime = onnx.RuntimeVersion
 
 	wakeWordRelease  = "v0.5.1"
 	whisperModelHost = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
@@ -70,10 +72,6 @@ const (
 	StageGPU Stage = "gpu"
 )
 
-// RuntimeVersion is the ONNX Runtime the wake word needs, named here so the
-// wake package can say it when the library on disk answers a different one.
-const RuntimeVersion = "1.29.0"
-
 // Bytes is roughly how large each stage is, for what is said before it starts.
 // Approximate on purpose: the exact number moves with every release, and it is
 // used to say "about half a gigabyte", not to verify anything.
@@ -86,6 +84,9 @@ var Bytes = map[Stage]int64{
 	// source hears.
 	StageWake: 78_300_000,
 	StageGPU:  670_600_000,
+	// The four networks, the character table and the ten voice styles. The
+	// estimator alone is two hundred and fifty of these megabytes.
+	StageVoice: 401_000_000,
 	// The two music programs. yt-dlp is one small executable; the ffmpeg
 	// archive is the large one, and most machines that stream already have
 	// ffmpeg somewhere on the PATH and never reach this stage at all.

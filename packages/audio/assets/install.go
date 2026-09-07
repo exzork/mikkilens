@@ -172,6 +172,9 @@ func (i *Installer) fetch(ctx context.Context, stage Stage, modelSize string, on
 
 	case StageFFmpeg:
 		return i.fetchFFmpeg(ctx, track)
+
+	case StageVoice:
+		return i.fetchVoice(ctx, track)
 	}
 	return &Error{Reason: "unknown download stage " + string(stage)}
 }

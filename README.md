@@ -308,6 +308,7 @@ kalau belum ada, **diunduh sendiri saat pertama dijalankan**, berurutan:
 | Build prosesor | 8 MB | ada yang bisa dijalankan |
 | Model suara | 488 MB | **sudah bisa mendengar** |
 | Berkas kata pemicu | 78 MB | bebas tangan — **hanya dari kode sumber**, lihat di bawah |
+| Suara bicaranya | 401 MB | **bisa bicara tanpa internet** — lihat [Suara bicaranya](#suara-bicaranya) |
 | Build kartu grafis | 670 MB | menjawab lima kali lebih cepat — kalau ada drivernya |
 
 Setiap tahap **diucapkan** saat mulai, dan urutannya disengaja: tiap tahap
@@ -340,6 +341,43 @@ perintah pendek.
 
 Kalau kamu lebih suka mengirim suara ke server, isi `[stt] base_url` di
 `config.toml` dengan endpoint apa pun yang kompatibel dengan OpenAI.
+
+### Suara bicaranya
+
+Ada tiga pilihan, di aplikasi Pengaturan tab **Audio**. Mana pun yang dipilih,
+sisanya berdiri di belakangnya — jadi tidak ada pilihan di sini yang bisa
+berakhir jadi sunyi.
+
+| Pilihan | Butuh internet? | Catatan |
+|---|---|---|
+| **Di komputer ini** | tidak | Bawaannya. 31 bahasa, 10 suara. Unduhan 401 MB. |
+| **Daring** | ya | Suara Microsoft Edge. Gratis, dan terdengar sangat wajar. |
+| **Windows** | tidak | Suara bawaan Windows. Tidak perlu diunduh, dan terdengar begitu. |
+
+**Di komputer ini** memakai [Supertonic
+3](https://huggingface.co/Supertone/supertonic-3) dari Supertone, dijalankan di
+komputermu sendiri. Alasannya satu: suara daring butuh internet, butuh jam di
+komputermu kira-kira benar, dan itu layanan milik orang lain yang bisa ditarik
+kapan saja — dan kalau salah satunya bermasalah di tengah siaran, yang kamu
+dapat adalah suara Windows yang datar, atau tidak ada suara sama sekali. Yang
+ada di `data\models` tidak bisa dimatikan dari luar.
+
+Suaranya sepuluh: **F1** sampai **F5** (perempuan) dan **M1** sampai **M5**
+(laki-laki). Semuanya bisa membaca ketiga puluh satu bahasanya, termasuk bahasa
+Indonesia, jadi satu suara yang sama tetap dipakai kalau kamu ganti bahasa.
+
+Kalau kamu punya suara buatan sendiri dari Voice Builder, taruh berkas `.json`
+nya di `data\models\supertonic\voice_styles`. Berkas itulah suaranya — dia
+langsung muncul di daftar, tanpa perlu apa-apa lagi.
+
+Yang perlu diketahui: modelnya sekitar 400 MB di disk dan kira-kira segitu juga
+di memori selama dipakai. Model itu **baru dimuat waktu ada yang perlu
+diucapkan**, bukan saat MikkiLens dijalankan, dan begitu kamu pindah ke pilihan
+lain memorinya langsung dikembalikan. Di komputer yang sekaligus dipakai
+merekam siaran, itu bedanya nyata.
+
+Kalau modelnya belum selesai diunduh, dia membaca pakai suara daring dulu.
+Tidak ada yang jadi sunyi karena unduhan yang belum selesai.
 
 ### Volume
 
