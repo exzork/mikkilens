@@ -235,3 +235,50 @@ func writeWAV(path string, samples []float32, sampleRate int) error {
 
 	return os.WriteFile(path, append(header.Bytes(), body...), 0o644)
 }
+
+// TestChangingVoiceNeedsNoReloadLive is the behaviour the settings page
+// depends on: saving a different voice takes effect on the next thing she
+// says, without the four models being torn down and loaded again.
+//
+// Same engine throughout, and the audio has to actually differ -- two voices
+// that load fine and sound identical would pass a weaker test and fail her.
+func TestChangingVoiceNeedsNoReloadLive(t *testing.T) {
+	liveOrSkip(t)
+
+	engine, err := Open()
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer engine.Close()
+
+	const line = "Selamat datang di siaran ini."
+	say := func(voice string) []float32 {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		started := time.Now()
+		samples, err := engine.Speak(ctx, line, Options{Voice: voice, Language: "id", Steps: 5})
+		if err != nil {
+			t.Fatalf("%s: %v", voice, err)
+		}
+		t.Logf("%s: %.2fs, made in %s", voice,
+			float64(len(samples))/float64(engine.SampleRate()),
+			time.Since(started).Round(time.Millisecond))
+		return samples
+	}
+
+	female := say("F1")
+	male := say("M2")
+
+	// A reload would show up here as seconds, not milliseconds. The second
+	// voice is a 300 KB file against four hundred megabytes of model.
+	if len(female) == len(male) {
+		t.Errorf("both voices produced %d samples, which is suspicious", len(female))
+	}
+
+	// And back again, because the first voice must not have been evicted by
+	// the second: she switches back and forth while deciding.
+	if again := say("F1"); len(again) != len(female) {
+		t.Errorf("F1 came back as %d samples, was %d", len(again), len(female))
+	}
+}
