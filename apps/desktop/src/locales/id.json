@@ -70,6 +70,7 @@
   "install.stage.engine": "mesin pengenalan suara",
   "install.stage.model": "model suara",
   "install.stage.wake": "berkas kata pemicu",
+  "install.stage.voice": "suaranya sendiri",
   "install.stage.gpu": "versi kartu grafis",
   "label.sttBackend": "Pengenalan suara",
   "label.wakeModel": "Kata pemicu",

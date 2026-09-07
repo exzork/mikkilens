@@ -70,6 +70,7 @@
   "install.stage.engine": "speech recognition engine",
   "install.stage.model": "speech model",
   "install.stage.wake": "wake word files",
+  "install.stage.voice": "her own voice",
   "install.stage.gpu": "graphics card build",
   "label.sttBackend": "Speech recognition",
   "label.wakeModel": "Wake word",
