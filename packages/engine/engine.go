@@ -543,6 +543,12 @@ func lastOf(wanted assets.Wanted) assets.Stage {
 	return wanted.Stages[len(wanted.Stages)-1]
 }
 
+// usesLocalVoice reports whether an engine setting means the local voice.
+// Empty means local, the same as it does everywhere else.
+func usesLocalVoice(engine string) bool {
+	return engine == "" || engine == tts.EngineLocal
+}
+
 // wantsLocalRecognition reports whether the configuration would use a local
 // whisper.cpp build if there were one.
 func wantsLocalRecognition(settings config.STT) bool {
@@ -1793,10 +1799,18 @@ func (e *Engine) ApplyConfig(updated config.Config) error {
 		e.AdoptCommands(e.loadCommands())
 	}
 
-	if updated.Speech.Engine != previous.Speech.Engine {
+	if updated.Speech.Engine != previous.Speech.Engine && !usesLocalVoice(updated.Speech.Engine) {
 		// The local voice holds four hundred megabytes open while it is loaded.
 		// Switching away from it should give that back to the game and to
 		// whatever is encoding video, not wait for a restart.
+		//
+		// Away from it, and only away. This used to fire on any change of
+		// engine, which meant switching *to* the local voice unloaded it --
+		// so choosing it, or changing anything else on that page afterwards,
+		// cost a second and a half of reloading to arrive back where it
+		// already was. Changing which voice reads never unloads anything
+		// either: the models are the same four, and the voice is a small file
+		// the loaded engine picks up on the next thing she says.
 		tts.ReleaseLocal()
 	}
 

@@ -1,4 +1,4 @@
-import { applyTranslations, setCatalog, t } from './i18n.js'
+import { applyTranslations, has, setCatalog, t } from './i18n.js'
 import type {
   AppConfig,
   ChannelInfo,
@@ -704,7 +704,11 @@ element('save-audio').addEventListener('click', () => {
       speech: {
         output_device: output ? output.value : '',
         engine: element<HTMLSelectElement>('voice-engine').value,
-        voice: element<HTMLSelectElement>('voice').value,
+        // The Windows engine has no voices to offer, so the dropdown is empty
+        // and reading it would send "" -- which saves over whichever voice she
+        // had chosen for the other engines and loses it. Keeping what is
+        // already there costs nothing: the Windows voice ignores the field.
+        voice: chosenVoice(),
         rate: percentFrom('rate'),
         volume: volumeFrom('volume', settings?.speech.volume ?? 100),
         chat_rate: percentFrom('chat-rate'),
@@ -750,7 +754,7 @@ async function fillVoices(keep: string): Promise<void> {
   for (const voice of options) {
     const option = document.createElement('option')
     option.value = voice.name
-    option.textContent = voice.gender ? `${voice.name} (${voice.gender})` : voice.name
+    option.textContent = describeVoice(voice)
     select.append(option)
   }
   if (keep && options.some((voice) => voice.name === keep)) {
@@ -766,6 +770,38 @@ async function fillVoices(keep: string): Promise<void> {
       : engine === 'windows'
         ? t('audio.engineWindowsHint')
         : t('audio.engineOnlineHint')
+}
+
+/**
+ * What one voice is called in the dropdown.
+ *
+ * "F1" and "M3" are the model's filenames, not names -- they say nothing about
+ * what she is choosing between, and choosing a voice by ear means playing all
+ * ten to find out. Supertone describe each one, so the description is the
+ * label and the id stays in front of it: the id is what config.toml stores and
+ * what the guide refers to, so dropping it would make those unreadable.
+ *
+ * Only the ten that ship are described. A voice built elsewhere is called
+ * whatever its file is called, which is all anyone here knows about it.
+ */
+/**
+ * The voice to save, which is not always the one the dropdown is showing.
+ *
+ * An empty dropdown means the engine has nothing to choose, not that she chose
+ * nothing -- so the saved name stays as it was rather than being cleared on
+ * the way past.
+ */
+function chosenVoice(): string {
+  const chosen = element<HTMLSelectElement>('voice').value
+  return chosen === '' ? (settings?.speech.voice ?? '') : chosen
+}
+
+function describeVoice(voice: VoiceInfo): string {
+  const key = `voice.${voice.name}`
+  if (has(key)) {
+    return `${voice.name} — ${t(key)}`
+  }
+  return voice.gender ? `${voice.name} (${voice.gender})` : voice.name
 }
 
 element('voice-engine').addEventListener('change', () => {

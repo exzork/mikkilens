@@ -61,6 +61,35 @@ for (const stage of stages) {
   }
 }
 
+// -- the voices ----------------------------------------------------------------
+//
+// Read out of the engine for the same reason as the stages. The dropdown falls
+// back to the bare filename for a voice it has no description of, which is
+// right for one somebody built themselves and wrong for one that ships: "F3"
+// on its own says nothing about what she is choosing between.
+
+const voices = []
+const supertonic = readFileSync(
+  join(root, 'packages', 'audio', 'tts', 'supertonic', 'supertonic.go'),
+  'utf8',
+)
+const presets = supertonic.match(/PresetVoices\s*=\s*\[\]string\{([^}]*)\}/)
+assert.ok(presets, 'could not find PresetVoices in the engine')
+for (const [, name] of presets[1].matchAll(/"([^"]+)"/g)) {
+  voices.push(name)
+}
+assert.equal(voices.length, 10, `expected ten preset voices, found ${voices.length}`)
+
+for (const voice of voices) {
+  for (const language of languages) {
+    assert.ok(
+      `voice.${voice}` in locales[language],
+      `${language}.json has no description for the "${voice}" voice, so the ` +
+        `dropdown offers it as a bare filename`,
+    )
+  }
+}
+
 // -- the static ones -----------------------------------------------------------
 
 const markup = readFileSync(join(here, '..', 'src', 'renderer', 'index.html'), 'utf8')
@@ -87,5 +116,6 @@ for (const language of languages) {
 }
 
 console.log(
-  `strings: all checks passed (${languages.length} languages, ${stages.size} download stages)`,
+  `strings: all checks passed (${languages.length} languages, ` +
+    `${stages.size} download stages, ${voices.length} voices)`,
 )

@@ -29,6 +29,18 @@ export function setCatalog(languageCode: string, catalog: Catalog): void {
   document.title = t('app.title')
 }
 
+/**
+ * Whether a string exists, without asking for it.
+ *
+ * For text that is only translated when we happen to know it. The ten voices
+ * the model ships with have a description worth reading; a voice somebody
+ * built themselves is called whatever they called the file, and asking t() for
+ * a name it has never heard of would put "[voice.mikki]" in the dropdown.
+ */
+export function has(key: string): boolean {
+  return key in strings
+}
+
 /** Look one string up, filling {placeholders}. */
 export function t(key: string, values?: Record<string, string | number>): string {
   const template = strings[key]

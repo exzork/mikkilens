@@ -363,8 +363,15 @@ dapat adalah suara Windows yang datar, atau tidak ada suara sama sekali. Yang
 ada di `data\models` tidak bisa dimatikan dari luar.
 
 Suaranya sepuluh: **F1** sampai **F5** (perempuan) dan **M1** sampai **M5**
-(laki-laki). Semuanya bisa membaca ketiga puluh satu bahasanya, termasuk bahasa
-Indonesia, jadi satu suara yang sama tetap dipakai kalau kamu ganti bahasa.
+(laki-laki). Di daftarnya masing-masing ada keterangannya — "tenang dan
+mantap", "cerah dan ceria", "berwibawa dan meyakinkan" — jadi kamu tidak perlu
+memutar kesepuluhnya dulu untuk tahu bedanya. Semuanya bisa membaca ketiga
+puluh satu bahasanya, termasuk bahasa Indonesia, jadi satu suara yang sama
+tetap dipakai kalau kamu ganti bahasa.
+
+Mengganti suaranya berlaku begitu disimpan. Modelnya tidak dimuat ulang — yang
+berubah cuma satu berkas kecil, dan kalimat berikutnya sudah memakai suara yang
+baru.
 
 Kalau kamu punya suara buatan sendiri dari Voice Builder, taruh berkas `.json`
 nya di `data\models\supertonic\voice_styles`. Berkas itulah suaranya — dia
