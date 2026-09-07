@@ -161,14 +161,53 @@ type Options struct {
 	// worth using, and below that it slurs.
 	Steps int
 
-	// Speed multiplies the predicted duration. 1.05 is the model's default and
-	// sounds like ordinary speech; the useful range is about 0.9 to 1.5.
+	// Speed divides the predicted duration, so a larger number is faster.
+	// 1.05 is the model's default and sounds like ordinary speech. Anything
+	// outside MinSpeed..MaxSpeed is clamped -- see MaxSpeed for why that is a
+	// refusal rather than a preference.
 	Speed float32
 }
 
 const (
 	defaultSteps = 8
-	defaultSpeed = 1.05
+
+	// DefaultSpeed is what the model's authors found sounds like ordinary
+	// speech. Not 1.0: a rate of "no change" has to land here, not there.
+	DefaultSpeed = 1.05
+
+	// MinSpeed and MaxSpeed are what the model can actually say, rather than
+	// what it will accept without complaining.
+	//
+	// Asking for speech shorter than it can fit does not produce fast speech.
+	// The duration predictor's answer is divided by this and the latent is
+	// sized from the result, so too large a number means too few columns to
+	// hold the words -- and what comes out is the sentence with syllables and
+	// then whole words missing from it, at confident volume, sounding finished.
+	// Nothing reports this. It is only audible, which on a machine used by ear
+	// is the worst way for it to be true.
+	//
+	// Measured rather than taken from the documentation, by synthesizing a
+	// sentence and reading it back with the recognizer this application already
+	// ships. Four generations at each speed, because the latent starts from
+	// noise and one lucky sample says nothing:
+	//
+	//	1.30   4/4 word for word, on both sentences tried
+	//	1.40   3/4 -- one dropped "atas"
+	//	1.50   0/4 -- "Terima katas dukungannya", "kasih banyak-banyak"
+	//	1.55   loses the last word outright
+	//	2.00   four words of eight
+	//
+	// So 1.3 rather than the 1.5 the model's own documentation recommends:
+	// 1.5 was clean the first time it was tried and wrong every time after,
+	// which is the shape of a limit set from one sample. The low end holds
+	// to 0.7, which is where that documentation stops.
+	//
+	// Clamping rather than scaling the whole range onto this one. A rate she
+	// set means the same thing whichever voice is reading -- that is the point
+	// of it being one setting -- so the top of the slider doing less here is
+	// honest, and quietly reinterpreting "+80%" as something else would not be.
+	MinSpeed = 0.7
+	MaxSpeed = 1.3
 
 	// betweenChunks is the pause spliced between the pieces of a long read.
 	// Without it the chunks butt together and the join is audible as a word
@@ -187,9 +226,9 @@ func (o Options) steps() int {
 
 func (o Options) speed() float32 {
 	if o.Speed <= 0 {
-		return defaultSpeed
+		return DefaultSpeed
 	}
-	return min(max(o.Speed, 0.5), 2.0)
+	return min(max(o.Speed, MinSpeed), MaxSpeed)
 }
 
 func (o Options) voice() string {

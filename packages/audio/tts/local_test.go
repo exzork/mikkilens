@@ -1,9 +1,12 @@
 package tts
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"testing"
+
+	"github.com/exzork/mikkilens/packages/audio/tts/supertonic"
 )
 
 // A typo in a config file she edits by hand must not be the reason MikkiLens
@@ -193,5 +196,46 @@ func TestBothCacheExtensionsAreKnown(t *testing.T) {
 		if !slices.Contains(cacheExtensions, extension) {
 			t.Errorf("%s is written but never looked for or cleared", extension)
 		}
+	}
+}
+
+// Asking the local voice to go faster than it can does not produce fast
+// speech, it produces the sentence with words missing -- at confident volume,
+// sounding finished. So the rate is clamped, and these are the two ends of it.
+
+func TestARateTooFastForTheModelIsClamped(t *testing.T) {
+	ceiling := localSpeed(fmt.Sprintf("+%d%%", LocalSpeedCeiling()))
+	if ceiling > supertonic.MaxSpeed+0.001 {
+		t.Errorf("the ceiling rate maps to %v, past the model's %v",
+			ceiling, supertonic.MaxSpeed)
+	}
+	// And just past it, the number she is told is the last one that works.
+	beyond := localSpeed(fmt.Sprintf("+%d%%", LocalSpeedCeiling()+1))
+	if beyond <= supertonic.MaxSpeed {
+		t.Errorf("+%d%% maps to %v, which is still within the model's %v -- "+
+			"the ceiling is being reported lower than it is",
+			LocalSpeedCeiling()+1, beyond, supertonic.MaxSpeed)
+	}
+}
+
+// The settings page offers up to +100%, because the online voice does go that
+// fast. The local one has to survive being asked.
+func TestTheTopOfTheSliderIsSurvivable(t *testing.T) {
+	options := supertonic.Options{Speed: localSpeed("+100%")}
+	if got := options.Speed; got <= supertonic.MaxSpeed {
+		t.Skip("the slider no longer exceeds what the model can do")
+	}
+	// Clamping happens inside the engine; what matters here is that the number
+	// handed to it is the honest one rather than pre-trimmed, so the engine
+	// stays the single place that knows what the model can say.
+	if localSpeed("+100%") <= localSpeed("+50%") {
+		t.Error("the rate mapping is not monotonic")
+	}
+}
+
+func TestTheSlowEndIsAlsoBounded(t *testing.T) {
+	if supertonic.MinSpeed <= 0 || supertonic.MinSpeed >= supertonic.DefaultSpeed {
+		t.Errorf("MinSpeed %v is not below the natural speed %v",
+			supertonic.MinSpeed, supertonic.DefaultSpeed)
 	}
 }

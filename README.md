@@ -373,6 +373,12 @@ Mengganti suaranya berlaku begitu disimpan. Modelnya tidak dimuat ulang — yang
 berubah cuma satu berkas kecil, dan kalimat berikutnya sudah memakai suara yang
 baru.
 
+Satu batasnya: **kecepatan bicaranya mentok di sekitar +23%**. Lebih cepat dari
+itu modelnya tidak jadi lebih cepat — dia mulai memakan suku kata dan kata,
+dengan volume yang meyakinkan dan terdengar selesai, jadi kamu tidak akan sadar
+ada yang hilang. Karena itu ditahan di situ. Suara **Daring** tidak punya batas
+ini dan tetap bisa sampai +100%.
+
 Kalau kamu punya suara buatan sendiri dari Voice Builder, taruh berkas `.json`
 nya di `data\models\supertonic\voice_styles`. Berkas itulah suaranya — dia
 langsung muncul di daftar, tanpa perlu apa-apa lagi.

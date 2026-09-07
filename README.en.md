@@ -111,6 +111,16 @@ schemes do not overlap ("F1" against "id-ID-GadisNeural"), which is what lets
 `onlineVoice` tell from the shape of a string whether a configured voice
 belongs to the service standing in.
 
+The reading rate is capped at 1.3x rather than the 1.5x the model's own
+documentation recommends. Past its limit the model does not speak faster, it
+drops syllables and then whole words -- at confident volume, sounding finished,
+with nothing logged. The limit was measured by synthesizing a sentence at each
+speed and reading it back through the recognizer this application already
+ships, four generations each because the latent starts from noise: 1.3 came
+back word for word, 1.4 dropped a word once in four, and 1.5 failed every time.
+1.5 was clean the first time it was tried, which is how a limit set from one
+sample goes wrong.
+
 Cost is why the local voice loads lazily and is released the moment she
 switches away: four hundred megabytes of weights, about 450 MB resident with
 all ten voices loaded, a second and a half to open the sessions, and roughly a

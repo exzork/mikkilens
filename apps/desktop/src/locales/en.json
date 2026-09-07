@@ -104,6 +104,7 @@
   "audio.engineWindows": "Windows",
   "audio.engineLocalReady": "Her own voice, running here. Thirty-one languages, ten voices, and it keeps working when the internet does not. It is the one that needs a 400 MB download.",
   "audio.engineLocalMissing": "Her own voice is not downloaded yet — about 400 MB, fetched on the next start. Until it arrives she reads in the online voice instead, so nothing goes quiet.",
+  "audio.engineLocalRateCap": "Her own voice tops out at about +{percent}% on the speaking rate — past that it starts dropping words rather than speeding up, so it holds there instead.",
   "audio.engineOnlineHint": "Microsoft Edge voices. Free and natural, but they need the internet and the clock on this computer to be roughly right. Her own voice stands behind them.",
   "audio.engineWindowsHint": "The voice built into Windows. Nothing to download and nothing to go wrong, and it sounds like it — this is the floor, not a choice worth making twice.",
   "audio.voice": "Voice",

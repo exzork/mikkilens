@@ -567,6 +567,11 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	case http.MethodGet:
 		payload := s.engine.Config().ToMap()
 		payload["_languages"] = i18n.Available()
+		// The rate past which the local voice stops getting faster. The page
+		// says it rather than leaving the top of the slider doing nothing --
+		// and it comes from the engine rather than being written into the
+		// wording, so it cannot drift away from what the engine enforces.
+		payload["_local_speed_ceiling"] = tts.LocalSpeedCeiling()
 		respond(writer, http.StatusOK, payload)
 	case http.MethodPut:
 		s.putConfig(writer, request)
@@ -583,6 +588,7 @@ func (s *Server) putConfig(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	delete(body, "_languages")
+	delete(body, "_local_speed_ceiling")
 
 	merged := s.engine.Config().ToMap()
 	for section, values := range body {

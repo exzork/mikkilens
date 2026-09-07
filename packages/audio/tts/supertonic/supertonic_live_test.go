@@ -282,3 +282,59 @@ func TestChangingVoiceNeedsNoReloadLive(t *testing.T) {
 		t.Errorf("F1 came back as %d samples, was %d", len(again), len(female))
 	}
 }
+
+// TestTooFastIsHeldAtTheCeilingLive is the one that would have caught this.
+//
+// Asked to go faster than MaxSpeed, the model does not speak faster -- it
+// drops syllables and then whole words, at confident volume, sounding
+// finished. Nothing reports that; it is only audible. So the engine holds the
+// speed instead, and above the ceiling every request has to produce the same
+// audio as the ceiling itself.
+func TestTooFastIsHeldAtTheCeilingLive(t *testing.T) {
+	liveOrSkip(t)
+
+	engine, err := Open()
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer engine.Close()
+
+	const line = "Terima kasih banyak atas dukungannya hari ini semuanya."
+	length := func(speed float32) int {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		samples, err := engine.Speak(ctx, line,
+			Options{Voice: "F1", Language: "id", Speed: speed, Steps: 8})
+		if err != nil {
+			t.Fatalf("speed %.2f: %v", speed, err)
+		}
+		return len(samples)
+	}
+
+	// The latent is sized from the clamped speed, so length is exact rather
+	// than approximate -- the noise it starts from changes how it sounds, not
+	// how long it is.
+	ceiling := length(MaxSpeed)
+	for _, tooFast := range []float32{MaxSpeed + 0.2, 2.0, 4.0} {
+		if got := length(tooFast); got != ceiling {
+			t.Errorf("speed %.2f produced %d samples against the ceiling's %d; "+
+				"it is being allowed past MaxSpeed", tooFast, got, ceiling)
+		}
+	}
+
+	// And the same at the slow end, so a rate dragged to the bottom cannot ask
+	// for a latent so long the model has nothing to fill it with.
+	floor := length(MinSpeed)
+	if got := length(MinSpeed - 0.3); got != floor {
+		t.Errorf("speed %.2f produced %d samples against the floor's %d",
+			MinSpeed-0.3, got, floor)
+	}
+
+	// The ceiling has to actually be faster than ordinary speech, or holding
+	// there would mean the rate slider does nothing at all.
+	if natural := length(DefaultSpeed); ceiling >= natural {
+		t.Errorf("the ceiling produced %d samples against %d at the natural "+
+			"speed; it is not faster", ceiling, natural)
+	}
+}

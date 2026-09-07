@@ -762,14 +762,21 @@ async function fillVoices(keep: string): Promise<void> {
   }
 
   const hint = element('voice-engine-hint')
-  hint.textContent =
-    engine === 'local'
-      ? available.length > 0
-        ? t('audio.engineLocalReady')
-        : t('audio.engineLocalMissing')
-      : engine === 'windows'
-        ? t('audio.engineWindowsHint')
-        : t('audio.engineOnlineHint')
+  if (engine === 'local') {
+    // The reading rate is capped for this engine and not for the others, and
+    // a slider that stops doing anything without saying so is the same, to
+    // the ear, as a slider that is broken.
+    const ceiling = t('audio.engineLocalRateCap', {
+      percent: String(settings?._local_speed_ceiling ?? 23),
+    })
+    hint.textContent =
+      (available.length > 0 ? t('audio.engineLocalReady') : t('audio.engineLocalMissing')) +
+      ' ' +
+      ceiling
+  } else {
+    hint.textContent =
+      engine === 'windows' ? t('audio.engineWindowsHint') : t('audio.engineOnlineHint')
+  }
 }
 
 /**

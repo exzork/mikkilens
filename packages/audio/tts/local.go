@@ -2,6 +2,7 @@ package tts
 
 import (
 	"context"
+	"math"
 
 	"github.com/exzork/mikkilens/packages/audio/tts/supertonic"
 )
@@ -113,6 +114,21 @@ func synthesizeLocal(ctx context.Context, text string, options Options) (Audio, 
 // found sounds like ordinary speech -- so a rate of "+0%" has to land there,
 // not on 1.0. Her "+35%" for chat then means 35% faster than ordinary, which
 // is what it means for the online voice too.
+//
+// Past LocalSpeedCeiling the model stops being able to fit the words in and
+// the engine clamps; see supertonic.MaxSpeed. The settings page offers up to
+// +100%, because the online voice does go that fast.
 func localSpeed(rate string) float32 {
-	return 1.05 * (1 + float32(parsePercent(rate))/100)
+	return supertonic.DefaultSpeed * (1 + float32(parsePercent(rate))/100)
+}
+
+// LocalSpeedCeiling is the rate percentage past which the local voice stops
+// getting any faster, for the settings page to say so rather than leave the
+// top of the slider silently doing nothing.
+func LocalSpeedCeiling() int {
+	// Floor, not round. This number is quoted to her as the point past which
+	// nothing gets faster, so it has to be a rate that actually works: the
+	// exact ceiling is 23.8%, and rounding that to 24% would name a setting
+	// that is itself clamped.
+	return int(math.Floor((supertonic.MaxSpeed/supertonic.DefaultSpeed - 1) * 100))
 }

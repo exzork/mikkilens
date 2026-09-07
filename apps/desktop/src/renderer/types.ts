@@ -199,6 +199,8 @@ export interface AppConfig {
   tako: { enabled: boolean; link: string; read_aloud: boolean; [key: string]: unknown }
   trakteer: { enabled: boolean; link: string; read_aloud: boolean; [key: string]: unknown }
   _languages?: string[]
+  /** Rate percentage past which the local voice stops getting any faster. */
+  _local_speed_ceiling?: number
   [key: string]: unknown
 }
 

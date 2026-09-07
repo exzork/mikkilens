@@ -54,7 +54,11 @@ engine = "local"
 # answer than nothing being read.
 voice = ""
 rate = "+0%"          # Speed of confirmations. "+25%" is noticeably faster.
-                      # It means the same thing to every engine.
+                      # It means the same thing to every engine, but the local
+                      # voice stops getting faster past about +23%: beyond that
+                      # it drops syllables and whole words rather than speeding
+                      # up, so it is held there instead. The online voice goes
+                      # all the way to +100%.
 
 # Every volume in this file is a plain 0 to 100: a percentage of that one
 # sound's own level, where 100 is untouched and 50 is half of it.
