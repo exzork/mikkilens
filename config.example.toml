@@ -33,6 +33,11 @@ chat_tts = "follow" # "follow" reads chat in the output-language voice.
 #              somebody else's service to withdraw.
 #   "windows"  The synthesizer built into Windows. Nothing to download and
 #              nothing to go wrong, and it sounds like it. This is the floor.
+#
+# Upgrading from before 0.11 does not change the voice you were hearing. A file
+# that names an online voice and says nothing here is taken to mean "online" --
+# you picked that voice from the only list there was, and the list growing is
+# not a reason to overrule you. Set this to "local" to hear her own voice.
 engine = "local"
 
 # The voice name, in whatever scheme the engine above uses.

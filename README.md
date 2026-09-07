@@ -379,6 +379,12 @@ merekam siaran, itu bedanya nyata.
 Kalau modelnya belum selesai diunduh, dia membaca pakai suara daring dulu.
 Tidak ada yang jadi sunyi karena unduhan yang belum selesai.
 
+**Kalau kamu memperbarui dari versi sebelum 0.11**, suara yang kamu dengar
+tidak berubah. Kamu dulu memilih suara itu dari satu-satunya daftar yang ada,
+dan daftarnya bertambah bukan alasan untuk menimpa pilihanmu — jadi
+pengaturannya tetap **Daring**. Pindah ke **Di komputer ini** kalau kamu mau
+mencoba suaranya sendiri.
+
 ### Volume
 
 Ada empat: **suaranya**, **pembaca chat**, **nada-nada pendek**, dan **musik**.

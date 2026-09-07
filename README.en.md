@@ -99,6 +99,12 @@ indexes code points directly through a 65 536-entry table, so there is no
 grapheme-to-phoneme dependency to ship — wrapped in a language tag that the
 encoder reads as part of the text.
 
+Upgrading does not change the voice anyone was already hearing.
+`migrateVoiceEngine` reads a file that names an online voice and says nothing
+about an engine as meaning the engine those names belong to — she chose that
+voice from the only list there was. A file that names no voice takes the new
+default, which is how the local voice reaches anything but a fresh install.
+
 Behind it, **online** speaks Microsoft's Edge voice protocol directly, and
 **windows** is SAPI, which is the floor rather than a choice. The two naming
 schemes do not overlap ("F1" against "id-ID-GadisNeural"), which is what lets

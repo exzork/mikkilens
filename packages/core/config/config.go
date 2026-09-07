@@ -610,6 +610,7 @@ func Load(path string) (Config, error) {
 		return Default(), &Error{Reason: err.Error()}
 	}
 	migrateVolumes(document)
+	migrateVoiceEngine(document)
 	return FromMap(document), nil
 }
 
