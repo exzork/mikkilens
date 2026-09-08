@@ -875,6 +875,27 @@ element('save-donations').addEventListener('click', () => {
   )
 })
 
+// obsFailure turns what the engine reports into something to act on.
+//
+// The raw text is the truth and is no use read aloud: OBS refusing a password
+// arrives as "websocket: close 4009: Authentication failed", which says
+// nothing about where the password is or that there is one. The engine names
+// the kind of failure, and the sentence for each kind says what to go and do.
+// Anything it cannot name still falls back to the raw text, which beats a
+// blank.
+function obsFailure(reason?: string, raw?: string): string {
+  const key = reason === 'auth' ? 'obs.failedAuth'
+    : reason === 'unreachable' ? 'obs.failedUnreachable'
+    : ''
+  if (key && has(key)) {
+    return t(key, {
+      host: element<HTMLInputElement>('obs-host').value,
+      port: String(numberFrom('obs-port', settings?.obs.port ?? 4455)),
+    })
+  }
+  return t('obs.failed', { reason: raw ?? '' })
+}
+
 element('test-obs').addEventListener('click', async () => {
   const result = element('obs-result')
   result.textContent = t('obs.testing')
@@ -885,6 +906,7 @@ element('test-obs').addEventListener('click', async () => {
       scenes?: string[]
       current_scene?: string
       error?: string
+      reason?: string
     }>('/test/obs', { method: 'POST' })
 
     const text = answer.ok
@@ -892,7 +914,7 @@ element('test-obs').addEventListener('click', async () => {
           scenes: (answer.scenes ?? []).join(', '),
           current: answer.current_scene ?? '?',
         })
-      : t('obs.failed', { reason: answer.error ?? '' })
+      : obsFailure(answer.reason, answer.error)
     result.textContent = text
     announce(text)
   } catch (error) {

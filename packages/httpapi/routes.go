@@ -758,7 +758,12 @@ func (s *Server) testOBS(writer http.ResponseWriter, _ *http.Request) {
 
 	controller.Disconnect()
 	if err := controller.Connect(); err != nil {
-		respond(writer, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		// The code as well as the text: "close 4009" is the truth and is
+		// useless to read out, so the page turns the code into a sentence and
+		// keeps the raw text only for when there is no code to go on.
+		respond(writer, http.StatusOK, map[string]any{
+			"ok": false, "error": err.Error(), "reason": controller.LastReason(),
+		})
 		return
 	}
 

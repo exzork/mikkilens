@@ -156,6 +156,8 @@
   "obs.testing": "Testing…",
   "obs.connected": "Connected. Scenes: {scenes}. Currently: {current}.",
   "obs.failed": "Failed: {reason}",
+  "obs.failedAuth": "OBS refused the password. In OBS open Tools, WebSocket Server Settings, Show Connect Info, and copy the Server Password into the box above.",
+  "obs.failedUnreachable": "Nothing answered on {host} port {port}. Check OBS is running, and that its WebSocket server is switched on under Tools, WebSocket Server Settings.",
   "obs.saved": "OBS settings saved.",
   "youtube.legend": "YouTube",
   "youtube.hint": "Chat needs no setup at all. Connecting adds the viewer count, the stream title, and changing the title by voice.",

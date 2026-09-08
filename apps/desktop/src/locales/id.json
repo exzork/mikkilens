@@ -156,6 +156,8 @@
   "obs.testing": "Menguji…",
   "obs.connected": "Terhubung. Scene: {scenes}. Sekarang: {current}.",
   "obs.failed": "Gagal: {reason}",
+  "obs.failedAuth": "OBS menolak kata sandinya. Di OBS buka Tools, WebSocket Server Settings, Show Connect Info, lalu salin Server Password ke kotak di atas.",
+  "obs.failedUnreachable": "Tidak ada jawaban di {host} port {port}. Pastikan OBS berjalan, dan server WebSocket-nya menyala di Tools, WebSocket Server Settings.",
   "obs.saved": "Pengaturan OBS tersimpan.",
   "youtube.legend": "YouTube",
   "youtube.hint": "Chat tidak perlu diatur sama sekali. Menyambungkan akun menambah jumlah penonton, judul siaran, dan ganti judul lewat suara.",

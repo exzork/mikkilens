@@ -1406,9 +1406,19 @@ func (e *Engine) onOBSConnected() {
 	}
 }
 
-func (e *Engine) onOBSDisconnected(reason string) {
-	slog.Warn("OBS disconnected", "reason", reason)
+func (e *Engine) onOBSDisconnected(reason, code string) {
+	slog.Warn("OBS disconnected", "reason", reason, "kind", code)
 	e.store.Update(state.Changes{"obs": state.Disconnected})
+
+	// "Trying again" is the wrong thing to say about a password OBS will not
+	// accept: trying again is exactly what will not work, and she would be
+	// waiting on a reconnection that is never coming. Naming the setting is
+	// the difference between her asking somebody to look, and not knowing
+	// there is anything to look at.
+	if code == obs.ReasonAuth {
+		e.bus.SayKey("obs.password_rejected", feedback.Error)
+		return
+	}
 	e.bus.SayKey("obs.disconnected", feedback.Error)
 }
 

@@ -64,7 +64,13 @@ var inputCaptureKinds = map[string]bool{
 }
 
 // Error is an OBS failure worth reporting aloud.
-type Error struct{ Reason string }
+// Code is one of the Reason constants, so a caller can say something useful
+// about the failure instead of passing OBS's own wording through to somebody
+// who cannot see the screen. Reason stays the raw text, for the log.
+type Error struct {
+	Reason string
+	Code   string
+}
 
 func (e *Error) Error() string { return e.Reason }
 
@@ -107,8 +113,10 @@ type Options struct {
 	MicSource     string
 	ReconnectMaxS float64
 
-	OnConnected    func()
-	OnDisconnected func(reason string)
+	OnConnected func()
+	// OnDisconnected is told why as well as that: code is one of the Reason
+	// constants, so what gets said can depend on whether waiting will fix it.
+	OnDisconnected func(reason, code string)
 	OnEvent        func(Event)
 }
 
@@ -123,6 +131,13 @@ type Controller struct {
 	running      bool
 	wasConnected bool
 	lastError    string
+	lastCode     string
+
+	// saidRejected keeps the password complaint to once per connection
+	// attempt that succeeds, rather than once every retry: the loop runs
+	// forever, and a sentence repeated every few seconds is worse than the
+	// silence it replaced.
+	saidRejected bool
 
 	// reloadingSince is when a scene collection change started, and zero when
 	// none is in flight. obs-websocket is explicit that a request made while a
@@ -144,6 +159,15 @@ func (c *Controller) Connected() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.client != nil
+}
+
+// LastReason is what kind of failure the most recent one was, as one of the
+// Reason constants. Empty when nothing has failed or when the text was not
+// recognised.
+func (c *Controller) LastReason() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.lastCode
 }
 
 // LastError is the most recent failure, for the settings page.
@@ -182,15 +206,19 @@ func (c *Controller) Connect() error {
 		goobs.WithPassword(password),
 		goobs.WithResponseTimeoutDuration(responseTimeout))
 	if err != nil {
+		code := classify(err)
 		c.mu.Lock()
 		c.lastError = err.Error()
+		c.lastCode = code
 		c.mu.Unlock()
-		return &Error{Reason: err.Error()}
+		return &Error{Reason: err.Error(), Code: code}
 	}
 
 	c.mu.Lock()
 	c.client = client
 	c.lastError = ""
+	c.lastCode = ReasonUnknown
+	c.saidRejected = false
 	c.wasConnected = true
 	onConnected := c.options.OnConnected
 	c.mu.Unlock()
@@ -260,7 +288,7 @@ func (c *Controller) reconnectLoop(stop <-chan struct{}, done chan<- struct{}) {
 	for {
 		if !c.Connected() {
 			if err := c.Connect(); err != nil {
-				c.reportDisconnected(err.Error())
+				c.reportDisconnected(err.Error(), classify(err))
 				delay = min(time.Duration(c.maxReconnect())*time.Second, delay*2)
 			} else {
 				delay = time.Second
@@ -269,7 +297,7 @@ func (c *Controller) reconnectLoop(stop <-chan struct{}, done chan<- struct{}) {
 			// A dead socket only shows up on use, so ask OBS something cheap.
 			slog.Warn("lost the OBS connection", "error", err)
 			c.Disconnect()
-			c.reportDisconnected(err.Error())
+			c.reportDisconnected(err.Error(), classify(err))
 			delay = time.Second
 		} else {
 			delay = 2 * time.Second
@@ -310,16 +338,29 @@ func (c *Controller) maxReconnect() float64 {
 
 // reportDisconnected fires the callback only on the transition, so a closed
 // OBS does not announce itself every two seconds for an hour.
-func (c *Controller) reportDisconnected(reason string) {
+func (c *Controller) reportDisconnected(reason, code string) {
 	c.mu.Lock()
-	announce := c.wasConnected
+	// A rejected password is said the first time, before anything has ever
+	// connected. Everything else keeps the old rule and stays quiet until a
+	// working connection has been lost: OBS not being open yet is the normal
+	// state of things at startup, and announcing it would be a complaint
+	// every time she starts the app before OBS.
+	//
+	// This one is different because waiting will not fix it. The loop would
+	// retry until she gave up, and she cannot see the settings page refusing.
+	rejected := code == ReasonAuth && !c.saidRejected
+	if rejected {
+		c.saidRejected = true
+	}
+	announce := c.wasConnected || rejected
 	c.wasConnected = false
 	c.lastError = reason
+	c.lastCode = code
 	callback := c.options.OnDisconnected
 	c.mu.Unlock()
 
 	if announce && callback != nil {
-		callback(reason)
+		callback(reason, code)
 	}
 }
 
@@ -422,9 +463,9 @@ func (c *Controller) fail(err error) error {
 		strings.Contains(message, "mismatched ID") {
 		slog.Warn("dropping a desynchronised OBS connection", "error", err)
 		c.Disconnect()
-		c.reportDisconnected(message)
+		c.reportDisconnected(message, classify(err))
 	}
-	return &Error{Reason: message}
+	return &Error{Reason: message, Code: classify(err)}
 }
 
 // -- scenes -------------------------------------------------------------------
