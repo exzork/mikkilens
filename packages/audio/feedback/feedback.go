@@ -783,7 +783,10 @@ func (b *Bus) speak(utterance Utterance, wanted int) bool {
 		engine = settings.Speech.Engine
 	}
 
-	audio, err := b.synthesize(ctx, utterance.Text, tts.Options{
+	// unmention, not utterance.Text: the "@" in front of a name is punctuation
+	// the voice should not read. Everything that keeps a record of this --
+	// the history, the callbacks -- keeps the original.
+	audio, err := b.synthesize(ctx, unmention(utterance.Text), tts.Options{
 		Engine: engine,
 		Voice:  voice,
 		Rate:   rate,
