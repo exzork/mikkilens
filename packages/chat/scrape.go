@@ -339,7 +339,13 @@ type chatItem struct {
 	Paid       *chatRenderer `json:"liveChatPaidMessageRenderer"`
 	Sticker    *chatRenderer `json:"liveChatPaidStickerRenderer"`
 	Membership *chatRenderer `json:"liveChatMembershipItemRenderer"`
-	Gift       *chatRenderer `json:"liveChatSponsorshipsGiftPurchaseAnnouncementRenderer"`
+
+	// A gifted membership arrives as one purchase announcement from whoever
+	// paid, and then one redemption announcement per recipient. Both are
+	// needed: the purchase is the only thing that says how many, and the
+	// redemptions are the only things that name the people who got them.
+	Gift         *chatRenderer `json:"liveChatSponsorshipsGiftPurchaseAnnouncementRenderer"`
+	GiftReceived *chatRenderer `json:"liveChatSponsorshipsGiftRedemptionAnnouncementRenderer"`
 }
 
 type chatRenderer struct {
@@ -353,6 +359,23 @@ type chatRenderer struct {
 	PurchaseAmount    *simpleText   `json:"purchaseAmountText"`
 	StickerAccessible *a11yLabel    `json:"stickerAccessibility"`
 	AuthorBadges      []authorBadge `json:"authorBadges"`
+
+	// AuthorChannelID is what joins a gift up with the people who received
+	// it: the recipients name their giver, and the ids are what match.
+	AuthorChannelID string `json:"authorExternalChannelId"`
+
+	// A gift purchase keeps nothing at the top level except its id and its
+	// time. Who sent it, how many, and which tier are all one level down.
+	Header *sponsorHeader `json:"header"`
+
+	// PrimaryText is the header's own sentence -- "Sent 10 Mikkiru gift
+	// memberships" -- and the only place the page says how many.
+	PrimaryText *textRuns `json:"primaryText"`
+}
+
+// sponsorHeader is the wrapper a gift purchase puts its details in.
+type sponsorHeader struct {
+	Renderer *chatRenderer `json:"liveChatSponsorshipsHeaderRenderer"`
 }
 
 type simpleText struct {
@@ -422,9 +445,11 @@ type authorBadge struct {
 // readable in it.
 func (i chatItem) message() (Message, bool) {
 	var (
-		renderer    *chatRenderer
-		isSuperchat bool
-		isMember    bool
+		renderer       *chatRenderer
+		isSuperchat    bool
+		isMember       bool
+		isGift         bool
+		isGiftReceived bool
 	)
 	switch {
 	case i.Text != nil:
@@ -436,35 +461,67 @@ func (i chatItem) message() (Message, bool) {
 	case i.Membership != nil:
 		renderer, isMember = i.Membership, true
 	case i.Gift != nil:
-		renderer, isMember = i.Gift, true
+		renderer, isGift = i.Gift, true
+	case i.GiftReceived != nil:
+		renderer, isGiftReceived = i.GiftReceived, true
 	default:
 		// Deletions, pinned banners, poll results and the rest. Ignoring them
 		// is deliberate: they are not things a viewer said.
 		return Message{}, false
 	}
 
-	text := renderer.Message.text()
+	// A gift purchase is a shell: its id and time are at the top, and who sent
+	// it, how many and which tier are all inside the header. Reading the top
+	// level alone is what left the announcement with no name on it.
+	details := renderer
+	if isGift && renderer.Header != nil && renderer.Header.Renderer != nil {
+		details = renderer.Header.Renderer
+	}
+
+	text := details.Message.text()
 	if text == "" {
-		text = renderer.HeaderSubtext.text()
+		text = details.HeaderSubtext.text()
+	}
+	if isGift || isGiftReceived {
+		// Both of these carry boilerplate where the words would be -- "Sent 10
+		// gift memberships", "received a gift membership by X". The sentence
+		// that gets read is built from the parts, so the boilerplate is
+		// dropped rather than read out on top of it.
+		text = ""
 	}
 	if text == "" && renderer.StickerAccessible != nil {
 		text = strings.TrimSpace(renderer.StickerAccessible.AccessibilityData.Label)
 	}
 
 	author := ""
-	if renderer.AuthorName != nil {
-		author = strings.TrimSpace(renderer.AuthorName.SimpleText)
+	if details.AuthorName != nil {
+		author = strings.TrimSpace(details.AuthorName.SimpleText)
 	}
 	amount := ""
-	if renderer.PurchaseAmount != nil {
-		amount = strings.TrimSpace(renderer.PurchaseAmount.SimpleText)
+	if details.PurchaseAmount != nil {
+		amount = strings.TrimSpace(details.PurchaseAmount.SimpleText)
+	}
+
+	// How many were bought is only ever said in the header's own sentence, as
+	// the one run that is a number.
+	giftCount := 0
+	if isGift {
+		giftCount = countIn(details.PrimaryText)
+	}
+
+	// A recipient names their giver in the message runs and nowhere else --
+	// there is no channel id for them here, unlike the Data API. The name is
+	// what the ingest joins the batch up by, so it is taken as given.
+	gifterName := ""
+	if isGiftReceived {
+		gifterName = lastNamedRun(renderer.Message)
 	}
 
 	// The badge says who is typing, not what they typed. A member who says
 	// "halo kak" has said "halo kak" -- announcing them as having just joined,
 	// every time they speak, is how their actual words go unread.
 	isOwner, isModerator, authorIsMember := false, false, false
-	for _, badge := range renderer.AuthorBadges {
+	for _, badge := range details.AuthorBadges {
 		switch {
 		case badge.Renderer.Icon == nil:
 			if len(badge.Renderer.CustomThumbnail) > 0 {
@@ -478,24 +535,65 @@ func (i chatItem) message() (Message, bool) {
 	}
 
 	// A paid message with no words is still worth announcing -- somebody sent
-	// money -- so an empty text is only fatal for an ordinary one.
-	if text == "" && !isSuperchat && !isMember {
+	// money -- so an empty text is only fatal for an ordinary one. The two
+	// gift events never have words of their own at all.
+	if text == "" && !isSuperchat && !isMember && !isGift && !isGiftReceived {
 		return Message{}, false
 	}
 
 	return Message{
-		ID:             renderer.ID,
-		Author:         author,
-		Text:           text,
-		PublishedAt:    publishedAt(renderer.TimestampUsec),
-		ReceivedAt:     float64(time.Now().UnixNano()) / 1e9,
-		IsSuperchat:    isSuperchat,
-		IsMember:       isMember,
-		AuthorIsMember: authorIsMember,
-		Amount:         amount,
-		IsOwner:        isOwner,
-		IsModerator:    isModerator,
+		ID:              renderer.ID,
+		Author:          author,
+		AuthorChannelID: renderer.AuthorChannelID,
+		Text:            text,
+		PublishedAt:     publishedAt(renderer.TimestampUsec),
+		ReceivedAt:      float64(time.Now().UnixNano()) / 1e9,
+		IsSuperchat:     isSuperchat,
+		IsMember:        isMember,
+		AuthorIsMember:  authorIsMember,
+		Amount:          amount,
+		IsOwner:         isOwner,
+		IsModerator:     isModerator,
+		IsGift:          isGift,
+		IsGiftReceived:  isGiftReceived,
+		GiftCount:       giftCount,
+		GifterName:      gifterName,
 	}, true
+}
+
+// countIn pulls the number out of a header sentence.
+//
+// "Sent 10 Mikkiru gift memberships" arrives as separate runs, one of which is
+// the number on its own. Taking the run that is entirely a number leaves the
+// wording alone, which matters because the wording is whatever language the
+// page came back in and the number is not.
+func countIn(runs *textRuns) int {
+	if runs == nil {
+		return 0
+	}
+	for _, run := range runs.Runs {
+		if count, err := strconv.Atoi(strings.TrimSpace(run.Text)); err == nil && count > 0 {
+			return count
+		}
+	}
+	return 0
+}
+
+// lastNamedRun is the giver's name out of "received a gift membership by X".
+//
+// The name is the last thing said and is the only run the page marks bold, but
+// bold is styling and could move. The last run with words in it is the same
+// answer and survives the sentence being reworded around it.
+func lastNamedRun(runs *textRuns) string {
+	if runs == nil {
+		return ""
+	}
+	for index := len(runs.Runs) - 1; index >= 0; index-- {
+		if name := strings.TrimSpace(runs.Runs[index].Text); name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 // publishedAt renders the page's microsecond stamp the way the Data API

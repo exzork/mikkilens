@@ -640,12 +640,21 @@ func (i *Ingest) noteGiftLocked(message *Message) {
 		}
 		// Only ever one entry per giver, so this is bounded by how many people
 		// gift rather than by how long the stream runs.
-		i.gifters[message.AuthorChannelID] = &gifterNote{
-			name: message.Author, total: message.GiftCount,
+		note := &gifterNote{name: message.Author, total: message.GiftCount}
+		i.gifters[message.AuthorChannelID] = note
+		// Filed under the name as well, because the public chat page names the
+		// giver on each recipient and gives no id to match them by. Two keys
+		// for one note rather than two notes: whichever the transport can
+		// offer finds the same count, and the seen tally stays shared.
+		if message.Author != "" {
+			i.gifters[message.Author] = note
 		}
 
-	case message.IsGiftReceived && message.GifterChannelID != "":
+	case message.IsGiftReceived:
 		note := i.gifters[message.GifterChannelID]
+		if note == nil && message.GifterName != "" {
+			note = i.gifters[message.GifterName]
+		}
 		if note == nil {
 			return
 		}
