@@ -460,12 +460,15 @@ func (i chatItem) message() (Message, bool) {
 		amount = strings.TrimSpace(renderer.PurchaseAmount.SimpleText)
 	}
 
-	isOwner, isModerator := false, false
+	// The badge says who is typing, not what they typed. A member who says
+	// "halo kak" has said "halo kak" -- announcing them as having just joined,
+	// every time they speak, is how their actual words go unread.
+	isOwner, isModerator, authorIsMember := false, false, false
 	for _, badge := range renderer.AuthorBadges {
 		switch {
 		case badge.Renderer.Icon == nil:
 			if len(badge.Renderer.CustomThumbnail) > 0 {
-				isMember = true
+				authorIsMember = true
 			}
 		case badge.Renderer.Icon.IconType == "OWNER":
 			isOwner = true
@@ -481,16 +484,17 @@ func (i chatItem) message() (Message, bool) {
 	}
 
 	return Message{
-		ID:          renderer.ID,
-		Author:      author,
-		Text:        text,
-		PublishedAt: publishedAt(renderer.TimestampUsec),
-		ReceivedAt:  float64(time.Now().UnixNano()) / 1e9,
-		IsSuperchat: isSuperchat,
-		IsMember:    isMember,
-		Amount:      amount,
-		IsOwner:     isOwner,
-		IsModerator: isModerator,
+		ID:             renderer.ID,
+		Author:         author,
+		Text:           text,
+		PublishedAt:    publishedAt(renderer.TimestampUsec),
+		ReceivedAt:     float64(time.Now().UnixNano()) / 1e9,
+		IsSuperchat:    isSuperchat,
+		IsMember:       isMember,
+		AuthorIsMember: authorIsMember,
+		Amount:         amount,
+		IsOwner:        isOwner,
+		IsModerator:    isModerator,
 	}, true
 }
 

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
+	"github.com/exzork/mikkilens/packages/core/config"
+	"github.com/exzork/mikkilens/packages/core/i18n"
 )
 
 // The page is not a published contract, so these tests pin the shape this
@@ -181,6 +183,9 @@ func TestAPaidMessageWithNoWordsSurvives(t *testing.T) {
 
 // Owner and moderator come from badge icons; a member is told apart by having
 // the channel's own image instead of one of YouTube's icons.
+//
+// The member badge marks the author, not the message: it says this regular is
+// a member, never that they just became one.
 func TestBadgesDecideOwnerModeratorAndMember(t *testing.T) {
 	transport, _ := serve(t, page("first-token"), answer(5000,
 		chatItemJSON("liveChatTextMessageRenderer",
@@ -207,8 +212,38 @@ func TestBadgesDecideOwnerModeratorAndMember(t *testing.T) {
 	if !messages[1].IsModerator {
 		t.Error("the moderator badge must be recognised")
 	}
-	if !messages[2].IsMember {
+	if !messages[2].AuthorIsMember {
 		t.Error("a custom badge image is what marks a member")
+	}
+	if messages[2].IsMember {
+		t.Error("wearing the badge is not the same as having just joined")
+	}
+}
+
+// The bug this guards: a member typing an ordinary message was announced as
+// having just become a member, and what they actually said was never read.
+func TestMemberBadgeDoesNotSwallowWhatTheySaid(t *testing.T) {
+	transport, _ := serve(t, page("first-token"), answer(5000,
+		chatItemJSON("liveChatTextMessageRenderer",
+			`{"id":"a","timestampUsec":"1756600000000000","authorName":{"simpleText":"Fan"},`+
+				`"message":{"runs":[{"text":"halo kak"}]},"authorBadges":[`+
+				`{"liveChatAuthorBadgeRenderer":{"tooltip":"Member (6 months)",`+
+				`"customThumbnail":{"thumbnails":[]}}}]}`)))
+
+	messages := collectScraped(t, transport)
+	if len(messages) != 1 {
+		t.Fatalf("got %d messages, want 1", len(messages))
+	}
+
+	// Render needs nothing but the settings and the locale, so the reader can
+	// stand on its own here without an ingest loop behind it.
+	reader := NewReader(nil, nil, i18n.Load("id"), config.Chat{}, nil)
+	spoken := reader.Render(messages[0])
+	if !strings.Contains(spoken, "halo kak") {
+		t.Errorf("a member's message must be read out; got %q", spoken)
+	}
+	if strings.Contains(spoken, "menjadi member") {
+		t.Errorf("a member talking is not a membership announcement; got %q", spoken)
 	}
 }
 

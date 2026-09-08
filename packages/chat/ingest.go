@@ -47,10 +47,18 @@ type Message struct {
 	PublishedAt string  `json:"published_at"`
 	ReceivedAt  float64 `json:"received_at"`
 	IsSuperchat bool    `json:"is_superchat"`
-	IsMember    bool    `json:"is_member"`
 	Amount      string  `json:"amount"`
 	IsOwner     bool    `json:"is_owner"`
 	IsModerator bool    `json:"is_moderator"`
+
+	// IsMember says this message *is* a membership announcement -- somebody
+	// just joined, or hit a milestone. AuthorIsMember says the person typing
+	// happens to hold a badge, which is true of most of the regulars and says
+	// nothing about what they just typed. Keeping them apart is the whole
+	// point: read the wrong one and every regular's "halo kak" is announced
+	// as them joining, and their actual words are never heard.
+	IsMember       bool `json:"is_member"`
+	AuthorIsMember bool `json:"author_is_member"`
 
 	// AuthorChannelID is who said it, as YouTube identifies them. It is kept
 	// because a gifted membership names its giver by id and nothing else.
@@ -195,7 +203,7 @@ func ParseMessage(item *yt.LiveChatMessage) (Message, bool) {
 	}
 
 	author, authorID := "seseorang", ""
-	isOwner, isModerator := false, false
+	isOwner, isModerator, authorIsMember := false, false, false
 	if item.AuthorDetails != nil {
 		if item.AuthorDetails.DisplayName != "" {
 			author = item.AuthorDetails.DisplayName
@@ -203,6 +211,7 @@ func ParseMessage(item *yt.LiveChatMessage) (Message, bool) {
 		authorID = item.AuthorDetails.ChannelId
 		isOwner = item.AuthorDetails.IsChatOwner
 		isModerator = item.AuthorDetails.IsChatModerator
+		authorIsMember = item.AuthorDetails.IsChatSponsor
 	}
 
 	return Message{
@@ -214,6 +223,7 @@ func ParseMessage(item *yt.LiveChatMessage) (Message, bool) {
 		ReceivedAt:      float64(time.Now().UnixNano()) / 1e9,
 		IsSuperchat:     isSuperchat,
 		IsMember:        isMember,
+		AuthorIsMember:  authorIsMember,
 		Amount:          amount,
 		IsOwner:         isOwner,
 		IsModerator:     isModerator,
