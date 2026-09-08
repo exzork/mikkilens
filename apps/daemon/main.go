@@ -26,6 +26,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/earcons"
 	"github.com/exzork/mikkilens/packages/audio/feedback"
 	"github.com/exzork/mikkilens/packages/audio/tts"
+	"github.com/exzork/mikkilens/packages/controllers/obs"
 	"github.com/exzork/mikkilens/packages/core/config"
 	"github.com/exzork/mikkilens/packages/core/i18n"
 	"github.com/exzork/mikkilens/packages/core/paths"
@@ -498,8 +499,9 @@ func commonPhrases(locale *i18n.Locale) []string {
 // It backs the file up first and never changes a password that already exists.
 // OBS reads this at startup, so it has to be restarted afterwards.
 func commandEnableOBS(languageOverride string) int {
-	obsConfig := filepath.Join(os.Getenv("APPDATA"),
-		"obs-studio", "plugin_config", "obs-websocket", "config.json")
+	// The same path the controller reads at connect time, so the two cannot
+	// drift apart about where OBS keeps this.
+	obsConfig := obs.LocalConfigPath()
 
 	settings, err := readOBSConfig(obsConfig)
 	if err != nil {

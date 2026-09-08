@@ -198,13 +198,35 @@ func (c *Controller) Connect() error {
 		c.mu.Unlock()
 		return nil
 	}
-	address := fmt.Sprintf("%s:%d", c.options.Host, c.options.Port)
-	password := c.options.Password
+	host, port := c.options.Host, c.options.Port
+	address := fmt.Sprintf("%s:%d", host, port)
+	configured := c.options.Password
 	c.mu.Unlock()
 
-	client, err := goobs.New(address,
-		goobs.WithPassword(password),
-		goobs.WithResponseTimeoutDuration(responseTimeout))
+	// The password she typed first, then the one OBS wrote down for itself.
+	// The second is what makes a fresh install work without anybody reading a
+	// generated password off a dialog, and what makes rotating it in OBS stop
+	// breaking the connection until config.toml catches up.
+	var (
+		client *goobs.Client
+		err    error
+		used   string
+	)
+	for _, candidate := range passwordsToTry(host, configured) {
+		used = candidate
+		client, err = goobs.New(address,
+			goobs.WithPassword(candidate),
+			goobs.WithResponseTimeoutDuration(responseTimeout))
+		if err == nil {
+			break
+		}
+		// Only a refused password is worth a second attempt. A closed OBS
+		// refuses every password equally, and dialling it twice to learn that
+		// twice would just double the wait on every retry.
+		if classify(err) != ReasonAuth {
+			break
+		}
+	}
 	if err != nil {
 		code := classify(err)
 		c.mu.Lock()
@@ -212,6 +234,15 @@ func (c *Controller) Connect() error {
 		c.lastCode = code
 		c.mu.Unlock()
 		return &Error{Reason: err.Error(), Code: code}
+	}
+
+	// Keep whichever one worked, so the reconnect loop is not re-reading OBS's
+	// config file every couple of seconds for the life of the stream.
+	if used != configured {
+		slog.Info("using the password OBS wrote down for itself")
+		c.mu.Lock()
+		c.options.Password = used
+		c.mu.Unlock()
 	}
 
 	c.mu.Lock()
