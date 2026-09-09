@@ -59,8 +59,7 @@ already_live = "You are already live."
 not_streaming = "You are not streaming."
 
 [confirm]
-stop_stream = "Stop the stream? Say yes or no."
-end_broadcast = "End the YouTube broadcast? Say yes or no."
+stop_stream = "Stop the stream and end the YouTube broadcast? Say yes or no."
 set_title = "Change the title to {text}? Say yes or no."
 timeout = "No answer. Cancelled."
 cancelled = "Cancelled."
@@ -190,6 +189,8 @@ needs_sign_in = "That needs YouTube connected. Open the settings page and press 
 not_connected = "YouTube is not connected. Open the settings page and press Connect YouTube."
 sign_in_expired = "The YouTube sign-in is no longer accepted. Open the settings page and press Connect YouTube again."
 no_broadcast = "There is no active broadcast."
+broadcast_ended = "The YouTube broadcast is ended."
+broadcast_end_failed = "I could not end the YouTube broadcast. Try ending it in YouTube Studio."
 title_changed = "Title changed to {text}."
 title_is = "The current title is: {text}"
 

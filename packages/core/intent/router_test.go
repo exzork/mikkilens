@@ -182,8 +182,14 @@ func TestADestructiveCommandAsksBeforeActing(t *testing.T) {
 	if !router.AwaitingConfirmation() {
 		t.Error("the question must stay open")
 	}
-	if !bus.saidContaining("Hentikan siaran?") {
+	// The one answer now covers ending the broadcast as well, so the question
+	// has to name that: an irreversible thing must not ride along unmentioned
+	// on a prompt about stopping OBS.
+	if !bus.saidContaining("hentikan siaran") {
 		t.Errorf("said = %+v", bus.said)
+	}
+	if !bus.saidContaining("akhiri siaran di youtube") {
+		t.Errorf("the prompt does not say the broadcast ends too: %+v", bus.said)
 	}
 }
 

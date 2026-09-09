@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -90,7 +91,54 @@ func (e *Engine) stopStream(map[string]string) error {
 	}
 	e.store.Update(state.Changes{"streaming": false})
 	e.bus.SayKey("obs.stream_stopped", feedback.Result)
+
+	// On the same answer, not a second question. Ending the broadcast is what
+	// "stop the stream" means to everyone watching it, and asking twice about
+	// one intention is a worse trade than folding it into one prompt that
+	// says what it will do.
+	e.endBroadcast()
 	return nil
+}
+
+// endBroadcast finishes the YouTube broadcast that OBS was feeding.
+//
+// Stopping OBS stops the pixels and nothing else. YouTube ends the broadcast
+// on its own only when auto-stop is turned on for it, and with that off the
+// broadcast sits there live with nothing going into it -- which to everyone
+// watching looks like the stream having broken rather than having finished.
+//
+// This runs off the back of the one confirmation that stopping the stream
+// already asks for, which is why that question now says the broadcast ends
+// too: the answer covers something irreversible, so it has to name it.
+//
+// Nothing is said when there was nothing to end. She has already been told
+// the stream stopped, and "there was no broadcast to end" on top of it would
+// be a sentence about YouTube every single time she stops a stream without a
+// broadcast running.
+func (e *Engine) endBroadcast() {
+	controller := e.YouTube()
+	if controller == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	ended, err := controller.EndBroadcast(ctx)
+	switch {
+	case err != nil:
+		// Not signed in is the ordinary case, not a fault: without a sign-in
+		// there is no broadcast to end and never was. It costs no quota
+		// either, because the lookup fails before the call.
+		var unauthenticated *youtube.NotAuthenticatedError
+		if errors.As(err, &unauthenticated) {
+			return
+		}
+		slog.Error("could not end the broadcast", "error", err)
+		e.bus.SayKey("youtube.broadcast_end_failed", feedback.Error)
+	case ended:
+		e.bus.SayKey("youtube.broadcast_ended", feedback.Result)
+	}
 }
 
 func (e *Engine) isLive(map[string]string) error {

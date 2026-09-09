@@ -61,8 +61,7 @@ already_live = "Kamu memang sudah siaran."
 not_streaming = "Kamu memang belum siaran."
 
 [confirm]
-stop_stream = "Hentikan siaran? Jawab ya atau tidak."
-end_broadcast = "Akhiri siaran di YouTube? Jawab ya atau tidak."
+stop_stream = "Hentikan siaran dan akhiri siaran di YouTube? Jawab ya atau tidak."
 set_title = "Ganti judul menjadi {text}? Jawab ya atau tidak."
 timeout = "Tidak ada jawaban. Dibatalkan."
 cancelled = "Dibatalkan."
@@ -192,6 +191,8 @@ needs_sign_in = "Itu perlu YouTube tersambung. Buka halaman pengaturan lalu teka
 not_connected = "YouTube belum tersambung. Buka halaman pengaturan lalu tekan Sambungkan YouTube."
 sign_in_expired = "Login YouTube sudah tidak diterima lagi. Buka halaman pengaturan lalu tekan Sambungkan YouTube sekali lagi."
 no_broadcast = "Tidak ada siaran yang sedang aktif."
+broadcast_ended = "Siaran di YouTube sudah diakhiri."
+broadcast_end_failed = "Aku tidak bisa mengakhiri siaran di YouTube. Coba akhiri lewat YouTube Studio."
 title_changed = "Judul diganti menjadi {text}."
 title_is = "Judul sekarang: {text}"
 
