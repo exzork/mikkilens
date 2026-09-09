@@ -18,9 +18,20 @@ import (
 // the cursor forward and says how many were dropped, so the gap is never
 // silent.
 
-// minGap keeps messages from running into each other. Back-to-back speech with
-// no seam is hard to follow.
-const minGap = 50 * time.Millisecond
+// minGap is the silence between one message and the next.
+//
+// It has to stay audibly longer than the pause inside a message, because the
+// two are now doing different jobs. A message is read as "<name>, <what they
+// said>" rather than "<name> says: <what they said>" -- the word was the same
+// on every line and carried nothing -- so the comma after the name is what
+// separates who from what, and this gap is what separates one person from the
+// next. If the gap were the shorter of the two, a name would sound like the
+// tail of the message before it.
+//
+// Half a second rather than the old fiftieth of one: fifty milliseconds is
+// below what anybody hears as a break, which was survivable while the word
+// "says" was doing the separating and is not survivable now.
+const minGap = 500 * time.Millisecond
 
 // Bus is the part of the speech bus the reader needs.
 type Bus interface {

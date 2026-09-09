@@ -56,13 +56,17 @@ func TestSpeakRealChatLive(t *testing.T) {
 	if engine := os.Getenv("MIKKILENS_ENGINE"); engine != "" {
 		settings.Speech.Engine = engine
 	}
+	if rate := os.Getenv("MIKKILENS_RATE"); rate != "" {
+		settings.Speech.Rate = rate
+		settings.Speech.ChatRate = rate
+	}
 	if voice := os.Getenv("MIKKILENS_VOICE"); voice != "" {
 		settings.Speech.Voice = voice
 		// Chat has a voice of its own, and empty means "follow the main one".
 		// Left as it was, a chat voice already set would quietly win.
 		settings.Speech.ChatVoice = ""
 	}
-	t.Logf("engine=%q voice=%q", settings.Speech.Engine, settings.Speech.Voice)
+	t.Logf("engine=%q voice=%q chat rate=%q", settings.Speech.Engine, settings.Speech.Voice, settings.Speech.ChatRate)
 
 	bus := feedback.New(settings, locale, nil)
 	bus.Start()
@@ -110,7 +114,22 @@ func TestSpeakRealChatLive(t *testing.T) {
 						message.MemberLevel, message.MemberMonths)
 				}
 
-				bus.SayChat(sentence, message.IsPaid(), nil)
+				// One at a time with the reader's own gap after it, rather
+				// than queueing the batch: the spacing between messages is
+				// half of what is being listened for here, and a probe that
+				// ran them together would not be reproducing what she hears.
+				spoken := make(chan struct{})
+				var once sync.Once
+				bus.SayChat(sentence, message.IsPaid(), func(bool) {
+					once.Do(func() { close(spoken) })
+				})
+				select {
+				case <-spoken:
+				case <-ctx.Done():
+					return
+				case <-time.After(30 * time.Second):
+				}
+				time.Sleep(minGap)
 			}
 		},
 		func() { t.Logf("connected to the chat page for %s", video) },
