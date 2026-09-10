@@ -15,6 +15,11 @@
 # tests load them, and a fresh clone needs them to have any commands at all.
 # Editing them will show up as a diff, which is the right trade.
 /config.toml
+# And any copy of it. Editing settings leaves backups next to the original --
+# config.toml.bak, config.toml.bak-before-obs-sync -- each one a full copy of
+# the OBS password and the overlay keys, and none of them covered by the line
+# above. One `git add -A` is all it takes.
+/config.toml.*
 /data/
 
 # Wake-word training: gigabytes of borrowed audio and the environment that
