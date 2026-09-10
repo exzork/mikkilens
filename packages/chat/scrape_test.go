@@ -291,18 +291,43 @@ func TestActionsThatAreNotMessagesAreIgnored(t *testing.T) {
 	}
 }
 
-// Chat being switched off is permanent for this broadcast. It has to arrive as
-// its own error, or the ingest loop retries it on a two second backoff and
-// turns it into a stream of spoken announcements she cannot switch off.
-func TestAPageWithNoChatIsReportedAsUnavailable(t *testing.T) {
+// A page with no chat in it must not be reported as chat being unavailable.
+//
+// This request carries no sign-in, so it is served whatever a stranger would
+// see -- and a members-only broadcast serves a stranger a page with no chat in
+// it, exactly like a broadcast with chat switched off. Claiming the stronger
+// of the two is what left members-only streams silent: the ingest loop
+// believed it and stopped, without ever asking the Data API transports, which
+// ask as the channel that owns the broadcast and can read the chat.
+//
+// It must not be an ordinary failure either, or the last transport in the
+// chain retries it on a two second backoff and turns it into a stream of
+// spoken announcements she cannot switch off.
+func TestAPageWithNoChatDoesNotClaimThereIsNoChat(t *testing.T) {
 	transport, _ := serve(t, noChatPage)
 
 	err := transport.Run(context.Background(), Target{VideoID: "abcdefghijk"},
 		func([]Message) {}, func() {})
 
+	var invisible *NotVisibleError
+	if !errors.As(err, &invisible) {
+		t.Fatalf("err = %#v, want a NotVisibleError", err)
+	}
 	var missing *youtube.ChatUnavailableError
-	if !errors.As(err, &missing) {
-		t.Fatalf("err = %#v, want a ChatUnavailableError", err)
+	if errors.As(err, &missing) {
+		t.Error("the public page cannot see a members-only chat, which is not " +
+			"the same as there being none")
+	}
+
+	// With the Data API transports behind it, the chain carries on.
+	if chatIsGone(err, true) {
+		t.Error("a page that saw nothing must not stop the chain while the " +
+			"Data API transports are still to be asked")
+	}
+	// Pinned to the page alone, there is nobody left to ask, so it settles the
+	// question and gets the slow re-check rather than a two second retry.
+	if !chatIsGone(err, false) {
+		t.Error("with no transport left to ask, the page's answer is the answer")
 	}
 }
 

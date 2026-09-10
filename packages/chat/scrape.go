@@ -161,11 +161,16 @@ func (s *scrapeTransport) open(ctx context.Context, videoID string) (*scrapeSess
 		return nil, fmt.Errorf("the live chat page could not be read: %w", err)
 	}
 	if bootstrap.Contents.LiveChatRenderer == nil {
-		// The page loads for a video with chat switched off, or for one whose
-		// stream has ended, and simply has no chat in it. Retrying cannot fix
-		// either, so it is reported as the thing it is.
-		return nil, &youtube.ChatUnavailableError{
-			Reason: "this broadcast has no live chat to read"}
+		// Three different things arrive as the same empty page, and this
+		// request cannot tell them apart: chat switched off, a stream that has
+		// ended, and a members-only broadcast, whose chat a request carrying
+		// no sign-in is simply not allowed to see. So this reports only what
+		// it knows -- the page it was given had no chat in it -- and leaves
+		// the answer that counts to the Data API transports, which ask as the
+		// channel that owns the broadcast.
+		return nil, &NotVisibleError{
+			Reason: "the public chat page carries no chat for this broadcast, " +
+				"which is also what a members-only stream looks like from outside"}
 	}
 
 	token, _ := firstContinuation(bootstrap.Contents.LiveChatRenderer.Continuations)

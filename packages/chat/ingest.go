@@ -272,6 +272,45 @@ type Transport interface {
 	Run(ctx context.Context, target Target, deliver func([]Message), ready func()) error
 }
 
+// NotVisibleError means this transport could not find the chat, and a
+// transport behind it still might.
+//
+// It is the difference between "there is no chat" and "I cannot see one". The
+// public page is fetched with no credential at all -- it is the page any
+// viewer gets -- so a members-only broadcast looks from out there exactly like
+// one with chat switched off: a page with no chat in it. Reporting that as
+// chat being unavailable is what left members-only streams silent. The loop
+// believed the page, stopped, and never asked the Data API transports, which
+// are signed in as the channel that owns the broadcast and can read its chat
+// perfectly well.
+//
+// Whichever transport is asked last is believed whatever it says, because by
+// then there is nobody left to ask.
+type NotVisibleError struct{ Reason string }
+
+func (e *NotVisibleError) Error() string { return e.Reason }
+
+// seesNoChat reports that this transport found no chat, without claiming that
+// there is none.
+func seesNoChat(err error) bool {
+	var invisible *NotVisibleError
+	return errors.As(err, &invisible)
+}
+
+// chatIsGone reports that this broadcast has no chat to read -- a permanent
+// condition for it, rather than a blip to retry in two seconds.
+//
+// more says whether a transport is left to try. It is what keeps a members-
+// only stream alive: the page saying it found nothing settles the question
+// only once the transports that can see more have said the same.
+func chatIsGone(err error, more bool) bool {
+	if seesNoChat(err) {
+		return !more
+	}
+	var missing *youtube.ChatUnavailableError
+	return errors.As(err, &missing)
+}
+
 // IngestOptions configure ingestion.
 type IngestOptions struct {
 	Transport string // "auto" | "page" | "api" | "stream" | "poll"
@@ -517,12 +556,25 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 				break
 			}
 
+			more := index+1 < len(candidates)
+
+			// A transport that found no chat has not established that there
+			// is none. The public page is unauthenticated, so a members-only
+			// broadcast is invisible to it; the Data API transports sign in
+			// as the channel that owns the broadcast and are the ones to
+			// believe. Asking them is the whole point of having them.
+			if seesNoChat(err) && more {
+				slog.Info("this transport cannot see the chat, asking the next",
+					"transport", name, "next", candidates[index+1].Name(),
+					"reason", err)
+				continue
+			}
+
 			// Chat being switched off, or the stream having ended, will not
 			// start working by asking again. Falling through to the poller
 			// only asks the same question a second way and gets the same
 			// answer, so stop here and wait for a different broadcast.
-			var missing *youtube.ChatUnavailableError
-			if errors.As(err, &missing) {
+			if chatIsGone(err, more) {
 				slog.Info("this broadcast has no live chat to read", "reason", err)
 				// Forget the broadcast before waiting. Otherwise the re-check
 				// asks about the same cached broadcast, gets the same answer,
@@ -535,8 +587,8 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 				break
 			}
 
-			slog.Warn("chat transport failed", "transport", transport.Name(), "error", err)
-			if index+1 < len(candidates) {
+			slog.Warn("chat transport failed", "transport", name, "error", err)
+			if more {
 				slog.Info("falling back", "transport", candidates[index+1].Name())
 				continue
 			}

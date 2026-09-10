@@ -332,6 +332,11 @@ transport = "auto"     # How live chat is read.
                        #   "stream" / "poll" pin one Data API transport.
                        # Polling uses far more of the daily quota than anything
                        # else here; the page uses none at all.
+                       # A members-only stream is invisible to the page -- it
+                       # is fetched with no sign-in, and gets what a stranger
+                       # gets -- so "auto" falls through to the Data API for
+                       # those and reads the chat from there. Pinning "page"
+                       # means members-only streams are read silently past.
 quota_budget = 10000
 quota_warn_percent = 80
 

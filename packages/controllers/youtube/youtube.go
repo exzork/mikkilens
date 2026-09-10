@@ -529,7 +529,17 @@ func (c *Controller) ClassifyHTTP(status int, body []byte, fallback error) error
 	type envelope struct {
 		Error struct {
 			Message string `json:"message"`
-			Errors  []struct {
+			// Status is the gRPC status name -- PERMISSION_DENIED,
+			// FAILED_PRECONDITION and the rest. streamList is a server-
+			// streaming method documented in those terms rather than in the
+			// Data API's own reason codes, and a transcoded error can carry
+			// the status and no reasons at all. Reading only the reasons left
+			// every one of those failures unclassified: "the chat has ended"
+			// came back as a 400 nobody recognised and was retried forever,
+			// and "slow down" came back as a 429 that sent the loop straight
+			// on to the next transport to ask the same server faster.
+			Status string `json:"status"`
+			Errors []struct {
 				Reason string `json:"reason"`
 			} `json:"errors"`
 		} `json:"error"`
@@ -568,11 +578,42 @@ func (c *Controller) ClassifyHTTP(status int, body []byte, fallback error) error
 			return &NotAuthenticatedError{Reason: message}
 		}
 	}
+	// Checked after the reason codes, which say more when they are there:
+	// "liveChatDisabled" and "quotaExceeded" both arrive as PERMISSION_DENIED.
+	switch payload.Error.Status {
+	case "PERMISSION_DENIED":
+		// Documented as insufficient permissions. Retrying cannot grant them,
+		// and neither can the poller -- it asks the same question with the
+		// same sign-in. The likely cause on a members-only broadcast is being
+		// signed in as a channel that does not own it, so the message says so
+		// rather than leaving her with a bare "unavailable".
+		if message == "" {
+			message = "this sign-in is not allowed to read that chat"
+		}
+		return &ChatUnavailableError{Reason: message}
+	case "FAILED_PRECONDITION", "NOT_FOUND":
+		// Chat disabled, chat ended, or no such chat id. All permanent for
+		// this broadcast, and none of them arrive as a 403 -- which is how
+		// they slipped past the catch-all below and got retried forever.
+		return &ChatUnavailableError{Reason: message}
+	case "RESOURCE_EXHAUSTED":
+		// The documented meaning here is the rate limit, not the day's
+		// allowance. Marking the ledger spent over a burst would switch
+		// YouTube off until midnight with almost none of it used.
+		return &RateLimitedError{Reason: message}
+	case "UNAUTHENTICATED":
+		return &NotAuthenticatedError{Reason: message}
+	}
+
 	if status == http.StatusForbidden {
 		// A forbidden stream with no reason we recognise is still not
 		// something that retrying will fix.
 		return &ChatUnavailableError{Reason: message}
 	}
+	// INVALID_ARGUMENT lands here deliberately. It means this request was
+	// malformed, which is our bug and not the chat's -- so it stays an
+	// ordinary failure and the chain falls through to the poller, which is a
+	// different endpoint and may well work.
 	return fallback
 }
 

@@ -188,6 +188,15 @@ as the fallback, streaming ahead of polling. If YouTube reshapes the page, chat
 gets more expensive rather than going silent. `transport` in `config.toml`
 pins the choice: `"page"`, `"api"`, or `"auto"` for all three in order.
 
+The other reason they stay behind it is members-only streams. The page is
+fetched with no sign-in, so it is served what a stranger is served, and a
+stranger gets a members-only broadcast's chat page with no chat in it —
+identical to a broadcast with chat switched off. Only the last transport asked
+settles whether a chat exists: the page finding nothing sends the chain on to
+the Data API, which asks as the channel that owns the broadcast and can read
+it. A signed-in transport saying there is no chat is believed at once. This is
+why `"page"` on its own reads members-only streams silently past.
+
 ## Triggers
 
 There are three ways into a command, and they converge immediately.

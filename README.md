@@ -573,6 +573,19 @@ Urutannya bisa dipaksa lewat `transport` di `config.toml`: `"page"` hanya
 halaman, `"api"` hanya Data API, `"auto"` (bawaan) mencoba semuanya sesuai
 urutan di atas.
 
+### Siaran khusus member
+
+Halaman publik diambil tanpa login, jadi yang diterima MikkiLens sama persis
+dengan yang diterima orang asing — dan buat siaran khusus member, orang asing
+menerima halaman chat yang kosong, tidak bisa dibedakan dari siaran yang
+chat-nya memang dimatikan. Karena itu hanya transport terakhir yang berhak
+memutuskan: halaman yang tidak menemukan apa-apa meneruskan giliran ke Data
+API, yang bertanya sebagai pemilik channel dan bisa membacanya. Kalau transport
+yang sudah login bilang tidak ada chat, itu langsung dipercaya.
+
+Konsekuensinya, `transport = "page"` melewatkan siaran khusus member tanpa
+suara. Biarkan di `"auto"` kalau kamu memakainya.
+
 Bedanya besar untuk kuota: polling `liveChatMessages.list` berharga 5 unit
 sekali tanya, jadi siaran 8 jam dengan jeda 5 detik menghabiskan sekitar 28.800
 unit — hampir tiga kali jatah harian, untuk satu orang saja. Halaman publik
