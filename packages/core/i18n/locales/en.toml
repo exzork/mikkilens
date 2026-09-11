@@ -242,3 +242,12 @@ no_audio_device = "No audio device found."
 mic_lost = "The microphone was disconnected."
 network = "There is a network problem."
 config_invalid = "The configuration file is invalid: {reason}"
+[omnivoice]
+# Cloning a voice is a job with a pause in the middle: a few seconds of
+# recording, then several more of encoding it. Both halves are said, because
+# to somebody not looking at the screen a silent pause and a crash are the
+# same event.
+recording = "Speak now. Read a sentence or two in your normal voice, and stop when you are done."
+nothing_heard = "I did not hear anything through the microphone. Nothing was saved."
+ready = "The voice {name} is ready. Pick it in the voice list to hear her read in it."
+failed = "That voice could not be saved: {reason}"

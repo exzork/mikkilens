@@ -344,19 +344,22 @@ Kalau kamu lebih suka mengirim suara ke server, isi `[stt] base_url` di
 
 ### Suara bicaranya
 
-Ada tiga pilihan, di aplikasi Pengaturan tab **Audio**. Mana pun yang dipilih,
-sisanya berdiri di belakangnya — jadi tidak ada pilihan di sini yang bisa
-berakhir jadi sunyi.
+Ada empat pilihan, di aplikasi Pengaturan tab **Audio**. Namanya sekarang nama
+modelnya, bukan tempat jalannya — "Di komputer ini" dan "Daring" masih cocok
+waktu cuma ada dua, dan berhenti cocok begitu ada dua yang sama-sama jalan di
+sini. Mana pun yang dipilih, sisanya berdiri di belakangnya — jadi tidak ada
+pilihan di sini yang bisa berakhir jadi sunyi.
 
 | Pilihan | Butuh internet? | Catatan |
 |---|---|---|
-| **Di komputer ini** | tidak | Bawaannya. 31 bahasa, 10 suara. Unduhan 401 MB. |
-| **Daring** | ya | Suara Microsoft Edge. Gratis, dan terdengar sangat wajar. |
-| **Windows** | tidak | Suara bawaan Windows. Tidak perlu diunduh, dan terdengar begitu. |
+| **Supertonic 3** | tidak | Bawaannya. 31 bahasa, 10 suara. Unduhan 401 MB. |
+| **Edge TTS** | ya | Suara neural Microsoft Edge. Gratis, dan terdengar sangat wajar. |
+| **Windows** | tidak | SAPI 5, suara bawaan Windows. Tidak perlu diunduh, dan terdengar begitu. |
+| **OmniVoice** | tidak | 600 bahasa, suaranya dari rekamanmu sendiri. Unduhan 2 GB, dan perlu kartu grafis — [baca ini dulu](#omnivoice). |
 
-**Di komputer ini** memakai [Supertonic
-3](https://huggingface.co/Supertone/supertonic-3) dari Supertone, dijalankan di
-komputermu sendiri. Alasannya satu: suara daring butuh internet, butuh jam di
+**Supertonic 3** memakai [model dengan nama yang
+sama](https://huggingface.co/Supertone/supertonic-3) dari Supertone, dijalankan
+di komputermu sendiri. Alasannya satu: suara daring butuh internet, butuh jam di
 komputermu kira-kira benar, dan itu layanan milik orang lain yang bisa ditarik
 kapan saja — dan kalau salah satunya bermasalah di tengah siaran, yang kamu
 dapat adalah suara Windows yang datar, atau tidak ada suara sama sekali. Yang
@@ -395,8 +398,71 @@ Tidak ada yang jadi sunyi karena unduhan yang belum selesai.
 **Kalau kamu memperbarui dari versi sebelum 0.11**, suara yang kamu dengar
 tidak berubah. Kamu dulu memilih suara itu dari satu-satunya daftar yang ada,
 dan daftarnya bertambah bukan alasan untuk menimpa pilihanmu — jadi
-pengaturannya tetap **Daring**. Pindah ke **Di komputer ini** kalau kamu mau
+pengaturannya tetap **Edge TTS**. Pindah ke **Supertonic 3** kalau kamu mau
 mencoba suaranya sendiri.
+
+<a name="omnivoice"></a>
+
+#### OmniVoice
+
+Pilihan keempat, dan satu-satunya di sini yang merupakan pertukaran, bukan
+sekadar selera. [OmniVoice](https://github.com/k2-fsa/OmniVoice) dari k2-fsa
+adalah model bahasa difusi 0,6 miliar parameter. Dia membaca 600 bahasa, dan
+suaranya **tidak diambil dari daftar** — dia menirukan suara dari rekaman yang
+kamu berikan.
+
+Cara memakainya — semuanya di dalam aplikasi, tidak perlu buka folder:
+
+1. Di tab **Audio**, pilih **OmniVoice** sebagai mesin suaranya. Kotak
+   **Tambah suara** akan muncul di bawahnya.
+2. Di kotak itu sudah ada satu kalimat yang siap dibacakan. Ganti kalau mau,
+   asal yang kamu baca memang yang ada di kotaknya.
+3. Tekan **Rekam sekarang**, bacakan kalimatnya, lalu diam kalau sudah.
+   MikkiLens mengatakan kapan dia mulai mendengarkan dan kapan suaranya sudah
+   jadi, jadi kamu tidak perlu melihat layar.
+
+Selesai. Suaranya langsung terpilih, tinggal tekan **Tes** untuk mendengarnya.
+
+Sudah punya rekaman yang lebih bagus? Tekan **Pakai berkas saja** dan pilih
+`.wav`-mu. Ini yang lebih disarankan kalau kamu mau hasil terbaik: mikrofonnya
+direkam di 16 kHz karena itu yang dibutuhkan pengenalan suara, sedangkan
+modelnya mau 24 kHz — jadi rekaman yang kamu buat sendiri di rate yang lebih
+tinggi hasil kloningnya sedikit lebih mirip.
+
+Yang perlu diketahui soal naskahnya: modelnya sekalian diberi tahu **apa** yang
+kamu ucapkan, bukan cuma bagaimana. Itu sebabnya ada kotak naskah, dan itu
+sebabnya membaca dari naskah jauh lebih baik daripada ngomong bebas lalu
+mengetik ulang kira-kiranya. Suara tanpa naskah tetap jalan, dan di daftarnya
+ditandai supaya kamu tahu itu yang bisa diperbaiki.
+
+Di balik layar tetap seperti dulu: rekamannya jadi `.wav`, naskahnya jadi
+`.txt`, dan hasil olahannya jadi `.json` di
+`data\models\omnivoiceoices`. Kalau kamu lebih suka menaruhnya sendiri,
+silakan — keduanya sama saja, dan `.json` itu bisa disalin ke komputer lain
+tanpa `.wav`-nya.
+
+Kalau kamu tidak memberi rekaman sama sekali, modelnya mengarang suaranya
+sendiri, dan tiap kalimat bisa terdengar seperti orang yang berbeda.
+
+**Yang harus kamu tahu sebelum memilih ini:**
+
+- **Unduhannya 2 GB**, dan cuma diunduh kalau kamu memilihnya. Tidak ikut
+  unduhan pertama, dan tidak ada pilihan lain yang jatuh ke sini.
+- **Memakai sekitar 1,4 GB memori** selama dimuat, dan langsung dikembalikan
+  begitu kamu pindah ke pilihan lain.
+- **Di kartu grafis NVIDIA: lebih cepat dari waktu nyata.** Diukur di sini di
+  RTX 5060 Ti: 2,3 detik kerja untuk 3 detik suara. Ini yang bikin dia bisa
+  dipakai siaran langsung. Runtime kartu grafisnya sekitar 1 GB lagi, dan ikut
+  diunduh sendiri kalau kartunya ketemu.
+- **Kalau cuma prosesor: sekitar 25 kali lebih lambat dari waktu nyata** —
+  satu kalimat biasa perlu setengah menit. Konfirmasi disimpan di cache jadi
+  cuma bayar sekali, tapi pesan chat dan donasi bayar tiap kali. Di komputer
+  tanpa kartu NVIDIA, ini suara buat rekaman, bukan buat siaran langsung.
+
+Modelnya resminya terbit sebagai bobot PyTorch, dan MikkiLens tidak memuat
+Python sama sekali — jadi yang dipakai di sini adalah ekspor ONNX dari pihak
+ketiga. Itu perlu kamu tahu: bobotnya dikonversi oleh orang di luar proyek yang
+melatihnya.
 
 ### Volume
 

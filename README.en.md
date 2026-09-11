@@ -127,6 +127,100 @@ all ten voices loaded, a second and a half to open the sessions, and roughly a
 fifth of a second of CPU per second of speech at eight denoising steps on two
 threads. Nothing loads until something actually asks to be spoken.
 
+The four engines are labelled by model rather than by location — Supertonic 3,
+Edge TTS, Windows, OmniVoice. The stored values are unchanged (`local`,
+`online`, `windows`), because changing them would silently reset the voice of
+every existing installation; only what anyone reads was renamed. "On this
+computer" and "Online" described the two engines that existed and stopped
+describing anything the moment a second engine ran on this computer too.
+
+**OmniVoice** (`packages/audio/tts/omnivoice`) is the fourth, and it is a
+different kind of thing rather than a larger Supertonic. k2-fsa's
+[OmniVoice](https://github.com/k2-fsa/OmniVoice) is a 0.6B diffusion language
+model over audio tokens: 8 residual codebooks of 1025 entries at 25 frames a
+second, decoded to 24 kHz. The audio being generated starts as a rectangle of
+the id 1024 — "not decided yet" — and each step runs a full forward pass over
+the whole sequence, scores every undecided slot, and commits the most confident
+handful. There is no KV cache to hold, because every position can change on
+every pass.
+
+Three things follow, and all three are load-bearing:
+
+*Length is chosen before generation, not discovered during it.* The model fills
+exactly the number of frames it is given, so a bad estimate is not slightly
+wrong timing but a sentence cut off mid-word or a sentence followed by invented
+breathing. `duration.go` is a port of the model's own rule-based estimator: a
+per-character speaking weight across 88 Unicode ranges, scaled by how fast the
+reference recording actually spoke. Its range table is generated from the
+upstream Python rather than transcribed.
+
+*The voice is a recording, not a name.* There is no "F1" here. A 3-to-10-second
+wav in `data/models/omnivoice/voices` is encoded once into codes and cached as
+a `.json` beside it; the `.json` is the voice after that and can be copied
+between machines. The 650 MB encoder is opened for that one question and closed
+again, so steady-state cost is the language model and the decoder only.
+
+Which is why cloning is a panel in the Audio tab rather than an instruction to
+open a folder. `/api/omnivoice/record` records through the microphone the
+engine already owns -- `capture.Record` adds a listener rather than taking the
+device, so the wake word keeps listening throughout -- and `/api/omnivoice/upload`
+takes a wav the window's main process read, as bytes rather than a path,
+because the page has no filesystem and the engine may not be on this machine.
+Both announce themselves through the speech bus, because encoding takes several
+seconds and a silent pause is indistinguishable from a crash to somebody not
+looking at the screen. The name is the one piece of user input that becomes a
+path, so `CleanName` is strict and `TestOmniUploadCannotWriteOutsideItsFolder`
+checks it with the traversals somebody would actually type.
+
+The panel carries a script to read rather than an empty transcript box. The
+model is told what was said as well as how, so the transcript is what most
+decides how good a clone is -- and reading a given sentence produces an exact
+transcript by construction, where speaking freely and typing an approximation
+afterwards produces a wrong one. A voice with no transcript still works and is
+labelled in the list, because it is the one quality problem that is otherwise
+invisible.
+
+*It is slow on a CPU.* Measured here: 76 seconds for 3.04 seconds of speech at
+16 steps, about 25x slower than real time. On the CUDA provider it is faster
+than real time. That is not a tuning difference, so `onnx.Accelerated` asks for
+the graphics card for this model and only this model — Supertonic and the wake
+word are small enough that the copying would cost more than the arithmetic —
+with the arena capped at 2 GB, because the card is also holding a game and
+whatever OBS is encoding. A refused provider logs and falls back to the CPU
+rather than failing.
+
+Two details of the port are worth knowing because they are not obvious from the
+reference implementation. The community ONNX export casts `attention_mask` to
+bool and then *adds* it to the attention scores, so a non-uniform mask does not
+mask anything; rather than work around that, each of the two guidance passes is
+run at its own exact length, which removes the padding that made a mask
+necessary at all, is what the model asks for anyway (attention is fully dense
+within a sequence), and is less work than padding the shorter pass out to the
+longer one. And the Go binding sizes an auto-allocated tensor of a dtype it has
+no Go equivalent for by element count rather than byte count, which halves the
+buffer for this graph's fp16 logits; the output tensor is therefore allocated
+here and reused across all sixteen steps, which was wanted anyway.
+
+The text side is Qwen3's byte-level BPE, reimplemented in `tokenizer.go`
+because the alternative is a Python process per utterance. Go's `regexp` has no
+lookahead and the pre-tokenizer pattern needs `\s+(?!\S)` — the alternative
+that keeps a word's leading space attached to the word — so the split is
+hand-written against the pattern's own alternation order. A nearly correct
+tokenizer is silent: every id it produces is inside the vocabulary and wrong,
+and what comes out is fluent speech saying something else. `tokenizer_test.go`
+therefore checks against vectors taken from the real HuggingFace tokenizer, not
+against itself.
+
+The whole pipeline is verified the way the rate cap above was: synthesize a
+sentence and read it back through the recognizer this application already
+ships. "Halo, ini contoh suara MikkiLens. Kamu sudah live." comes back as
+"Halo, ini contoh suara Miki Lens. Kamu sudah live?".
+
+The model is published officially as PyTorch weights, and MikkiLens has no
+Python in it, so the ONNX used here is a third-party export. That is worth
+stating plainly: the weights were converted by somebody outside the project
+that trained them.
+
 Speech recognition is an interface with two implementations: a local
 whisper.cpp build driven as a child process, and any OpenAI-compatible
 transcription endpoint. Running whisper.cpp out of process costs a few tens of

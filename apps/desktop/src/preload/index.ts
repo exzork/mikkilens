@@ -51,6 +51,14 @@ const api = {
     ipcRenderer.on('engine-status', (_event, status: EngineStatus) => listener(status))
   },
 
+  /**
+   * Ask for a wav file to clone a voice from.
+   *
+   * Returns its bytes rather than its path: the page cannot open a file, and
+   * the engine holding the models may not even be on this machine.
+   */
+  pickRecording: (): Promise<PickedRecording | null> => ipcRenderer.invoke('pick-recording'),
+
   /** Put the typing box away. Escape and playing a song both use it. */
   closeMusicBox: (): Promise<boolean> => ipcRenderer.invoke('music:close'),
 
@@ -64,6 +72,15 @@ const api = {
   onMusicBoxReopened: (listener: () => void): void => {
     ipcRenderer.on('music:reset', () => listener())
   },
+}
+
+export interface PickedRecording {
+  /** A first guess at the voice's name, taken from the filename. */
+  name?: string
+  /** The file's bytes, base64 encoded. */
+  audio?: string
+  /** Set instead of the other two when the file could not be used. */
+  error?: string
 }
 
 export interface CheckResult {

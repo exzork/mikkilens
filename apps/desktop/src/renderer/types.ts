@@ -20,9 +20,22 @@ export interface MikkiLensBridge {
   loginItem(enabled?: boolean): Promise<boolean>
   version(): Promise<string>
   checkForUpdate(): Promise<UpdateCheck>
+  pickRecording(): Promise<PickedRecording | null>
   onEngineStatus(listener: (status: EngineStatus) => void): void
   closeMusicBox(): Promise<boolean>
   onMusicBoxReopened(listener: () => void): void
+}
+
+/**
+ * A wav file she picked to clone a voice from.
+ *
+ * The bytes rather than the path: the page cannot open a file, and the engine
+ * that has to read it may not even be on this machine.
+ */
+export interface PickedRecording {
+  name?: string
+  audio?: string
+  error?: string
 }
 
 /** What a check she asked for turned up. */
@@ -132,6 +145,25 @@ export interface VoiceInfo {
   locale: string
 }
 
+/** One of OmniVoice's cloned voices, which are recordings rather than names. */
+export interface ClonedVoice {
+  name: string
+  /** Whether the recording has been encoded yet. An unprepared voice still
+   * works; the first sentence pays for it. */
+  prepared: boolean
+  /** How long the reference recording is. The model wants three to ten. */
+  seconds: number
+  /** What was read into it, if anything. Its absence is worth showing. */
+  text: string
+}
+
+export interface ClonedVoiceResult {
+  voice: ClonedVoice
+  seconds: number
+  took_s: number
+  voices: ClonedVoice[]
+}
+
 export interface CommandSpec {
   phrases: string[]
   confirm: boolean
@@ -164,7 +196,7 @@ export interface LogPayload {
 export interface AppConfig {
   language: { output: string; stt: string; chat_tts: string }
   speech: {
-    /** Which voice reads: "local", "online" or "windows". */
+    /** Which voice reads: "local", "online", "windows" or "omnivoice". */
     engine: string
     voice: string
     rate: string

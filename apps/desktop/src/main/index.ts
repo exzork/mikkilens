@@ -1,6 +1,6 @@
-import { app, BrowserWindow, ipcMain, Menu, shell, Tray, nativeImage } from 'electron'
-import { join } from 'node:path'
-import { readFileSync } from 'node:fs'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, Tray, nativeImage } from 'electron'
+import { basename, extname, join } from 'node:path'
+import { readFileSync, statSync } from 'node:fs'
 import { Daemon } from './daemon.js'
 import { isDev, watchRenderer } from './dev.js'
 import { homeDirectory, logFile, seedHome } from './home.js'
@@ -429,6 +429,53 @@ ipcMain.handle('read-log-tail', (_event, lines: unknown) => {
     return contents.split(/\r?\n/).slice(-wanted).join('\n')
   } catch (error) {
     return `Could not read the log: ${String(error)}`
+  }
+})
+
+/**
+ * Pick a recording to clone a voice from.
+ *
+ * The file is read here and handed over as bytes rather than as a path,
+ * because the page has no filesystem and the engine may not be on this machine
+ * -- the API it talks to is reachable over the network when she turns that on.
+ * A path would be a name for something only one of the three can open.
+ *
+ * The cap is generous and still a cap. Ten seconds of audio is under two
+ * megabytes however it was recorded, so anything past this is a mistake -- a
+ * whole stream recording picked instead of a clip -- and refusing it with a
+ * reason beats sending a hundred megabytes through a JSON body to be trimmed
+ * at the far end.
+ */
+const maxRecordingBytes = 48 * 1024 * 1024
+
+ipcMain.handle('pick-recording', async () => {
+  const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  const picked = window
+    ? await dialog.showOpenDialog(window, {
+        title: t('audio.omniPickTitle'),
+        properties: ['openFile'],
+        filters: [{ name: 'WAV', extensions: ['wav'] }],
+      })
+    : await dialog.showOpenDialog({ properties: ['openFile'] })
+
+  const path = picked.canceled ? undefined : picked.filePaths[0]
+  if (!path) {
+    return null
+  }
+
+  try {
+    const size = statSync(path).size
+    if (size > maxRecordingBytes) {
+      return { error: t('audio.omniFileTooBig') }
+    }
+    return {
+      // The filename without its extension is the obvious first guess at what
+      // to call the voice, and it is a guess she can overwrite before saving.
+      name: basename(path, extname(path)),
+      audio: readFileSync(path).toString('base64'),
+    }
+  } catch (error) {
+    return { error: String(error) }
   }
 })
 

@@ -175,6 +175,12 @@ func (i *Installer) fetch(ctx context.Context, stage Stage, modelSize string, on
 
 	case StageVoice:
 		return i.fetchVoice(ctx, track)
+
+	case StageOmni:
+		return i.fetchOmni(ctx, track)
+
+	case StageCUDA:
+		return i.fetchCUDA(ctx, track)
 	}
 	return &Error{Reason: "unknown download stage " + string(stage)}
 }

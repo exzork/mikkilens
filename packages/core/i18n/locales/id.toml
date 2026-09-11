@@ -244,3 +244,12 @@ no_audio_device = "Tidak menemukan perangkat suara."
 mic_lost = "Mikrofon terputus."
 network = "Koneksi internet bermasalah."
 config_invalid = "Berkas pengaturan bermasalah: {reason}"
+[omnivoice]
+# Mengklon suara itu pekerjaan yang ada jedanya di tengah: beberapa detik
+# merekam, lalu beberapa detik lagi mengolahnya. Dua-duanya dikatakan, karena
+# buat yang tidak melihat layar, jeda yang diam dan aplikasi yang mati itu
+# kejadian yang sama.
+recording = "Silakan bicara. Bacakan satu dua kalimat dengan suara biasamu, lalu berhenti kalau sudah."
+nothing_heard = "Saya tidak mendengar apa-apa dari mikrofonnya. Tidak ada yang disimpan."
+ready = "Suara {name} sudah siap. Pilih di daftar suara untuk mendengarnya membaca pakai itu."
+failed = "Suara itu tidak bisa disimpan: {reason}"

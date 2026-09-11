@@ -437,6 +437,17 @@ func (e *Engine) installAssets(ctx context.Context) {
 			settings.Music.YtDlpPath, settings.Music.FFmpegPath))
 	}
 
+	// OmniVoice, last of everything and only when it is the one she has
+	// chosen. It is two gigabytes -- larger than the rest of this list put
+	// together -- and nothing falls back to it, so nothing here is waiting on
+	// it. Anything it went in front of would be made to wait for no reason.
+	wanted = assets.WithOmni(wanted, assets.MissingOmni(settings.Speech.Engine))
+
+	// And the graphics runtime in front of it, when there is a card. This is
+	// the piece that decides whether OmniVoice is a voice she can stream with
+	// or one she can only record with; see assets.MissingCUDA.
+	wanted = assets.WithCUDA(wanted, assets.MissingCUDA(settings.Speech.Engine))
+
 	if wanted.Empty() {
 		return
 	}
@@ -1822,6 +1833,17 @@ func (e *Engine) ApplyConfig(updated config.Config) error {
 		// either: the models are the same four, and the voice is a small file
 		// the loaded engine picks up on the next thing she says.
 		tts.ReleaseLocal()
+	}
+
+	if updated.Speech.Engine != previous.Speech.Engine &&
+		previous.Speech.Engine == tts.EngineOmni {
+		// OmniVoice holds a gigabyte and a half, which is the whole reason the
+		// rule above exists, three times over. The test is on what she is
+		// leaving rather than on what she is arriving at: unloading on any
+		// change would mean switching *to* OmniVoice unloaded it, and the
+		// reload is several seconds rather than the local voice's second and a
+		// half.
+		tts.ReleaseOmni()
 	}
 
 	if updated.Speech.Engine != previous.Speech.Engine ||

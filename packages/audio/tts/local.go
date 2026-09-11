@@ -7,25 +7,34 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/tts/supertonic"
 )
 
-// The three engines, named the way they are spoken about rather than after
-// what they are made of. What she picks in settings is one of these.
+// The four engines. The stored values are what they have always been --
+// changing them would silently reset the voice of every existing installation
+// -- but everything anybody reads names the model instead: "local" is shown
+// and spoken about as Supertonic 3, "online" as Edge TTS. The setting is an
+// identifier; the label is the truth about what is running.
 const (
 	// EngineLocal is Supertonic 3, running on this machine. It is the default:
 	// it needs no network, no clock, and nobody else's permission.
 	EngineLocal = "local"
 
-	// EngineOnline is the Edge voices. Free, natural, and somebody else's
-	// service to withdraw.
+	// EngineOnline is Edge TTS, Microsoft's neural voices. Free, natural, and
+	// somebody else's service to withdraw.
 	EngineOnline = "online"
 
-	// EngineWindows is the speech synthesizer built into Windows. It is the
-	// floor rather than a choice: no download, no network, and it sounds like
-	// it.
+	// EngineWindows is SAPI 5, the speech synthesizer built into Windows. It
+	// is the floor rather than a choice: no download, no network, and it
+	// sounds like it.
 	EngineWindows = "windows"
+
+	// EngineOmni is OmniVoice, also running on this machine. It clones a voice
+	// from a recording and reads six hundred languages, and it costs about two
+	// gigabytes and seconds of processor per sentence to do it. Unlike the
+	// other three it is a deliberate choice rather than somewhere to land.
+	EngineOmni = "omnivoice"
 )
 
 // Engines are the choices, in the order the settings page offers them.
-var Engines = []string{EngineLocal, EngineOnline, EngineWindows}
+var Engines = []string{EngineLocal, EngineOnline, EngineWindows, EngineOmni}
 
 // resolveEngine settles on which voice to try first.
 //
@@ -38,6 +47,8 @@ func resolveEngine(name string) string {
 		return EngineOnline
 	case EngineWindows:
 		return EngineWindows
+	case EngineOmni:
+		return EngineOmni
 	default:
 		return EngineLocal
 	}

@@ -54,6 +54,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/devices/test", only(http.MethodPost, s.testDevice))
 	mux.HandleFunc("/api/voices", only(http.MethodGet, s.getVoices))
 	mux.HandleFunc("/api/speak", only(http.MethodPost, s.speak))
+	s.omniRoutes(mux)
 
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/secret", only(http.MethodPut, s.putSecret))
@@ -473,6 +474,14 @@ func (s *Server) getVoices(writer http.ResponseWriter, request *http.Request) {
 		// The Windows synthesizer takes whatever voice Windows is set to. There
 		// is nothing to choose here, and an empty list is the honest answer.
 		respond(writer, http.StatusOK, []tts.Voice{})
+		return
+	}
+	if engine == tts.EngineOmni {
+		// OmniVoice's voices are the recordings in its folder, so this is a
+		// directory listing rather than a fixed set -- read every time for the
+		// same reason the local voice is: somebody drops a wav in and expects
+		// to see it, not to restart first.
+		respond(writer, http.StatusOK, tts.OmniVoices())
 		return
 	}
 
