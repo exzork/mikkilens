@@ -475,6 +475,14 @@ func (s *Server) getVoices(writer http.ResponseWriter, request *http.Request) {
 		respond(writer, http.StatusOK, []tts.Voice{})
 		return
 	}
+	if engine == tts.EngineOmni {
+		// OmniVoice's voices are the recordings in its folder, so this is a
+		// directory listing rather than a fixed set -- read every time for the
+		// same reason the local voice is: somebody drops a wav in and expects
+		// to see it, not to restart first.
+		respond(writer, http.StatusOK, tts.OmniVoices())
+		return
+	}
 
 	voiceOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(request.Context(), 20*time.Second)

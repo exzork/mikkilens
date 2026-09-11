@@ -1,0 +1,273 @@
+[
+ {
+  "text": "<|denoise|><|lang_start|>None<|lang_end|><|instruct_start|>None<|instruct_end|>",
+  "ids": [
+   151669,
+   151670,
+   4064,
+   151671,
+   151672,
+   4064,
+   151673
+  ]
+ },
+ {
+  "text": "<|lang_start|>id<|lang_end|><|instruct_start|>female, low pitch<|instruct_end|>",
+  "ids": [
+   151670,
+   307,
+   151671,
+   151672,
+   42634,
+   11,
+   3347,
+   9649,
+   151673
+  ]
+ },
+ {
+  "text": "<|text_start|>Halo semuanya, selamat datang di siaran hari ini.<|text_end|>",
+  "ids": [
+   151674,
+   39,
+   12529,
+   5234,
+   84,
+   24074,
+   11,
+   11806,
+   41911,
+   3258,
+   524,
+   1853,
+   4403,
+   21320,
+   69696,
+   16806,
+   13,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>Mikrofon dimatikan.<|text_end|>",
+  "ids": [
+   151674,
+   44,
+   1579,
+   299,
+   21470,
+   5103,
+   266,
+   22222,
+   13,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>Kamu sudah live.<|text_end|>",
+  "ids": [
+   151674,
+   42,
+   51972,
+   49796,
+   3887,
+   13,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>Terima kasih atas donasinya sebesar 50.000 rupiah!<|text_end|>",
+  "ids": [
+   151674,
+   21209,
+   7523,
+   47656,
+   6996,
+   87418,
+   1513,
+   300,
+   61087,
+   511,
+   9433,
+   277,
+   220,
+   20,
+   15,
+   13,
+   15,
+   15,
+   15,
+   435,
+   454,
+   19310,
+   0,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>Hello, this is a test of zero-shot voice cloning.<|text_end|>",
+  "ids": [
+   151674,
+   9707,
+   11,
+   419,
+   374,
+   264,
+   1273,
+   315,
+   7168,
+   63530,
+   7743,
+   77866,
+   13,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>I have 2345 apples.   Trailing spaces  <|text_end|>",
+  "ids": [
+   151674,
+   40,
+   614,
+   220,
+   17,
+   18,
+   19,
+   20,
+   40676,
+   13,
+   256,
+   1163,
+   14277,
+   12621,
+   256,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>Line one\nline two\r\nline three<|text_end|>",
+  "ids": [
+   151674,
+   2460,
+   825,
+   198,
+   1056,
+   1378,
+   319,
+   1056,
+   2326,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>[laughter] You really got me.<|text_end|>",
+  "ids": [
+   151674,
+   58,
+   51783,
+   60,
+   1446,
+   2167,
+   2684,
+   752,
+   13,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>emoji 😀 and éèê café naïve<|text_end|>",
+  "ids": [
+   151674,
+   37523,
+   90316,
+   323,
+   3958,
+   4458,
+   5498,
+   51950,
+   94880,
+   586,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>你好世界，这是一个测试。<|text_end|>",
+  "ids": [
+   151674,
+   108386,
+   99489,
+   3837,
+   105464,
+   81705,
+   1773,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>don't it's they're we've I'm we'll he'd<|text_end|>",
+  "ids": [
+   151674,
+   15007,
+   944,
+   432,
+   594,
+   807,
+   2299,
+   582,
+   3003,
+   358,
+   2776,
+   582,
+   3278,
+   566,
+   4172,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>   leading spaces and\t\ttabs<|text_end|>",
+  "ids": [
+   151674,
+   256,
+   6388,
+   12621,
+   323,
+   197,
+   3244,
+   3435,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>Punctuation!!! ???  ...--- ***<|text_end|>",
+  "ids": [
+   151674,
+   47,
+   72299,
+   12069,
+   51317,
+   220,
+   2503,
+   4421,
+   17160,
+   151675
+  ]
+ },
+ {
+  "text": "<|text_start|>MiXeD CaSe DON'T IT'S<|text_end|>",
+  "ids": [
+   151674,
+   41887,
+   55,
+   68,
+   35,
+   14413,
+   1514,
+   44273,
+   17323,
+   8700,
+   13272,
+   151675
+  ]
+ }
+]

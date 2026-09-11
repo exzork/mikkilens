@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -61,6 +62,7 @@ func Start() error {
 			startErr = err
 			return
 		}
+		reachable(library)
 		ort.SetSharedLibraryPath(library)
 		if err := ort.InitializeEnvironment(); err != nil {
 			startErr = &Error{Reason: startupReason(library, err)}
@@ -104,9 +106,20 @@ func Found() error {
 	return err
 }
 
+// CUDADir holds a runtime built with the CUDA provider in it.
+//
+// A directory of its own, searched first, so both builds can sit on the
+// machine at once -- the same arrangement the whisper GPU build uses, for the
+// same reason. The CUDA build is a superset: everything that ran on the
+// processor still runs on the processor unless it asks for the card, and only
+// OmniVoice asks. So preferring it when it is there costs the wake word and
+// Supertonic nothing.
+func CUDADir() string { return filepath.Join(paths.ModelsDir(), "cuda") }
+
 func findLibrary() (string, error) {
 	names := []string{"onnxruntime.dll", "libonnxruntime.so", "libonnxruntime.dylib"}
 	directories := []string{
+		CUDADir(),
 		paths.ModelsDir(),
 		filepath.Join(paths.ModelsDir(), "onnxruntime"),
 		filepath.Join(paths.Root(), "vendor", "onnxruntime"),
@@ -174,4 +187,81 @@ func Options(threads int) (*ort.SessionOptions, error) {
 		}
 	}
 	return options, nil
+}
+
+// Accelerated builds options that would rather run on the graphics card.
+//
+// Only one model in MikkiLens is big enough for this question to arise.
+// Supertonic and the wake word are small enough that moving them to a graphics
+// card would cost more in copying than it saved in arithmetic; OmniVoice is a
+// 0.6B-parameter language model run thirty-two times per sentence, and on a
+// processor that is about twenty-five seconds of work for every second of
+// speech. On a card it is faster than real time. That is not a tuning
+// difference, it is the difference between a usable voice and an unusable one.
+//
+// The second return value is whether the card was actually taken, because that
+// is worth saying out loud rather than leaving to be inferred from how long
+// the first sentence took. A refusal is not an error: the CUDA provider is
+// absent from the processor-only runtime, which is the one most people have,
+// and falling back to it is the correct outcome rather than a failure.
+func Accelerated(threads int, device int) (*ort.SessionOptions, bool, error) {
+	options, err := Options(threads)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := options.AppendExecutionProviderCUDA(cudaOptions(device)); err != nil {
+		slog.Info("the graphics card is not available to the ONNX runtime; "+
+			"using the processor", "reason", err)
+		return options, false, nil
+	}
+	return options, true, nil
+}
+
+// cudaOptions are how the card is asked for.
+//
+// The arena is capped rather than left to grow. ONNX Runtime's default is to
+// take memory as it needs it and never give it back, which on a machine whose
+// graphics card is also holding a game and whatever OBS is encoding is exactly
+// the wrong default -- the failure it produces is not a slow voice but a
+// dropped frame in somebody else's capture. Two gigabytes is enough for this
+// model with room over, and leaves the card to its real job.
+func cudaOptions(device int) *ort.CUDAProviderOptions {
+	options, err := ort.NewCUDAProviderOptions()
+	if err != nil {
+		return nil
+	}
+	if err := options.Update(map[string]string{
+		"device_id":                 strconv.Itoa(device),
+		"gpu_mem_limit":             strconv.Itoa(2 * 1024 * 1024 * 1024),
+		"arena_extend_strategy":     "kSameAsRequested",
+		"cudnn_conv_algo_search":    "HEURISTIC",
+		"do_copy_in_default_stream": "1",
+	}); err != nil {
+		slog.Debug("the CUDA provider did not accept a setting", "error", err)
+	}
+	return options
+}
+
+// reachable puts the runtime's own directory where Windows will look for the
+// libraries it depends on.
+//
+// The processor-only runtime is one self-contained file and needs none of
+// this. The CUDA build is not: onnxruntime.dll loads a provider DLL, and that
+// provider loads cuBLAS, and cuBLAS is found by the ordinary search path --
+// which does not include the directory of the DLL that asked for it. Without
+// this, a complete and correct installation fails with "LoadLibrary failed for
+// cublasLt64_12.dll", falls back to the processor, and the only visible
+// symptom is that every sentence takes half a minute.
+//
+// Prepended rather than appended, so a matching pair of libraries is preferred
+// over whatever else on the machine happens to share a name with one of them.
+func reachable(library string) {
+	directory := filepath.Dir(library)
+	current := os.Getenv("PATH")
+	if strings.HasPrefix(current, directory+string(os.PathListSeparator)) {
+		return
+	}
+	if err := os.Setenv("PATH", directory+string(os.PathListSeparator)+current); err != nil {
+		slog.Debug("could not put the runtime on the search path", "error", err)
+	}
 }

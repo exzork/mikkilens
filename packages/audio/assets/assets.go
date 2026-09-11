@@ -92,6 +92,18 @@ var Bytes = map[Stage]int64{
 	// ffmpeg somewhere on the PATH and never reach this stage at all.
 	StagePlayer: 18_400_000,
 	StageFFmpeg: 92_000_000,
+	// OmniVoice: 1.2 GB of language model, 650 MB of voice encoder, 86 MB of
+	// decoder and 11 MB of tokenizer. By a distance the largest thing
+	// MikkiLens will ever ask to download, which is why nothing asks for it
+	// unless she has chosen it.
+	StageOmni: 1_977_000_000,
+}
+
+func init() {
+	// The CUDA build of the runtime and the NVIDIA libraries it loads. Fetched
+	// only alongside OmniVoice, and only on a machine with a card to use it.
+	// Summed from the four downloads rather than written out; see cudaBytes.
+	Bytes[StageCUDA] = cudaBytes()
 }
 
 // modelsDir is where everything lands. A variable so tests can contain it.

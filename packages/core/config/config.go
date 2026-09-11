@@ -39,16 +39,24 @@ type Language struct {
 
 // Speech covers everything about the voice that reads to her.
 type Speech struct {
-	// Engine is which voice reads: "local", "online" or "windows".
+	// Engine is which voice reads: "local", "online", "windows" or
+	// "omnivoice".
 	//
 	// "local" is Supertonic 3, running here. It is the default because it is
 	// the only one that cannot be taken away mid-stream: no network, no clock,
 	// nobody else's service. It costs four hundred megabytes to download and
 	// about as much again in memory while it is loaded.
 	//
-	// "online" is the Edge voices, which are free and natural and somebody
-	// else's to withdraw. "windows" is the synthesizer built into Windows,
-	// which is the floor rather than a choice.
+	// "online" is Edge TTS, Microsoft's neural voices, which are free and
+	// natural and somebody else's to withdraw. "windows" is SAPI 5, the
+	// synthesizer built into Windows, which is the floor rather than a choice.
+	//
+	// "omnivoice" is OmniVoice, also running here: six hundred languages, and
+	// a voice taken from a recording rather than from a list. It is the one
+	// choice here that is a trade rather than a preference -- two gigabytes of
+	// models, and a speed that depends entirely on whether there is an NVIDIA
+	// card to run it on. On one it is faster than real time; on a processor
+	// alone it is about twenty-five times slower than real time.
 	//
 	// Whichever is set, the others stand behind it, so none of these is a way
 	// to end up with silence. Empty means "local".

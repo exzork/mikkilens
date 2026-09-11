@@ -164,7 +164,7 @@ export interface LogPayload {
 export interface AppConfig {
   language: { output: string; stt: string; chat_tts: string }
   speech: {
-    /** Which voice reads: "local", "online" or "windows". */
+    /** Which voice reads: "local", "online", "windows" or "omnivoice". */
     engine: string
     voice: string
     rate: string

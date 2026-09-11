@@ -728,8 +728,8 @@ element('save-audio').addEventListener('click', () => {
 /**
  * Fills the voice dropdown for whichever engine is selected.
  *
- * The two engines do not share a naming scheme -- "F1" against
- * "id-ID-GadisNeural" -- so the list is refetched whenever the engine changes
+ * No two engines share a naming scheme -- "F1" against "id-ID-GadisNeural"
+ * against a recording's filename -- so the list is refetched whenever it changes
  * rather than only at startup. `keep` is the voice to reselect if it is still
  * in the new list, which it will not be across a change of engine; falling back
  * to the first entry is what makes switching engines leave a usable voice
@@ -761,21 +761,49 @@ async function fillVoices(keep: string): Promise<void> {
     select.value = keep
   }
 
-  const hint = element('voice-engine-hint')
-  if (engine === 'local') {
-    // The reading rate is capped for this engine and not for the others, and
-    // a slider that stops doing anything without saying so is the same, to
-    // the ear, as a slider that is broken.
-    const ceiling = t('audio.engineLocalRateCap', {
-      percent: String(settings?._local_speed_ceiling ?? 23),
-    })
-    hint.textContent =
-      (available.length > 0 ? t('audio.engineLocalReady') : t('audio.engineLocalMissing')) +
-      ' ' +
-      ceiling
-  } else {
-    hint.textContent =
-      engine === 'windows' ? t('audio.engineWindowsHint') : t('audio.engineOnlineHint')
+  element('voice-engine-hint').textContent = engineHint(engine, available.length > 0)
+}
+
+/**
+ * What the line under the engine dropdown says.
+ *
+ * Each engine is named after the model it actually is -- Supertonic 3, Edge
+ * TTS, SAPI 5, OmniVoice -- rather than after where it runs, because "on this
+ * computer" and "online" described the two of them that existed and stopped
+ * describing anything once there were two that run here. The hint carries the
+ * rest: what the thing is, what it costs, and what stands behind it.
+ *
+ * `installed` is whether that engine has anything to offer, which is the same
+ * question as whether its models are downloaded for the two that have models.
+ */
+function engineHint(engine: string, installed: boolean): string {
+  switch (engine) {
+    case 'local': {
+      // The reading rate is capped for this engine and not for the others, and
+      // a slider that stops doing anything without saying so is the same, to
+      // the ear, as a slider that is broken.
+      const ceiling = t('audio.engineLocalRateCap', {
+        percent: String(settings?._local_speed_ceiling ?? 23),
+      })
+      return (
+        (installed ? t('audio.engineLocalReady') : t('audio.engineLocalMissing')) + ' ' + ceiling
+      )
+    }
+    case 'omnivoice':
+      // Three sentences rather than one, because this is the engine somebody
+      // can choose and then wonder why every sentence arrives late. What it
+      // costs is said in the same breath as what it is, not discovered.
+      return (
+        (installed ? t('audio.engineOmniReady') : t('audio.engineOmniMissing')) +
+        ' ' +
+        t('audio.engineOmniHint') +
+        ' ' +
+        t('audio.engineOmniSlow')
+      )
+    case 'windows':
+      return t('audio.engineWindowsHint')
+    default:
+      return t('audio.engineOnlineHint')
   }
 }
 

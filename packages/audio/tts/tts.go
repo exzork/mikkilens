@@ -1,20 +1,31 @@
 // Package tts turns text into audio, and audio into sound on a chosen device.
 //
-// There are three voices, and the rule between them is that a dropped
+// There are four voices, and the rule between them is that a dropped
 // connection must never become silence:
 //
-//	local    Supertonic 3, run here through ONNX Runtime. Thirty-one
-//	         languages, ten voices, and nothing outside this machine to
-//	         depend on. The default, and four hundred megabytes to fetch.
-//	online   The Edge voices. Free and natural, but they need the network,
-//	         they need the clock to be roughly right, and they are somebody
-//	         else's service to withdraw.
-//	windows  The synthesizer built into Windows. No download, no network,
-//	         and it sounds like it -- the floor rather than a choice.
+//	local      Supertonic 3, run here through ONNX Runtime. Thirty-one
+//	           languages, ten voices, and nothing outside this machine to
+//	           depend on. The default, and four hundred megabytes to fetch.
+//	online     Edge TTS, Microsoft's neural voices. Free and natural, but
+//	           they need the network, they need the clock to be roughly
+//	           right, and they are somebody else's service to withdraw.
+//	windows    SAPI 5, the synthesizer built into Windows. No download, no
+//	           network, and it sounds like it -- the floor, not a choice.
+//	omnivoice  OmniVoice, also run here. Six hundred languages, and its
+//	           voice comes from a recording rather than a list. Two
+//	           gigabytes, and it wants a graphics card: on one it is faster
+//	           than real time, on a processor alone it is twenty-five times
+//	           slower than real time.
 //
-// Whichever she picks, the others stand behind it. A substitute is never
-// cached: it is a degraded answer to a temporary problem, and keeping it would
-// hold the wrong voice long after the right one came back.
+// Whichever she picks, the others stand behind it -- except OmniVoice, which
+// stands behind nothing. Falling back is for when something has gone wrong and
+// the answer still has to arrive; on a machine with no card, an engine that
+// takes half a minute a sentence is not an answer arriving, it is the same
+// silence with extra steps.
+//
+// A substitute is never cached: it is a degraded answer to a temporary problem,
+// and keeping it would hold the wrong voice long after the right one came
+// back.
 package tts
 
 import (
@@ -52,14 +63,15 @@ var (
 // own level every time and the volume is applied to the samples afterwards, by
 // [Audio.AtVolume] -- see the comment there for why.
 type Options struct {
-	// Engine is which voice reads: EngineLocal, EngineOnline or
-	// EngineWindows. Empty means local.
+	// Engine is which voice reads: EngineLocal, EngineOnline, EngineWindows
+	// or EngineOmni. Empty means local.
 	Engine string
 
 	// Voice is a name in whatever scheme Engine uses -- "F1" for the local
-	// voice, "id-ID-GadisNeural" for the online one. A name the chosen engine
-	// does not recognise falls back to that engine's default rather than
-	// failing, because a voice she did not pick is a better answer than silence.
+	// voice, "id-ID-GadisNeural" for the online one, the name of a recording
+	// for OmniVoice. A name the chosen engine does not recognise falls back to
+	// that engine's default rather than failing, because a voice she did not
+	// pick is a better answer than silence.
 	Voice string
 
 	Rate string
@@ -165,6 +177,14 @@ func fallbackOrder(chosen string) []string {
 		return []string{EngineOnline, EngineLocal, EngineWindows}
 	case EngineWindows:
 		return []string{EngineWindows}
+	case EngineOmni:
+		// Everything stands behind OmniVoice and OmniVoice stands behind
+		// nothing. Without a graphics card it is the slowest by a wide margin,
+		// so arriving at it by accident -- because a download had not
+		// finished, or the network was down for a moment -- would turn a
+		// missing confirmation into a confirmation that comes half a minute
+		// late, which on a live stream is worse than the one that never came.
+		return []string{EngineOmni, EngineLocal, EngineOnline, EngineWindows}
 	default:
 		return []string{EngineLocal, EngineOnline, EngineWindows}
 	}
@@ -176,6 +196,13 @@ func renderWith(ctx context.Context, engine, text string, options Options) (Audi
 	switch engine {
 	case EngineLocal:
 		audio, err := synthesizeLocal(ctx, text, options)
+		if err != nil {
+			return Audio{}, nil, err
+		}
+		return audio, EncodeWAV(audio), nil
+
+	case EngineOmni:
+		audio, err := synthesizeOmni(ctx, text, options)
 		if err != nil {
 			return Audio{}, nil, err
 		}

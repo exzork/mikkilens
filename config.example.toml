@@ -31,8 +31,24 @@ chat_tts = "follow" # "follow" reads chat in the output-language voice.
 #              natural in Indonesian -- but they need the network, they need
 #              the clock on this machine to be roughly right, and they are
 #              somebody else's service to withdraw.
-#   "windows"  The synthesizer built into Windows. Nothing to download and
-#              nothing to go wrong, and it sounds like it. This is the floor.
+#   "windows"  SAPI 5, the synthesizer built into Windows. Nothing to download
+#              and nothing to go wrong, and it sounds like it. This is the
+#              floor.
+#   "omnivoice" OmniVoice, also running on this computer -- a 0.6B diffusion
+#              language model, through ONNX Runtime. Six hundred languages,
+#              and its voice comes from a recording you supply rather than
+#              from a list (see `voice` below). It costs about 2 GB to
+#              download and about 1.4 GB of memory while loaded.
+#
+#              Speed is the part worth reading twice, and it depends entirely
+#              on your graphics card. On an NVIDIA card it is faster than real
+#              time (measured: 2.3s of work for 3s of speech), and the ~1 GB
+#              CUDA runtime is fetched automatically alongside the models. On
+#              a processor alone it is roughly 25 times slower than real time
+#              -- one sentence takes half a minute -- which is a voice for
+#              recordings rather than for a live chat. Confirmations are
+#              cached and pay that once; chat and donations pay it every time.
+#              Nothing falls back to it, for the same reason.
 #
 # Upgrading from before 0.11 does not change the voice you were hearing. A file
 # that names an online voice and says nothing here is taken to mean "online" --
@@ -48,6 +64,14 @@ engine = "local"
 #            own. Empty means F1.
 #   online   "id-ID-GadisNeural", "id-ID-ArdiNeural", and so on. Empty uses the
 #            language default (id -> id-ID-GadisNeural).
+#   omnivoice The name of a recording in data/models/omnivoice/voices. Put a
+#            clean 3 to 10 second mikki.wav there and set this to "mikki"; put
+#            the words it says in mikki.txt beside it and it clones
+#            noticeably better. The recording is turned into a mikki.json the
+#            first time it is used, and the .json is the voice after that --
+#            it can be copied between machines without the wav. Empty means
+#            no reference at all, and the model invents a voice, differently
+#            every time.
 #
 # A name the chosen engine does not recognise is not an error: it falls back to
 # that engine's own default, because a voice you did not pick is a much better
