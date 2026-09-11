@@ -3,6 +3,8 @@ import type {
   AppConfig,
   ChannelInfo,
   ChannelsPayload,
+  ClonedVoice,
+  ClonedVoiceResult,
   CommandsPayload,
   CommandSpec,
   DeviceInfo,
@@ -762,7 +764,211 @@ async function fillVoices(keep: string): Promise<void> {
   }
 
   element('voice-engine-hint').textContent = engineHint(engine, available.length > 0)
+
+  // Cloning belongs to OmniVoice and to nothing else, so the whole panel comes
+  // and goes with the engine rather than sitting there greyed out.
+  const cloning = element('omni-clone')
+  cloning.hidden = engine !== 'omnivoice'
+  if (!cloning.hidden) {
+    void refreshClonedVoices()
+  }
 }
+
+/**
+ * The voices OmniVoice can read in, as things that can be added and removed.
+ *
+ * This is a second list of the same voices the dropdown above already shows,
+ * and it is deliberately not merged with it. The dropdown answers "which one
+ * reads?"; this answers "which ones are there, how long is each, and does it
+ * have a transcript?" -- and the last of those is the one number that most
+ * decides how well a clone came out, which a dropdown has nowhere to put.
+ */
+async function refreshClonedVoices(): Promise<void> {
+  const voices = (await api<ClonedVoice[]>('/omnivoice/voices').catch(() => [])) ?? []
+  const list = element('omni-voices')
+  list.replaceChildren()
+
+  if (voices.length === 0) {
+    const empty = document.createElement('p')
+    empty.className = 'hint'
+    empty.textContent = t('audio.omniNoVoices')
+    list.append(empty)
+  }
+
+  for (const voice of voices) {
+    const row = document.createElement('p')
+    row.className = 'cloned-voice'
+
+    const name = document.createElement('strong')
+    name.textContent = voice.name
+    row.append(name)
+
+    const detail = document.createElement('span')
+    detail.className = 'hint'
+    detail.textContent = ' ' + describeClone(voice)
+    row.append(detail)
+
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.className = 'ghost small'
+    remove.textContent = t('audio.omniRemove')
+    remove.setAttribute('aria-label', t('audio.omniRemoveNamed', { name: voice.name }))
+    remove.addEventListener('click', () => {
+      void removeClonedVoice(voice.name, remove)
+    })
+    row.append(remove)
+
+    list.append(row)
+  }
+
+  // A name that is free, so the common case is pressing Record and nothing
+  // else. She can still overwrite it.
+  const field = element<HTMLInputElement>('omni-name')
+  if (field.value.trim() === '') {
+    field.value = suggestVoiceName(voices)
+  }
+  const script = element<HTMLTextAreaElement>('omni-script')
+  if (script.value.trim() === '') {
+    script.value = t('audio.omniScriptDefault')
+  }
+}
+
+/** What one cloned voice's line says after its name. */
+function describeClone(voice: ClonedVoice): string {
+  const parts = [t('audio.omniSeconds', { seconds: voice.seconds.toFixed(1) })]
+  if (!voice.prepared) {
+    parts.push(t('audio.omniUnprepared'))
+  }
+  // Said only when it is missing. A transcript being present is the ordinary
+  // case and needs no remark; its absence is a fixable quality problem that is
+  // otherwise invisible.
+  if (voice.text.trim() === '') {
+    parts.push(t('audio.omniNoScript'))
+  }
+  if (voice.seconds > 0 && voice.seconds < 3) {
+    parts.push(t('audio.omniTooShort'))
+  }
+  return parts.join(' · ')
+}
+
+/** A name nothing else is using, so Record works with no typing at all. */
+function suggestVoiceName(voices: ClonedVoice[]): string {
+  const taken = new Set(voices.map((voice) => voice.name))
+  const base = t('audio.omniDefaultName')
+  if (!taken.has(base)) {
+    return base
+  }
+  for (let number = 2; number < 100; number += 1) {
+    if (!taken.has(`${base}-${number}`)) {
+      return `${base}-${number}`
+    }
+  }
+  return base
+}
+
+async function removeClonedVoice(name: string, button: HTMLButtonElement): Promise<void> {
+  button.disabled = true
+  try {
+    await api(`/omnivoice/voices?name=${encodeURIComponent(name)}`, { method: 'DELETE' })
+    announce(t('audio.omniRemoved', { name }))
+    await refreshClonedVoices()
+    // The dropdown was offering a voice that no longer exists.
+    await fillVoices(element<HTMLSelectElement>('voice').value)
+  } catch (error) {
+    alarm(t('audio.omniFailed', { detail: String(error) }))
+  } finally {
+    button.disabled = false
+  }
+}
+
+/**
+ * Record through the microphone she already chose, or take a file.
+ *
+ * Both end in the same place, which is why they share this. The engine does
+ * the slow half -- several seconds of encoding -- and says so out loud while
+ * it happens, so the only thing left here is to keep the buttons from being
+ * pressed twice and to put the result on screen for whoever is looking.
+ */
+async function addClonedVoice(
+  path: string,
+  body: Record<string, string>,
+  pending: string,
+): Promise<void> {
+  const record = element<HTMLButtonElement>('omni-record')
+  const pick = element<HTMLButtonElement>('omni-pick')
+  const result = element('omni-result')
+
+  record.disabled = true
+  pick.disabled = true
+  result.textContent = pending
+  announce(pending)
+
+  try {
+    const saved = await api<ClonedVoiceResult>(path, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    const message = t('audio.omniSaved', {
+      name: saved.voice.name,
+      seconds: saved.seconds.toFixed(1),
+    })
+    result.textContent = message
+    announce(message)
+
+    await refreshClonedVoices()
+    // Select what she just made. Recording a voice and then having to go and
+    // find it in a dropdown is the step this whole panel exists to remove.
+    await fillVoices(saved.voice.name)
+    element<HTMLSelectElement>('voice').value = saved.voice.name
+    element<HTMLInputElement>('omni-name').value = ''
+  } catch (error) {
+    const message = t('audio.omniFailed', { detail: String(error) })
+    result.textContent = message
+    alarm(message)
+  } finally {
+    record.disabled = false
+    pick.disabled = false
+  }
+}
+
+element('omni-record').addEventListener('click', () => {
+  void addClonedVoice(
+    '/omnivoice/record',
+    {
+      name: element<HTMLInputElement>('omni-name').value,
+      text: element<HTMLTextAreaElement>('omni-script').value,
+    },
+    t('audio.omniRecording'),
+  )
+})
+
+element('omni-pick').addEventListener('click', () => {
+  void (async () => {
+    const picked = await window.mikkilens.pickRecording()
+    if (!picked) {
+      return // she closed the dialog, which is not a failure
+    }
+    if (picked.error || !picked.audio) {
+      alarm(t('audio.omniFailed', { detail: picked.error ?? '' }))
+      return
+    }
+    // The filename is a better guess than the placeholder, but only when she
+    // has not typed something of her own.
+    const field = element<HTMLInputElement>('omni-name')
+    if (field.value.trim() === '' && picked.name) {
+      field.value = picked.name
+    }
+    await addClonedVoice(
+      '/omnivoice/upload',
+      {
+        name: field.value,
+        text: element<HTMLTextAreaElement>('omni-script').value,
+        audio: picked.audio,
+      },
+      t('audio.omniEncoding'),
+    )
+  })()
+})
 
 /**
  * What the line under the engine dropdown says.

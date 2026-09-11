@@ -1,9 +1,7 @@
 package omnivoice
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"math"
 	"os"
 	"path/filepath"
@@ -137,29 +135,87 @@ func TestSpeaksLive(t *testing.T) {
 	}
 }
 
-// encodeWAV is here rather than in the package because nothing in the package
-// needs it: the engine hands samples to the speech bus, which owns the output
-// device. Only a person checking by ear needs a file.
-func encodeWAV(samples []float32) []byte {
-	body := &bytes.Buffer{}
-	for _, value := range samples {
-		clamped := math.Max(-1, math.Min(1, float64(value)))
-		_ = binary.Write(body, binary.LittleEndian, int16(clamped*32767))
+// Cloning, all the way through: a recording goes in, a voice comes out, and
+// she reads a new sentence in it.
+//
+// This is the path the settings page drives, and the only one where the 650 MB
+// encoder is ever loaded. It is worth exercising end to end because the failure
+// it guards against is not a crash: a clone that silently falls back to the
+// model's own invented voice sounds completely fine and is not the voice
+// anybody asked for.
+func TestClonesAVoiceLive(t *testing.T) {
+	liveOrSkip(t)
+	if !EncoderInstalled() {
+		t.Skipf("the voice encoder is not installed in %s", Dir())
 	}
 
-	out := &bytes.Buffer{}
-	out.WriteString("RIFF")
-	_ = binary.Write(out, binary.LittleEndian, uint32(36+body.Len()))
-	out.WriteString("WAVEfmt ")
-	_ = binary.Write(out, binary.LittleEndian, uint32(16))
-	_ = binary.Write(out, binary.LittleEndian, uint16(1))
-	_ = binary.Write(out, binary.LittleEndian, uint16(1))
-	_ = binary.Write(out, binary.LittleEndian, uint32(SampleRate))
-	_ = binary.Write(out, binary.LittleEndian, uint32(SampleRate*2))
-	_ = binary.Write(out, binary.LittleEndian, uint16(2))
-	_ = binary.Write(out, binary.LittleEndian, uint16(16))
-	out.WriteString("data")
-	_ = binary.Write(out, binary.LittleEndian, uint32(body.Len()))
-	out.Write(body.Bytes())
-	return out.Bytes()
+	// A reference recording made here rather than shipped: six seconds of a
+	// tone is not a voice, but it is audio with structure, and what is being
+	// checked is that it survives being encoded, stored, reloaded and used.
+	reference := make([]float32, 6*SampleRate)
+	for index := range reference {
+		at := float64(index) / SampleRate
+		reference[index] = float32(0.3 * math.Sin(2*math.Pi*180*at) *
+			(0.6 + 0.4*math.Sin(2*math.Pi*3*at)))
+	}
+
+	const name = "test-clone"
+	t.Cleanup(func() { _ = Remove(name) })
+
+	if err := Save(name, "Halo, ini rekaman contoh.", reference, SampleRate); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// It has to show up the way the settings page would see it.
+	var saved *VoiceInfo
+	for _, candidate := range Library() {
+		if candidate.Name == name {
+			found := candidate
+			saved = &found
+		}
+	}
+	if saved == nil {
+		t.Fatal("the voice was saved and does not appear in the library")
+	}
+	if !saved.Prepared {
+		t.Error("the voice was saved without being prepared; the first sentence will stall")
+	}
+	if saved.Seconds < 5 || saved.Seconds > 7 {
+		t.Errorf("a six second recording came back as %.1fs", saved.Seconds)
+	}
+	if saved.Text == "" {
+		t.Error("the transcript was not kept")
+	}
+
+	engine, err := Open()
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer engine.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer cancel()
+
+	samples, err := engine.Speak(ctx, "Selamat pagi semuanya.", Options{
+		Voice:    name,
+		Language: "id",
+	})
+	if err != nil {
+		t.Fatalf("Speak in the cloned voice: %v", err)
+	}
+	if len(samples) == 0 {
+		t.Fatal("the cloned voice produced no audio")
+	}
+	t.Logf("spoke %.2fs in the cloned voice", float64(len(samples))/SampleRate)
+
+	// Removing it has to take everything, or the settings page shows a voice
+	// that is half gone and cannot be spoken in.
+	if err := Remove(name); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	for _, candidate := range Library() {
+		if candidate.Name == name {
+			t.Error("the voice is still listed after being removed")
+		}
+	}
 }

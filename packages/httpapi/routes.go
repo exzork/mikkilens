@@ -54,6 +54,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/devices/test", only(http.MethodPost, s.testDevice))
 	mux.HandleFunc("/api/voices", only(http.MethodGet, s.getVoices))
 	mux.HandleFunc("/api/speak", only(http.MethodPost, s.speak))
+	s.omniRoutes(mux)
 
 	mux.HandleFunc("/api/config", s.handleConfig)
 	mux.HandleFunc("/api/secret", only(http.MethodPut, s.putSecret))

@@ -160,6 +160,26 @@ a `.json` beside it; the `.json` is the voice after that and can be copied
 between machines. The 650 MB encoder is opened for that one question and closed
 again, so steady-state cost is the language model and the decoder only.
 
+Which is why cloning is a panel in the Audio tab rather than an instruction to
+open a folder. `/api/omnivoice/record` records through the microphone the
+engine already owns -- `capture.Record` adds a listener rather than taking the
+device, so the wake word keeps listening throughout -- and `/api/omnivoice/upload`
+takes a wav the window's main process read, as bytes rather than a path,
+because the page has no filesystem and the engine may not be on this machine.
+Both announce themselves through the speech bus, because encoding takes several
+seconds and a silent pause is indistinguishable from a crash to somebody not
+looking at the screen. The name is the one piece of user input that becomes a
+path, so `CleanName` is strict and `TestOmniUploadCannotWriteOutsideItsFolder`
+checks it with the traversals somebody would actually type.
+
+The panel carries a script to read rather than an empty transcript box. The
+model is told what was said as well as how, so the transcript is what most
+decides how good a clone is -- and reading a given sentence produces an exact
+transcript by construction, where speaking freely and typing an approximation
+afterwards produces a wrong one. A voice with no transcript still works and is
+labelled in the list, because it is the one quality problem that is otherwise
+invisible.
+
 *It is slow on a CPU.* Measured here: 76 seconds for 3.04 seconds of speech at
 16 steps, about 25x slower than real time. On the CUDA provider it is faster
 than real time. That is not a tuning difference, so `onnx.Accelerated` asks for

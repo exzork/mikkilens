@@ -204,6 +204,39 @@
               <label for="voice" data-i18n="audio.voice">Voice</label>
               <select id="voice"></select>
             </p>
+
+            <!--
+              Cloning, which only OmniVoice has. It is hidden for the other
+              three rather than shown disabled: they do not have voices that
+              can be added, so an empty version of this would be a control
+              that describes a thing that does not exist.
+            -->
+            <fieldset id="omni-clone" hidden>
+              <legend data-i18n="audio.omniCloneLegend">Add a voice</legend>
+              <p class="hint" data-i18n="audio.omniCloneHint"></p>
+
+              <div id="omni-voices"></div>
+
+              <p>
+                <label for="omni-name" data-i18n="audio.omniName">Call it</label>
+                <input type="text" id="omni-name" maxlength="48" autocomplete="off" />
+              </p>
+              <p>
+                <label for="omni-script" data-i18n="audio.omniScript">Read this out</label>
+                <textarea id="omni-script" rows="3"></textarea>
+              </p>
+              <p class="hint" data-i18n="audio.omniScriptHint"></p>
+
+              <p class="buttons">
+                <button type="button" id="omni-record" class="primary" data-i18n="audio.omniRecord">
+                  Record it now
+                </button>
+                <button type="button" id="omni-pick" data-i18n="audio.omniPick">
+                  Use a file instead
+                </button>
+              </p>
+              <p class="result" id="omni-result" role="status" aria-live="polite"></p>
+            </fieldset>
             <p>
               <label for="rate" data-i18n="audio.rate">Speaking rate</label>
               <input type="range" id="rate" min="-50" max="100" step="5" data-unit="percent" />
