@@ -40,6 +40,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/exzork/mikkilens/packages/audio/speakable"
 	"github.com/exzork/mikkilens/packages/audio/tts/omnivoice"
 	"github.com/exzork/mikkilens/packages/core/paths"
 )
@@ -100,7 +101,13 @@ type Options struct {
 // Synthesize renders text with the chosen voice, falling back through the
 // others rather than failing.
 func Synthesize(ctx context.Context, text string, options Options) (Audio, error) {
-	key := cacheKey(text, options)
+	// The voice is given the numbers as words, whichever voice it is: none of
+	// them reads "Rp50.000" or "20:15" reliably. The cache is keyed on what is
+	// actually spoken, so a better reading of a number is heard straight away
+	// rather than after the old one is evicted. Audio.Text keeps what was
+	// written.
+	spoken := speakable.Numbers(text, options.Language)
+	key := cacheKey(spoken, options)
 
 	if !options.NoCache {
 		if cached, ok := recall(key); ok {
@@ -117,7 +124,7 @@ func Synthesize(ctx context.Context, text string, options Options) (Audio, error
 		}
 	}
 
-	audio, encoded, err := render(ctx, text, options)
+	audio, encoded, err := render(ctx, spoken, options)
 	if err != nil {
 		return Audio{}, err
 	}
