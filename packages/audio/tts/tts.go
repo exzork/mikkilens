@@ -40,6 +40,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/exzork/mikkilens/packages/audio/tts/omnivoice"
 	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
@@ -288,10 +289,19 @@ func ClearCache() {
 // the language are in here because the same words in the same voice name mean
 // different audio under a different engine, and a stale entry would be heard
 // as the setting having done nothing.
+//
+// An OmniVoice voice is a recording, and a new recording saved under the same
+// name is a different voice -- so its version goes in too. Without it every
+// phrase already said kept playing in the voice that had just been replaced.
 func cacheKey(text string, options Options) string {
+	engine := resolveEngine(options.Engine)
+	version := ""
+	if engine == EngineOmni {
+		version = omnivoice.Version(options.Voice)
+	}
 	sum := sha256.Sum256([]byte(strings.Join([]string{
-		text, resolveEngine(options.Engine), options.Voice,
-		options.Rate, options.Language,
+		text, engine, options.Voice,
+		options.Rate, options.Language, version,
 	}, "\x00")))
 	return hex.EncodeToString(sum[:])[:32]
 }

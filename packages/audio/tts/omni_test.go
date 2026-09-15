@@ -2,9 +2,13 @@ package tts
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/exzork/mikkilens/packages/audio/tts/omnivoice"
+	"github.com/exzork/mikkilens/packages/core/paths"
 )
 
 func TestOmniVoiceIsAnEngine(t *testing.T) {
@@ -112,6 +116,42 @@ func TestOmniVoiceHasItsOwnCacheEntries(t *testing.T) {
 	other := cacheKey("Halo", Options{Engine: EngineOmni, Voice: "budi"})
 	if omni == other {
 		t.Error("two different OmniVoice voices share a cache entry")
+	}
+}
+
+// Saving a new recording under a voice's existing name is how a voice gets
+// replaced, and the cache has to notice. It did not, once: every phrase already
+// said went on playing in the voice that had just been thrown away.
+func TestReplacingAnOmniVoiceMissesTheCache(t *testing.T) {
+	root := t.TempDir()
+	paths.SetRoot(root)
+	t.Cleanup(func() { paths.SetRoot("") })
+
+	voices := filepath.Join(root, "data", "models", "omnivoice", "voices")
+	if err := os.MkdirAll(voices, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	recording := filepath.Join(voices, "mikki.wav")
+	write := func(content string, at time.Time) {
+		t.Helper()
+		if err := os.WriteFile(recording, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(recording, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	options := Options{Engine: EngineOmni, Voice: "mikki"}
+
+	write("the first recording", time.Unix(1_000, 0))
+	before := cacheKey("Halo", options)
+	if again := cacheKey("Halo", options); again != before {
+		t.Fatal("the same voice gives two different cache keys, so nothing is ever reused")
+	}
+
+	write("the recording that replaced it", time.Unix(2_000, 0))
+	if after := cacheKey("Halo", options); after == before {
+		t.Error("a replaced recording still finds the speech rendered in the old one")
 	}
 }
 

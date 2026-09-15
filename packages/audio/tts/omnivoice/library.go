@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -78,6 +79,25 @@ func describe(name string) VoiceInfo {
 		info.Seconds = float64(len(samples)) / SampleRate
 	}
 	return info
+}
+
+// Version names one state of a voice's files: its recording and transcript, by
+// size and modification time. Replacing either gives a different answer, which
+// is what lets cached speech tell the voice it was rendered in apart from a
+// new one saved under the same name. A voice with no files is "".
+func Version(name string) string {
+	if name == "" {
+		return ""
+	}
+	var parts []string
+	for _, path := range []string{recordingPath(name), transcriptPath(name)} {
+		if info, err := os.Stat(path); err == nil {
+			parts = append(parts, fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano()))
+		} else {
+			parts = append(parts, "-")
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 // Save writes a recording as a voice and prepares it.
