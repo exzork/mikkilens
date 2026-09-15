@@ -407,10 +407,15 @@ type textRuns struct {
 
 // text flattens the runs into something speakable.
 //
-// A channel's own emotes have no unicode character to read, only a name like
-// :_wave:, so the name is used with its decoration stripped. Standard emoji
-// carry the character itself in emojiId, and are kept: whether they are read
-// out is the reader's decision, not this one's.
+// A channel's own emotes are pictures with a name like :_eyes-purple-crying:,
+// and they are left out. Reading the name looked like the kind thing to do and
+// was not: emotes arrive packed against the words and each other, so a real
+// message came out as "degdegan eyes purple crying eyes purple crying" -- the
+// same made-up phrase twice, louder than what was actually typed. Standard
+// emoji carry the character itself in emojiId, and are kept: whether they are
+// read out is the reader's decision, not this one's. A message that was only
+// custom emotes now carries no words, which is what lets the emote-only filter
+// see it for what it is.
 func (t *textRuns) text() string {
 	if t == nil {
 		return ""
@@ -426,8 +431,10 @@ func (t *textRuns) text() string {
 			built.WriteString(run.Text)
 		case !run.Emoji.IsCustomEmoji && run.Emoji.EmojiID != "":
 			built.WriteString(run.Emoji.EmojiID)
-		case len(run.Emoji.Shortcuts) > 0:
-			built.WriteString(strings.Trim(run.Emoji.Shortcuts[0], ":_"))
+		default:
+			// A space where the emote was, so the words either side of it
+			// do not run together into one.
+			built.WriteString(" ")
 		}
 	}
 	return strings.TrimSpace(built.String())

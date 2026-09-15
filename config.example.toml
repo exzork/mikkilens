@@ -433,7 +433,11 @@ quota_warn_percent = 80
 enabled = true
 autostart_reading = true
 translate = false            # Translate chat before reading. Slower, costs money.
-skip_emote_only = true
+skip_emote_only = true       # Messages with no words in them are not read. A
+                             # channel's own emotes are never read by name --
+                             # packed against the words they came out as
+                             # phrases nobody typed -- so a message of only
+                             # those counts as emote-only too.
 collapse_duplicates = true
 read_superchats_first = true
 max_message_chars = 200      # Longer messages are cut off.

@@ -247,9 +247,9 @@ func TestMemberBadgeDoesNotSwallowWhatTheySaid(t *testing.T) {
 	}
 }
 
-// A channel's own emote has no character to read, only a name like :_wave:.
-// Reading the raw shortcut aloud with its punctuation would be worse than the
-// name on its own.
+// A channel's own emote has no character to read, only a name like :_wave:,
+// and the name is not read either: packed against the words, it came out as a
+// phrase nobody typed. A standard emoji keeps its character.
 func TestEmojiAreFlattenedIntoSomethingSpeakable(t *testing.T) {
 	transport, _ := serve(t, page("first-token"), answer(5000, chatItemJSON(
 		"liveChatTextMessageRenderer",
@@ -266,11 +266,32 @@ func TestEmojiAreFlattenedIntoSomethingSpeakable(t *testing.T) {
 	if !strings.Contains(messages[0].Text, "👋") {
 		t.Errorf("a standard emoji keeps its character, got %q", messages[0].Text)
 	}
-	if !strings.Contains(messages[0].Text, "lambai") {
-		t.Errorf("a custom emote falls back to its name, got %q", messages[0].Text)
+	if strings.Contains(messages[0].Text, "lambai") || strings.Contains(messages[0].Text, ":_") {
+		t.Errorf("a custom emote's name must not be read aloud, got %q", messages[0].Text)
 	}
-	if strings.Contains(messages[0].Text, ":_") {
-		t.Errorf("the shortcut's punctuation must not be read aloud, got %q", messages[0].Text)
+}
+
+// Emotes packed straight against a word, the way they really arrive, must not
+// glue the word to anything, and a message of nothing but emotes has no words.
+func TestCustomEmotesLeaveTheWordsApart(t *testing.T) {
+	transport, _ := serve(t, page("first-token"), answer(5000, chatItemJSON(
+		"liveChatTextMessageRenderer",
+		`{"id":"g","timestampUsec":"1756600000000000","authorName":{"simpleText":"Enki"},`+
+			`"message":{"runs":[{"text":"aku degdegan"},`+
+			`{"emoji":{"emojiId":"UC/x","shortcuts":[":_eyes-purple-crying:"],"isCustomEmoji":true}},`+
+			`{"emoji":{"emojiId":"UC/x","shortcuts":[":_eyes-purple-crying:"],"isCustomEmoji":true}},`+
+			`{"text":"banget"}]}}`)))
+
+	messages := collectScraped(t, transport)
+	if len(messages) != 1 {
+		t.Fatalf("got %d messages, want 1", len(messages))
+	}
+	if got := strings.Join(strings.Fields(messages[0].Text), " "); got != "aku degdegan banget" {
+		t.Errorf("text = %q, want the words and nothing else", messages[0].Text)
+	}
+
+	if !(Message{Text: strings.TrimSpace(" ")}).IsEmoteOnly() {
+		t.Error("a message that was only custom emotes should count as emote-only")
 	}
 }
 

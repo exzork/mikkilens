@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/exzork/mikkilens/packages/audio/speakable"
 	"github.com/exzork/mikkilens/packages/core/config"
 	"github.com/exzork/mikkilens/packages/core/i18n"
 	"github.com/exzork/mikkilens/packages/core/intent"
@@ -325,7 +326,14 @@ func (r *Reader) Render(message Message) string {
 	settings, locale := r.settings, r.locale
 	r.mu.Unlock()
 
-	text := trimTo(message.Text, settings.MaxMessageChars)
+	// Written for a voice rather than for eyes: the handle as a name that can
+	// be said, and the message with its shorthand and laughter written out.
+	// See speakable.Name and speakable.Chat for what that means and why.
+	text := speakable.Chat(trimTo(message.Text, settings.MaxMessageChars), locale.Language)
+	message.Author = speakable.Name(message.Author)
+	if message.GifterName != "" {
+		message.GifterName = speakable.Name(message.GifterName)
+	}
 	switch {
 	case message.IsSuperchat:
 		return locale.T("chat.superchat", i18n.Args{

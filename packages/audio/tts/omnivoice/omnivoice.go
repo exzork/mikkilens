@@ -1130,15 +1130,20 @@ func postProcess(samples []float32, voice *Voice) []float32 {
 		}
 	}
 
-	const fadeSeconds = 0.1
-	fade := int(fadeSeconds * SampleRate)
-	if fade > len(samples)/2 {
-		fade = len(samples) / 2
+	// Faded in far faster than out. The model starts speaking almost at once
+	// -- the first sound is often 40 ms in -- and a tenth of a second of fade
+	// laid over that played the start of the first word at a whisper: read back
+	// through recognition, "Halo semuanya" came out as "Selo semuanya". Ten
+	// milliseconds is still enough that the start never clicks. The end keeps
+	// the long fade, where what it softens is breath rather than a word.
+	const fadeInSeconds, fadeOutSeconds = 0.01, 0.1
+	fadeIn := min(int(fadeInSeconds*SampleRate), len(samples)/2)
+	fadeOut := min(int(fadeOutSeconds*SampleRate), len(samples)/2)
+	for index := 0; index < fadeIn; index++ {
+		samples[index] *= float32(index) / float32(fadeIn)
 	}
-	for index := 0; index < fade; index++ {
-		ramp := float32(index) / float32(fade)
-		samples[index] *= ramp
-		samples[len(samples)-1-index] *= ramp
+	for index := 0; index < fadeOut; index++ {
+		samples[len(samples)-1-index] *= float32(index) / float32(fadeOut)
 	}
 	return samples
 }

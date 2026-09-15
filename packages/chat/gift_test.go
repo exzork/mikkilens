@@ -113,7 +113,8 @@ func TestABatchOfGiftsIsReadAsPeopleRatherThanSilence(t *testing.T) {
 
 	purchase := parseItem(t, giftPurchaseJSON)
 	ingest.noteGiftLocked(&purchase)
-	if spoken := reader.Render(purchase); spoken != "@exzork_ menghadiahkan 10 membership." {
+	// Names as they are said, not as they are typed: see speakable.Name.
+	if spoken := reader.Render(purchase); spoken != "exzork menghadiahkan 10 membership." {
 		t.Errorf("the purchase reads as %q", spoken)
 	}
 
@@ -123,7 +124,7 @@ func TestABatchOfGiftsIsReadAsPeopleRatherThanSilence(t *testing.T) {
 		t.Errorf("the batch joined up as %d of %d, want 1 of 10",
 			redemption.GiftIndex, redemption.GiftTotal)
 	}
-	want := "@FioChan324 mendapat hadiah membership dari @exzork_."
+	want := "Fio Chan 324 mendapat hadiah membership dari exzork."
 	if spoken := reader.Render(redemption); spoken != want {
 		t.Errorf("the redemption reads as %q, want %q", spoken, want)
 	}
