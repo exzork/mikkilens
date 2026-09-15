@@ -92,9 +92,12 @@ func TestTheWindowsEngineOffersNothingToChoose(t *testing.T) {
 	}
 }
 
-// No engine in the query means the configured one, which by default is local.
+// No engine in the query means the configured one. Configured as the local
+// voice here rather than left at the default, so that a list of Supertonic
+// voices coming back can only mean the setting was read.
 func TestNoEngineInTheQueryMeansTheConfiguredOne(t *testing.T) {
-	server, _, directory := client(t)
+	server, engine, directory := client(t)
+	engine.settings.Speech.Engine = "local"
 
 	styles := filepath.Join(directory, "data", "models", "supertonic", "voice_styles")
 	if err := os.MkdirAll(styles, 0o755); err != nil {

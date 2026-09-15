@@ -13,8 +13,9 @@ import (
 // and spoken about as Supertonic 3, "online" as Edge TTS. The setting is an
 // identifier; the label is the truth about what is running.
 const (
-	// EngineLocal is Supertonic 3, running on this machine. It is the default:
-	// it needs no network, no clock, and nobody else's permission.
+	// EngineLocal is Supertonic 3, running on this machine. It needs no
+	// network, no clock, and nobody else's permission, which is why it is the
+	// first thing to stand behind OmniVoice and what an empty engine means.
 	EngineLocal = "local"
 
 	// EngineOnline is Edge TTS, Microsoft's neural voices. Free, natural, and
@@ -28,8 +29,9 @@ const (
 
 	// EngineOmni is OmniVoice, also running on this machine. It clones a voice
 	// from a recording and reads six hundred languages, and it costs about two
-	// gigabytes and seconds of processor per sentence to do it. Unlike the
-	// other three it is a deliberate choice rather than somewhere to land.
+	// gigabytes and seconds of processor per sentence to do it. It is the
+	// default, reading in her own voice, and it is never somewhere another
+	// engine lands by falling back.
 	EngineOmni = "omnivoice"
 )
 

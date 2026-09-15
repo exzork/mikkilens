@@ -53,6 +53,16 @@ func OmniVoices() []Voice {
 	return found
 }
 
+// InstallBuiltinOmniVoices puts any of the named voices that ship with
+// MikkiLens into the voices folder, so the settings page lists her voice before
+// anything has been said in it. Names that are not built-in voices are skipped,
+// and a voice already there is never touched; see omnivoice.InstallBuiltin.
+func InstallBuiltinOmniVoices(names ...string) {
+	for _, name := range names {
+		omnivoice.InstallBuiltin(name)
+	}
+}
+
 // synthesizeOmni renders one phrase with OmniVoice.
 //
 // Rate arrives as the same "+15%" string every other engine takes, because it
@@ -67,7 +77,9 @@ func synthesizeOmni(ctx context.Context, text string, options Options) (Audio, e
 	}
 
 	voice := options.Voice
-	if !omnivoice.Known(voice) {
+	// A built-in voice that is missing -- removed while it was still the one
+	// chosen -- is put back rather than replaced by an invented one.
+	if !omnivoice.Known(voice) && !omnivoice.InstallBuiltin(voice) {
 		// The configured voice is an Edge name, a Supertonic one, or a
 		// recording that has been deleted. Reading in the model's own invented
 		// voice is a much better answer than not reading.

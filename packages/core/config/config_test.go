@@ -26,6 +26,9 @@ func TestDefaultsAreIndonesian(t *testing.T) {
 
 func TestEmptyVoiceFallsBackToTheLocaleVoice(t *testing.T) {
 	settings := config.Default()
+	// Cleared rather than taken from the default, which names her built-in
+	// voice: this is about what an empty voice means, not about what ships.
+	settings.Speech.Voice = ""
 	if got := settings.Voice("id-ID-GadisNeural"); got != "id-ID-GadisNeural" {
 		t.Errorf("Voice() = %q", got)
 	}

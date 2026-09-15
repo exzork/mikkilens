@@ -23,6 +23,17 @@ func load(t *testing.T, contents string) Config {
 	return settings
 }
 
+// The default: OmniVoice, reading in the voice MikkiLens ships with.
+func wantDefaultVoice(t *testing.T, settings Config) {
+	t.Helper()
+	if settings.Speech.Engine != "omnivoice" {
+		t.Errorf("engine = %q, want omnivoice", settings.Speech.Engine)
+	}
+	if settings.Speech.Voice != "mikkiru" {
+		t.Errorf("voice = %q, want mikkiru", settings.Speech.Voice)
+	}
+}
+
 // The case that matters: a machine running 0.10 today, upgraded.
 func TestAnOnlineVoiceSurvivesTheUpgrade(t *testing.T) {
 	settings := load(t, `
@@ -61,41 +72,31 @@ donation_voice = 'en-US-AriaNeural'
 }
 
 // Nothing was chosen, so there is nothing to preserve, and the new default
-// takes over. This is how the local voice reaches anyone but a fresh install.
+// takes over -- the voice as well as the engine. An empty voice here meant
+// "whatever the engine starts with", not OmniVoice's invented voice.
 func TestNoVoiceChosenTakesTheNewDefault(t *testing.T) {
-	settings := load(t, `
+	wantDefaultVoice(t, load(t, `
 [speech]
 voice = ''
 rate = '+0%'
-`)
-	if settings.Speech.Engine != "local" {
-		t.Errorf("engine = %q, want local", settings.Speech.Engine)
-	}
+`))
 }
 
 func TestASpeechSectionWithNoVoiceAtAllTakesTheNewDefault(t *testing.T) {
-	settings := load(t, `
+	wantDefaultVoice(t, load(t, `
 [speech]
 rate = '+0%'
 volume = 100
-`)
-	if settings.Speech.Engine != "local" {
-		t.Errorf("engine = %q, want local", settings.Speech.Engine)
-	}
+`))
 }
 
 // A file with no speech section at all, and a machine with no file at all.
 func TestNoSpeechSectionTakesTheNewDefault(t *testing.T) {
-	settings := load(t, "[audio]\nsample_rate = 16000\n")
-	if settings.Speech.Engine != "local" {
-		t.Errorf("engine = %q, want local", settings.Speech.Engine)
-	}
+	wantDefaultVoice(t, load(t, "[audio]\nsample_rate = 16000\n"))
 }
 
-func TestAFreshInstallGetsTheLocalVoice(t *testing.T) {
-	if Default().Speech.Engine != "local" {
-		t.Errorf("engine = %q, want local", Default().Speech.Engine)
-	}
+func TestAFreshInstallGetsHerOwnVoice(t *testing.T) {
+	wantDefaultVoice(t, Default())
 }
 
 // A value she has just chosen is never something to second-guess -- including
@@ -121,14 +122,28 @@ voice = 'id-ID-GadisNeural'
 	}
 }
 
-// A local voice name is not a reason to switch to the online engine.
-func TestALocalVoiceNameDoesNotLookOnline(t *testing.T) {
+// With the engine said outright, an empty voice is a choice too: for OmniVoice
+// it is the model inventing a voice, and that is hers to pick.
+func TestAnEmptyVoiceBesideAnExplicitEngineStaysEmpty(t *testing.T) {
+	settings := load(t, `
+[speech]
+engine = 'omnivoice'
+voice = ''
+`)
+	if settings.Speech.Voice != "" {
+		t.Errorf("voice = %q, want the empty voice she chose", settings.Speech.Voice)
+	}
+}
+
+// A Supertonic voice name, from somebody who chose it while the local voice was
+// the default and never wrote the engine down, keeps the local voice.
+func TestASupertonicVoiceKeepsTheLocalEngine(t *testing.T) {
 	settings := load(t, `
 [speech]
 voice = 'F3'
 `)
 	if settings.Speech.Engine != "local" {
-		t.Errorf("engine = %q, want local", settings.Speech.Engine)
+		t.Errorf("engine = %q, want local: she picked F3 and should keep it", settings.Speech.Engine)
 	}
 	if settings.Speech.Voice != "F3" {
 		t.Errorf("voice = %q, want it untouched", settings.Speech.Voice)

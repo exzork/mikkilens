@@ -352,10 +352,10 @@ pilihan di sini yang bisa berakhir jadi sunyi.
 
 | Pilihan | Butuh internet? | Catatan |
 |---|---|---|
-| **Supertonic 3** | tidak | Bawaannya. 31 bahasa, 10 suara. Unduhan 401 MB. |
+| **OmniVoice** | tidak | **Bawaannya**, dengan suara Mikkiru sendiri. 600 bahasa. Unduhan 2 GB saat pertama dijalankan, dan perlu kartu grafis — [baca ini dulu](#omnivoice). |
+| **Supertonic 3** | tidak | 31 bahasa, 10 suara. Unduhan 401 MB. |
 | **Edge TTS** | ya | Suara neural Microsoft Edge. Gratis, dan terdengar sangat wajar. |
 | **Windows** | tidak | SAPI 5, suara bawaan Windows. Tidak perlu diunduh, dan terdengar begitu. |
-| **OmniVoice** | tidak | 600 bahasa, suaranya dari rekamanmu sendiri. Unduhan 2 GB, dan perlu kartu grafis — [baca ini dulu](#omnivoice). |
 
 **Supertonic 3** memakai [model dengan nama yang
 sama](https://huggingface.co/Supertone/supertonic-3) dari Supertone, dijalankan
@@ -395,11 +395,11 @@ merekam siaran, itu bedanya nyata.
 Kalau modelnya belum selesai diunduh, dia membaca pakai suara daring dulu.
 Tidak ada yang jadi sunyi karena unduhan yang belum selesai.
 
-**Kalau kamu memperbarui dari versi sebelum 0.11**, suara yang kamu dengar
-tidak berubah. Kamu dulu memilih suara itu dari satu-satunya daftar yang ada,
-dan daftarnya bertambah bukan alasan untuk menimpa pilihanmu — jadi
-pengaturannya tetap **Edge TTS**. Pindah ke **Supertonic 3** kalau kamu mau
-mencoba suaranya sendiri.
+**Kalau kamu memperbarui dari versi lama**, suara yang kamu dengar tidak
+berubah. Kalau kamu dulu sudah memilih suara Edge TTS atau Supertonic 3, pilihan
+itu tetap dipakai — bawaan yang baru bukan alasan untuk menimpa pilihanmu. Yang
+belum pernah memilih suara apa pun ikut pindah ke bawaan yang baru: OmniVoice,
+dengan suara Mikkiru.
 
 <a name="omnivoice"></a>
 
@@ -410,6 +410,14 @@ sekadar selera. [OmniVoice](https://github.com/k2-fsa/OmniVoice) dari k2-fsa
 adalah model bahasa difusi 0,6 miliar parameter. Dia membaca 600 bahasa, dan
 suaranya **tidak diambil dari daftar** — dia menirukan suara dari rekaman yang
 kamu berikan.
+
+**Ini pilihan bawaannya.** Begitu MikkiLens dipasang, dia membaca pakai suara
+**mikkiru** — suara Mikkiru sendiri, yang sudah ikut di dalam programnya dan
+sudah siap pakai. Yang perlu diunduh cuma modelnya: sekitar 2 GB, diambil
+otomatis saat pertama dijalankan, ditambah runtime kartu grafis sekitar 1 GB
+kalau ada kartu NVIDIA. Selama unduhannya belum selesai, dia membaca pakai suara
+lain dulu, jadi tidak ada yang jadi sunyi. Kalau kamu merekam suara baru dengan
+nama `mikkiru`, rekamanmu yang dipakai, dan tidak akan ditimpa lagi.
 
 Cara memakainya — semuanya di dalam aplikasi, tidak perlu buka folder:
 

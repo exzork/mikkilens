@@ -21,12 +21,12 @@ chat_tts = "follow" # "follow" reads chat in the output-language voice.
 # Which voice reads. Whichever you pick, the others stand behind it, so none of
 # these is a way to end up with silence.
 #
-#   "local"    Her own voice, running on this computer -- Supertonic 3, through
-#              ONNX Runtime. Thirty-one languages and ten voices (F1 to F5, M1
-#              to M5), and it keeps working when the internet does not. This is
-#              the default. It costs a 400 MB download, fetched once at first
-#              launch, and about 450 MB of memory while it is loaded -- which
-#              switching away from it hands straight back.
+#   "local"    Supertonic 3, running on this computer through ONNX Runtime.
+#              Thirty-one languages and ten voices (F1 to F5, M1 to M5), and it
+#              keeps working when the internet does not. It costs a 400 MB
+#              download, fetched when you choose it, and about 450 MB of memory
+#              while it is loaded -- which switching away from it hands
+#              straight back.
 #   "online"   The Microsoft Edge voices. Free, no key, and they sound very
 #              natural in Indonesian -- but they need the network, they need
 #              the clock on this machine to be roughly right, and they are
@@ -35,10 +35,11 @@ chat_tts = "follow" # "follow" reads chat in the output-language voice.
 #              and nothing to go wrong, and it sounds like it. This is the
 #              floor.
 #   "omnivoice" OmniVoice, also running on this computer -- a 0.6B diffusion
-#              language model, through ONNX Runtime. Six hundred languages,
-#              and its voice comes from a recording you supply rather than
-#              from a list (see `voice` below). It costs about 2 GB to
-#              download and about 1.4 GB of memory while loaded.
+#              language model, through ONNX Runtime. This is the default. Six
+#              hundred languages, and its voice comes from a recording rather
+#              than from a list: out of the box, her own (see `voice` below).
+#              It costs about 2 GB, fetched at first launch, and about 1.4 GB
+#              of memory while loaded.
 #
 #              Speed is the part worth reading twice, and it depends entirely
 #              on your graphics card. On an NVIDIA card it is faster than real
@@ -50,11 +51,12 @@ chat_tts = "follow" # "follow" reads chat in the output-language voice.
 #              cached and pay that once; chat and donations pay it every time.
 #              Nothing falls back to it, for the same reason.
 #
-# Upgrading from before 0.11 does not change the voice you were hearing. A file
-# that names an online voice and says nothing here is taken to mean "online" --
-# you picked that voice from the only list there was, and the list growing is
-# not a reason to overrule you. Set this to "local" to hear her own voice.
-engine = "local"
+# Upgrading does not change the voice you were hearing. A file that names an
+# Edge voice and says nothing here is taken to mean "online", and one that names
+# a Supertonic voice (F1 to M5) is taken to mean "local" -- you picked that
+# voice, and a new default is not a reason to overrule you. A file that names
+# no voice at all takes the default.
+engine = "omnivoice"
 
 # The voice name, in whatever scheme the engine above uses.
 #
@@ -71,12 +73,14 @@ engine = "local"
 #            first time it is used, and the .json is the voice after that --
 #            it can be copied between machines without the wav. Empty means
 #            no reference at all, and the model invents a voice, differently
-#            every time.
+#            every time. "mikkiru" -- the default -- is her own voice, and it
+#            ships inside MikkiLens already prepared, so it needs nothing but
+#            the models.
 #
 # A name the chosen engine does not recognise is not an error: it falls back to
 # that engine's own default, because a voice you did not pick is a much better
 # answer than nothing being read.
-voice = ""
+voice = "mikkiru"
 rate = "+0%"          # Speed of confirmations. "+25%" is noticeably faster.
                       # It means the same thing to every engine, but the local
                       # voice stops getting faster past about +23%: beyond that

@@ -85,7 +85,8 @@ is configured, the others stand behind it in order, and a substitute result is
 never cached — keeping it would hold the wrong voice long after the right one
 came back.
 
-The default is **local**: Supertone's [Supertonic
+The default is **omnivoice**, reading in Mikkiru's own voice — see below.
+**local** is Supertone's [Supertonic
 3](https://huggingface.co/Supertone/supertonic-3), four ONNX models run here
 through the same runtime the wake word uses. Thirty-one languages including
 Indonesian, ten voices, 44.1 kHz, and no dependency on anything outside the
@@ -100,10 +101,21 @@ grapheme-to-phoneme dependency to ship — wrapped in a language tag that the
 encoder reads as part of the text.
 
 Upgrading does not change the voice anyone was already hearing.
-`migrateVoiceEngine` reads a file that names an online voice and says nothing
-about an engine as meaning the engine those names belong to — she chose that
-voice from the only list there was. A file that names no voice takes the new
-default, which is how the local voice reaches anything but a fresh install.
+`migrateVoiceEngine` reads a file that names a voice and says nothing about an
+engine as meaning the engine that name belongs to: an Edge voice means
+**online**, a Supertonic preset (`F1`–`M5`) means **local**. A file that names
+no voice takes the new default, voice and all — an empty `voice` there meant
+"whatever the engine starts with", and under OmniVoice empty means a voice the
+model invents, so it is dropped rather than carried across.
+
+The default voice, `mikkiru`, ships inside the engine (`omnivoice/builtin`,
+`go:embed`) as a recording, its transcript and the prepared codes, and is
+written into `data/models/omnivoice/voices` at startup when the configuration
+names it and no voice of that name is there. A voice she saves under the same
+name is never overwritten. Because the codes ship prepared, a fresh machine
+speaks in it as soon as the models land, without the encoder having run.
+OmniVoice being the default also means the first-run download includes its
+~2 GB of models, and the CUDA runtime when there is a card.
 
 Behind it, **online** speaks Microsoft's Edge voice protocol directly, and
 **windows** is SAPI, which is the floor rather than a choice. The two naming

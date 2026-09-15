@@ -2429,7 +2429,7 @@ async function boot(): Promise<void> {
   renderDevices(element('output-devices'), devices.output ?? [], 'output', settings.speech.output_device)
   renderDevices(element('input-devices'), devices.input ?? [], 'input', settings.audio.input_device)
 
-  element<HTMLSelectElement>('voice-engine').value = settings.speech.engine || 'local'
+  element<HTMLSelectElement>('voice-engine').value = settings.speech.engine || 'omnivoice'
   await fillVoices(settings.speech.voice)
 
   showPercent('rate', settings.speech.rate)

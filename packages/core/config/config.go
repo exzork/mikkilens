@@ -42,17 +42,18 @@ type Speech struct {
 	// Engine is which voice reads: "local", "online", "windows" or
 	// "omnivoice".
 	//
-	// "local" is Supertonic 3, running here. It is the default because it is
-	// the only one that cannot be taken away mid-stream: no network, no clock,
-	// nobody else's service. It costs four hundred megabytes to download and
-	// about as much again in memory while it is loaded.
+	// "local" is Supertonic 3, running here. It cannot be taken away
+	// mid-stream: no network, no clock, nobody else's service. It costs four
+	// hundred megabytes to download and about as much again in memory while it
+	// is loaded.
 	//
 	// "online" is Edge TTS, Microsoft's neural voices, which are free and
 	// natural and somebody else's to withdraw. "windows" is SAPI 5, the
 	// synthesizer built into Windows, which is the floor rather than a choice.
 	//
-	// "omnivoice" is OmniVoice, also running here: six hundred languages, and
-	// a voice taken from a recording rather than from a list. It is the one
+	// "omnivoice" is OmniVoice, also running here, and the default: out of the
+	// box MikkiLens reads in Mikkiru's own voice. Six hundred languages, and a
+	// voice taken from a recording rather than from a list. It is the one
 	// choice here that is a trade rather than a preference -- two gigabytes of
 	// models, and a speed that depends entirely on whether there is an NVIDIA
 	// card to run it on. On one it is faster than real time; on a processor
@@ -63,7 +64,9 @@ type Speech struct {
 	Engine string `toml:"engine" json:"engine"`
 
 	// Voice is a name in whatever scheme Engine uses: "F1" for the local voice,
-	// "id-ID-GadisNeural" for the online one. Empty means the locale default,
+	// "id-ID-GadisNeural" for the online one, a recording's name for OmniVoice.
+	// The default is "mikkiru", which ships with the program. Empty means the
+	// locale default,
 	// and a name the chosen engine does not know falls back to that engine's
 	// own default rather than failing.
 	Voice string `toml:"voice" json:"voice"`
@@ -524,10 +527,13 @@ func Default() Config {
 	return Config{
 		Language: Language{Output: "id", STT: "id", ChatTTS: "follow"},
 		Speech: Speech{
-			// "local" rather than tts.EngineLocal: this package sits under the
-			// audio packages, not above them, and one string constant is not
-			// worth turning that around for.
-			Engine: "local",
+			// OmniVoice, reading in her own voice, which ships prepared inside
+			// the executable. Spelled out rather than taken from tts.EngineOmni
+			// and omnivoice.DefaultVoice: this package sits under the audio
+			// packages, not above them. tts.TestTheDefaultIsHerOwnVoice keeps
+			// the names honest.
+			Engine: "omnivoice",
+			Voice:  "mikkiru",
 			Rate:   "+0%", Volume: 100, ChatRate: "+15%", ChatVolume: 100,
 			DonationRate: "+0%", DonationVolume: 100,
 			EarconVolume: 25, ConfirmTimeoutS: 8.0,

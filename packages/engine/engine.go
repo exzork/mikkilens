@@ -386,6 +386,7 @@ func (e *Engine) Start(ctx context.Context) {
 		defer close(loaded)
 		// Anything missing comes down first, because recognition that loads
 		// before the model arrives only reports that there is nothing to load.
+		e.installBuiltinVoices()
 		e.installAssets(ctx)
 		e.loadRecognition(ctx)
 	}()
@@ -500,6 +501,17 @@ func (e *Engine) installAssets(ctx context.Context) {
 	if wanted.Has(assets.StageWake) && e.WakeError() != "" {
 		e.restartWakeWord()
 	}
+}
+
+// installBuiltinVoices writes out the voices that ship inside MikkiLens, for
+// whichever of them the configuration names.
+//
+// Before the download, and not after: it is half a megabyte from inside the
+// executable rather than two gigabytes from the network, and doing it first
+// means the settings page lists her voice while the models are still arriving.
+func (e *Engine) installBuiltinVoices() {
+	speech := e.Config().Speech
+	tts.InstallBuiltinOmniVoices(speech.Voice, speech.ChatVoice, speech.DonationVoice)
 }
 
 // context is the life of the application, for work that must not be tied to

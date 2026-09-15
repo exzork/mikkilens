@@ -14,11 +14,10 @@ import (
 // optionally the encoder that turns a recording into a voice. About two
 // gigabytes.
 //
-// Unlike the local voice, this is never part of a first-run download. It is
-// five times the size, it is only useful to somebody who has a recording to
-// clone, and nothing falls back to it -- so fetching it because it exists
-// would be two gigabytes spent on a guess. It is fetched when she chooses it,
-// and not before. See MissingOmni.
+// It is fetched when OmniVoice is the engine chosen, and not otherwise -- which
+// since it became the default, reading in her own voice, means a first run
+// fetches it too. Nothing falls back to it, so on a machine that has chosen
+// something else it would be two gigabytes spent on a guess. See MissingOmni.
 const StageOmni Stage = "omnivoice"
 
 // The export this is fetched from, pinned to a revision rather than a branch
