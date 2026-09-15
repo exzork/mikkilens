@@ -61,18 +61,16 @@ const t = (key: string, values?: Record<string, string | number>): string =>
   translate(strings, key, values)
 
 /**
- * One window at a time, but never at the cost of no window at all.
+ * One MikkiLens at a time.
  *
- * The lock is worth having: a second launch should raise the window that is
- * already open rather than adding another. But Electron leaves the lock behind
- * when it is killed rather than closed, and a stale one made the next launch
- * exit silently -- she double-clicks the icon and nothing happens, with
- * nothing anywhere to say why. That is the worse failure by a long way, so a
- * lock we cannot take is a warning and we carry on.
+ * A second launch raises the window that is already open and then leaves.
+ * Opening anyway put a second tray icon beside the first, and a second copy of
+ * everything the main process owns -- the music box's global key, the update
+ * checks -- fighting the first for them.
  *
- * Carrying on is safe: the engine is a separate process and a second window
- * attaches to the one already running rather than starting its own, so the
- * worst case is two windows onto the same engine.
+ * On Windows the lock is a mutex the system releases when its owner dies, so a
+ * killed MikkiLens does not leave it behind. The retries cover the one real
+ * gap: a window that has just been quit can hold it for a moment longer.
  */
 async function acquireSingleInstanceLock(): Promise<boolean> {
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -102,10 +100,11 @@ async function acquireSingleInstanceLock(): Promise<boolean> {
 
 async function main(): Promise<void> {
   if (!(await acquireSingleInstanceLock())) {
-    console.warn(
-      'MikkiLens could not take the single-instance lock. ' +
-        'Opening anyway: a stale lock must not leave you without a window.',
-    )
+    // The MikkiLens holding the lock has already been told, through
+    // 'second-instance', to bring its window forward.
+    console.warn('MikkiLens is already running; showing that window instead.')
+    app.exit(0)
+    return
   }
   await app.whenReady()
 
@@ -187,6 +186,7 @@ function createWindow(): void {
     minHeight: 460,
     show: false,
     title: 'MikkiLens',
+    icon: appIcon(),
     backgroundColor: '#12131a',
     webPreferences: {
       preload: join(__dirname, '..', 'preload', 'index.js'),
@@ -255,15 +255,22 @@ function toggleMute(): void {
   }).catch(() => {})
 }
 
+/**
+ * The site's favicon, as the tray, window and taskbar icon.
+ *
+ * An .ico carries every size Windows asks for, so the tray picks its own at
+ * whatever scaling the display runs, rather than shrinking one large picture
+ * into a smudge. src/assets/icon.ico is rendered from docs/favicon.svg.
+ */
+function appIcon(): Electron.NativeImage {
+  const name = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+  return nativeImage.createFromPath(join(__dirname, '..', 'assets', name))
+}
+
 function createTray(): void {
-  // A one-pixel transparent image keeps the tray icon valid without shipping a
-  // binary asset. The tooltip and the menu are what actually matter here: a
-  // screen reader reads those, not the picture.
-  const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAJ0lEQVR42mNk' +
-      'YPhfz0AEYBxVSF+FjAxQBWAaLIhWSFDhqEIaKwQAy0kW0eRoRBUAAAAASUVORK5CYII=',
-  )
-  tray = new Tray(icon)
+  // The tooltip and the menu still matter more than the picture: a screen
+  // reader reads those.
+  tray = new Tray(appIcon())
   applyTrayMenu()
   tray.on('double-click', () => showWindow())
 }

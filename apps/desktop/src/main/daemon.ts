@@ -29,6 +29,7 @@ export class Daemon {
   private child: ChildProcess | null = null
   private owned = false
   private detail = ''
+  private starting: Promise<DaemonStatus> | null = null
 
   /**
    * @param url  where the engine's local API answers
@@ -76,8 +77,21 @@ export class Daemon {
    * Attaching first is what makes "run at login, open the window later" work,
    * and it stops a second window from starting a second engine that would
    * fight the first one for the microphone.
+   *
+   * Callers that overlap -- startup still waiting on the engine while the page
+   * asks for a restart -- share one attempt. Each running its own would see
+   * no engine yet, and each would start one.
    */
-  async ensureRunning(): Promise<DaemonStatus> {
+  ensureRunning(): Promise<DaemonStatus> {
+    if (!this.starting) {
+      this.starting = this.attachOrStart().finally(() => {
+        this.starting = null
+      })
+    }
+    return this.starting
+  }
+
+  private async attachOrStart(): Promise<DaemonStatus> {
     if (await this.reachable()) {
       this.detail = 'attached to the engine already running'
       return this.status(true)

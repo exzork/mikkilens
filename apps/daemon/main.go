@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -240,6 +241,14 @@ func commandRun(arguments []string, languageOverride string) int {
 	defer stop()
 
 	api := httpapi.NewServer(app)
+	// Before anything opens the microphone or registers the hotkey: a second
+	// engine would carry on without its API and fight the first for both,
+	// which sounds like MikkiLens hearing everything twice.
+	if engineAnswering(api.URL()) {
+		fmt.Fprintf(os.Stderr, "MikkiLens is already running (%s); not starting another.\n", api.URL())
+		slog.Warn("not starting: an engine is already running", "api", api.URL())
+		return 1
+	}
 	if err := api.Start(); err != nil {
 		// The API is optional; the voice is not.
 		slog.Error("could not start the settings API", "error", err)
@@ -256,6 +265,24 @@ func commandRun(arguments []string, languageOverride string) int {
 	api.Stop()
 	app.Stop()
 	return 0
+}
+
+// engineAnswering reports whether a MikkiLens engine already answers at url.
+//
+// Only one that says it is MikkiLens counts. Something else holding the port
+// is not a reason to refuse: the API is optional there, and the voice is not.
+func engineAnswering(url string) bool {
+	client := http.Client{Timeout: 2 * time.Second}
+	response, err := client.Get(url + "/api/health")
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 4096))
+	if err != nil || response.StatusCode != http.StatusOK {
+		return false
+	}
+	return strings.Contains(string(body), `"app":"mikkilens"`)
 }
 
 func describeCommand(command string, slots map[string]string) string {

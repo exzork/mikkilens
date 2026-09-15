@@ -17,6 +17,7 @@ const assets = [
   ['src/renderer/music.html', 'out/renderer/music.html'],
   ['src/renderer/style.css', 'out/renderer/style.css'],
   ['src/locales', 'out/locales'],
+  ['src/assets', 'out/assets'],
 ]
 
 for (const [from, to] of assets) {
