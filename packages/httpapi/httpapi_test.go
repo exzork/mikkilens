@@ -52,6 +52,16 @@ type stubEngine struct {
 	wakeError   string
 	hotkeyError string
 
+	// speechAssets is what EnsureSpeechAssets answers with, and ensured counts
+	// the saves that asked. Both, because "did the save start a download?" and
+	// "did it say what it started?" are separate ways for this to be wrong.
+	speechAssets assets.Wanted
+	ensured      int
+
+	// applyErr makes the running app refuse a configuration, which is the only
+	// way to reach the path where a save is rejected before it reaches disk.
+	applyErr error
+
 	applied      []config.Config
 	adopted      []*intent.Set
 	reloads      int
@@ -130,6 +140,9 @@ func shippedCommands(t *testing.T) string {
 
 func (e *stubEngine) Config() config.Config { return e.settings }
 func (e *stubEngine) ApplyConfig(updated config.Config) error {
+	if e.applyErr != nil {
+		return e.applyErr
+	}
 	e.settings = updated
 	e.applied = append(e.applied, updated)
 	return nil
@@ -146,16 +159,20 @@ func (e *stubEngine) ReloadCommands()               { e.reloads++ }
 func (e *stubEngine) Router() *intent.Router        { return e.router }
 func (e *stubEngine) Transcriber() *stt.Transcriber { return stt.New(e.settings.STT, "id") }
 func (e *stubEngine) Installing() assets.Progress   { return assets.Progress{} }
-func (e *stubEngine) Wake() *wake.Detector          { return nil }
-func (e *stubEngine) WakeError() string             { return e.wakeError }
-func (e *stubEngine) Hotkey() hotkey.Watcher        { return nil }
-func (e *stubEngine) HotkeyError() string           { return e.hotkeyError }
-func (e *stubEngine) Microphone() *capture.Stream   { return nil }
-func (e *stubEngine) OBS() *obs.Controller          { return nil }
-func (e *stubEngine) YouTube() *youtube.Controller  { return nil }
-func (e *stubEngine) ChatIngest() *chat.Ingest      { return nil }
-func (e *stubEngine) ChatReader() *chat.Reader      { return nil }
-func (e *stubEngine) BeginListening()               { e.listens++ }
+func (e *stubEngine) EnsureSpeechAssets() assets.Wanted {
+	e.ensured++
+	return e.speechAssets
+}
+func (e *stubEngine) Wake() *wake.Detector         { return nil }
+func (e *stubEngine) WakeError() string            { return e.wakeError }
+func (e *stubEngine) Hotkey() hotkey.Watcher       { return nil }
+func (e *stubEngine) HotkeyError() string          { return e.hotkeyError }
+func (e *stubEngine) Microphone() *capture.Stream  { return nil }
+func (e *stubEngine) OBS() *obs.Controller         { return nil }
+func (e *stubEngine) YouTube() *youtube.Controller { return nil }
+func (e *stubEngine) ChatIngest() *chat.Ingest     { return nil }
+func (e *stubEngine) ChatReader() *chat.Reader     { return nil }
+func (e *stubEngine) BeginListening()              { e.listens++ }
 func (e *stubEngine) RunCommand(id string, confirm bool) {
 	e.ran = append(e.ran, ranCommand{id: id, confirm: confirm})
 }
@@ -477,6 +494,78 @@ func TestConfigWriteKeepsUnmentionedValues(t *testing.T) {
 	}
 	if engine.settings.OBS.Port != 4455 {
 		t.Errorf("obs.port = %d", engine.settings.OBS.Port)
+	}
+}
+
+// Choosing an engine whose models are not on the machine has to start fetching
+// them from the save, because the alternative -- waiting for the next restart --
+// is an engine that reads in something else and never says why.
+func TestSavingAnEngineStartsTheDownloadItNeeds(t *testing.T) {
+	server, engine, _ := client(t)
+	engine.speechAssets = assets.Wanted{
+		Stages: []assets.Stage{assets.StageCUDA, assets.StageOmni},
+		Bytes:  2_000_000_000,
+	}
+
+	status, body := send(t, server, http.MethodPut, "/api/config", map[string]any{
+		"speech": map[string]any{"engine": "omnivoice"},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d", status)
+	}
+	if engine.ensured != 1 {
+		t.Errorf("the save asked for the download %d times, want 1", engine.ensured)
+	}
+
+	// The page draws a bar from this. An answer that saved the setting and said
+	// nothing about the two gigabytes it just began is the failure that matters.
+	started, ok := body["downloading"].(map[string]any)
+	if !ok {
+		t.Fatalf("downloading = %#v, want what the save started", body["downloading"])
+	}
+	if bytes, _ := started["bytes"].(float64); int64(bytes) != 2_000_000_000 {
+		t.Errorf("bytes = %v", started["bytes"])
+	}
+	stages, _ := started["stages"].([]any)
+	if len(stages) != 2 || stages[0] != "cuda" || stages[1] != "omnivoice" {
+		t.Errorf("stages = %#v, want them named and in the order they are fetched", stages)
+	}
+}
+
+// The ordinary case: an engine whose models are already here downloads nothing,
+// and says so as an absence rather than as a download of no bytes -- which the
+// page would put an empty bar up for.
+func TestSavingAnEngineThatNeedsNothingReportsNoDownload(t *testing.T) {
+	server, engine, _ := client(t)
+
+	status, body := send(t, server, http.MethodPut, "/api/config", map[string]any{
+		"speech": map[string]any{"engine": "windows"},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d", status)
+	}
+	if engine.ensured != 1 {
+		t.Errorf("the save asked for the download %d times, want 1", engine.ensured)
+	}
+	if body["downloading"] != nil {
+		t.Errorf("downloading = %#v, want nothing at all", body["downloading"])
+	}
+}
+
+// A configuration that was rejected must not have spent two gigabytes on its
+// way to being rejected.
+func TestARejectedSaveStartsNoDownload(t *testing.T) {
+	server, engine, _ := client(t)
+	engine.applyErr = errors.New("no")
+
+	status, _ := send(t, server, http.MethodPut, "/api/config", map[string]any{
+		"speech": map[string]any{"engine": "omnivoice"},
+	})
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want the bad configuration refused", status)
+	}
+	if engine.ensured != 0 {
+		t.Errorf("a rejected save asked for a download %d times, want 0", engine.ensured)
 	}
 }
 

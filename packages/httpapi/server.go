@@ -56,6 +56,7 @@ type Engine interface {
 	Router() *intent.Router
 	Transcriber() *stt.Transcriber
 	Installing() assets.Progress
+	EnsureSpeechAssets() assets.Wanted
 	Wake() *wake.Detector
 	WakeError() string
 	Hotkey() hotkey.Watcher

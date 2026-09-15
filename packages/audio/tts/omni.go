@@ -2,6 +2,7 @@ package tts
 
 import (
 	"context"
+	"math"
 
 	"github.com/exzork/mikkilens/packages/audio/tts/omnivoice"
 )
@@ -102,6 +103,24 @@ func synthesizeOmni(ctx context.Context, text string, options Options) (Audio, e
 // Unlike the local voice there is no model default to start from: OmniVoice
 // has no speed of its own, only the length it is asked to fill, so "+0%" is
 // exactly 1 and the arithmetic is the plain reading of the number.
+//
+// Past OmniSpeedCeiling the engine clamps; see omnivoice.MaxSpeed for what
+// goes wrong above it. The number is not converted here, so that what the
+// engine enforces and what the settings page quotes cannot drift apart.
 func omniSpeed(rate string) float32 {
 	return 1 + float32(parsePercent(rate))/100
+}
+
+// OmniSpeedCeiling is the rate percentage past which OmniVoice stops getting
+// any faster, for the settings page to say so rather than leave the top of the
+// slider silently doing nothing.
+//
+// The same promise the local voice makes, and it matters more here: this
+// engine answers too much speed by dropping the end of the sentence rather
+// than by refusing, so a rate above this is not a slider that does nothing but
+// one that quietly damages what she hears.
+func OmniSpeedCeiling() int {
+	// Floor for the same reason as the local voice: this number is quoted as a
+	// rate that works, so it must not name a setting that is itself clamped.
+	return int(math.Floor((omnivoice.MaxSpeed - 1) * 100))
 }

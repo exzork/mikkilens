@@ -83,6 +83,30 @@ const (
 	SampleRate = 24000
 )
 
+// MaxSpeed is as fast as this model can be asked to talk before it stops
+// saying the words.
+//
+// It is a refusal rather than a preference, and it needs one because Speed
+// here is not the pitch-preserving speed-up every other engine means by it.
+// The model fills the time it is given, so asking for less time is asking it
+// to fit the same sentence into fewer frames -- and past a point it does that
+// by slurring and by running out before the end. Reading the same line back
+// through recognition, at 24 kHz with a cloned voice:
+//
+//	1.00   said in full, "ribet buka laptopnya"
+//	1.15   still all there, noticeably quick
+//	1.35   "seribet buka laptop" -- the last syllable never arrives,
+//	       and "hape atau tab" has become "apa totep"
+//
+// So 1.2: the last value where the whole sentence survives. A rate above this
+// does not produce faster speech, it produces speech with words missing from
+// it, which to somebody working by ear is indistinguishable from chat that
+// arrived wrong.
+//
+// There is no floor to go with it. Slower means more frames to fill, which the
+// model does comfortably; speed() only guards the degenerate zero.
+const MaxSpeed = 1.2
+
 // The tags the prompt is assembled from. They are real tokens in the
 // vocabulary rather than text the model reads, which is why they are looked up
 // by name at load time and a missing one is a refusal to load.
@@ -248,11 +272,16 @@ func (o Options) guidance() float32 {
 	return o.Guidance
 }
 
+// speed is what the frame estimate is actually divided by.
+//
+// Clamped here rather than where the rate is parsed, because this is the one
+// place every caller passes through: a speed that drops words is wrong however
+// it was arrived at, whether from her settings page or from a test.
 func (o Options) speed() float32 {
 	if o.Speed <= 0 {
 		return 1
 	}
-	return o.Speed
+	return min(o.Speed, MaxSpeed)
 }
 
 func (o Options) language() string {

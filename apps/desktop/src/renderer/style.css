@@ -493,6 +493,44 @@ input.capturing {
   font-size: 0.85rem;
 }
 
+/* A download in progress: the bar, and the words under it.
+
+   The words are not a caption for the bar -- they are the same reading in the
+   form that survives being read aloud, which is the form that matters here.
+   The bar is what a sighted helper glances at to see whether two gigabytes are
+   actually moving. */
+.download {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.4rem 0 0;
+}
+
+.download progress {
+  /* Chromium draws its own bar otherwise, in its own colours, which ignore
+     both the dark theme and the high-contrast one. */
+  appearance: none;
+  width: 100%;
+  height: 0.6rem;
+  border: none;
+}
+
+.download progress::-webkit-progress-bar {
+  background: var(--edge);
+  border-radius: var(--radius);
+}
+
+.download progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+/* An indeterminate bar -- one whose total nobody knows yet -- has no value to
+   fill, so it gets the accent as a whole rather than sitting there looking
+   like a download stuck at zero. */
+.download progress:indeterminate::-webkit-progress-bar {
+  background: linear-gradient(90deg, var(--edge), var(--accent), var(--edge));
+}
+
 .result {
   color: var(--muted);
   font-size: 0.9rem;

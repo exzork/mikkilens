@@ -9,11 +9,13 @@ import type {
   CommandSpec,
   DeviceInfo,
   DeviceList,
+  DownloadStage,
   EngineStatus,
   Health,
   LogPayload,
   OBSProfiles,
   Snapshot,
+  StartedDownload,
   VoiceInfo,
   WakeStatus,
   YouTubeStatus,
@@ -377,6 +379,90 @@ function megabytesPerSecond(speed: number): string {
   return speed > 0 ? `${(speed / (1024 * 1024)).toFixed(1)} MB/s` : '—'
 }
 
+/** A download's size, in the unit that keeps it to one or two digits. */
+function downloadSize(bytes: number): string {
+  const megabytes = bytes / (1024 * 1024)
+  return megabytes >= 1024 ? `${(megabytes / 1024).toFixed(1)} GB` : `${Math.round(megabytes)} MB`
+}
+
+// -- the download the Audio tab can start --------------------------------------
+//
+// Choosing OmniVoice and saving fetches about two gigabytes. That is far too
+// long to leave a button looking like it did nothing, so the save puts a bar up
+// straight away and the engine's progress reports drive it from there.
+//
+// The bar is scoped to the stages a voice engine needs. A first-run download of
+// the speech model is already a row on the status page and does not belong
+// under the voice dropdown, where it would read as the voice being what is
+// still arriving.
+
+/** The stages that belong to a voice rather than to recognition. */
+const speechStages = new Set<DownloadStage>(['voice', 'omnivoice', 'cuda'])
+
+/**
+ * What the last save started, until it finishes.
+ *
+ * Kept because the first progress report takes a second or two to arrive -- a
+ * connection has to be opened before any byte is counted -- and because the gap
+ * between one stage finishing and the next beginning would otherwise blink the
+ * bar away and back.
+ */
+let pendingDownload: StartedDownload | null = null
+
+/** Put the bar up for a download that has just been started. */
+function beginDownload(started: StartedDownload): void {
+  pendingDownload = started
+  renderDownload()
+}
+
+function renderDownload(): void {
+  const row = element('voice-download')
+  const bar = element<HTMLProgressElement>('voice-download-bar')
+  const text = element('voice-download-text')
+  const progress = snapshot.installing
+
+  // What was started is finished when its last stage says so, or the moment
+  // anything fails. Until then the bar stays up even between stages.
+  if (progress && pendingDownload) {
+    const last = pendingDownload.stages[pendingDownload.stages.length - 1]
+    if (progress.failed || (progress.done && progress.stage === last)) {
+      pendingDownload = null
+    }
+  }
+
+  const running =
+    progress && !progress.done && !progress.failed && speechStages.has(progress.stage)
+  if (!pendingDownload && !running) {
+    row.hidden = true
+    return
+  }
+  row.hidden = false
+
+  if (progress?.failed) {
+    bar.removeAttribute('value')
+    text.textContent = t('install.failed', { reason: progress.failed })
+    return
+  }
+
+  // Nothing counted yet: either no report has arrived, or this stage is an
+  // archive whose length the server did not say. An indeterminate bar is the
+  // honest shape for both -- a bar pinned at zero says the download has stalled.
+  if (!progress || progress.total <= 0) {
+    bar.removeAttribute('value')
+    text.textContent = progress
+      ? t(`install.stage.${progress.stage}`)
+      : t('install.started', { size: downloadSize(pendingDownload?.bytes ?? 0) })
+    return
+  }
+
+  bar.value = progress.percent
+  text.textContent = t('install.progress', {
+    what: t(`install.stage.${progress.stage}`),
+    percent: String(progress.percent),
+    speed: megabytesPerSecond(progress.bytes_per_second),
+  })
+}
+
 function renderStatus(): void {
   const grid = element('status-grid')
   grid.replaceChildren()
@@ -399,6 +485,7 @@ function renderStatus(): void {
   }
 
   showRecognitionBackend()
+  renderDownload()
 
   const health = element('health-list')
   health.replaceChildren()
@@ -686,11 +773,23 @@ async function loadCommands(): Promise<void> {
 
 async function saveConfig(patch: Record<string, unknown>, message: string): Promise<void> {
   try {
-    const result = await api<{ config: AppConfig }>('/config', {
-      method: 'PUT',
-      body: JSON.stringify(patch),
-    })
+    const result = await api<{ config: AppConfig; downloading?: StartedDownload | null }>(
+      '/config',
+      {
+        method: 'PUT',
+        body: JSON.stringify(patch),
+      },
+    )
     settings = result.config
+
+    // Saving an engine whose models are not here yet starts fetching them. Said
+    // rather than only drawn: the bar is for whoever is looking at the screen,
+    // and this sentence is the part she hears.
+    if (result.downloading) {
+      beginDownload(result.downloading)
+      announce(`${message} ${t('install.started', { size: downloadSize(result.downloading.bytes) })}`)
+      return
+    }
     announce(message)
   } catch (error) {
     alarm(t('common.saveFailed', { reason: reason(error) }))
@@ -995,8 +1094,15 @@ function engineHint(engine: string, installed: boolean): string {
         (installed ? t('audio.engineLocalReady') : t('audio.engineLocalMissing')) + ' ' + ceiling
       )
     }
-    case 'omnivoice':
-      // Three sentences rather than one, because this is the engine somebody
+    case 'omnivoice': {
+      // The rate cap is said for a sharper reason than the local voice's. That
+      // one stops getting faster; this one starts dropping the end of the
+      // sentence, which is a thing she would hear as chat arriving wrong
+      // rather than as a setting being too high.
+      const ceiling = t('audio.engineOmniRateCap', {
+        percent: String(settings?._omni_speed_ceiling ?? 20),
+      })
+      // Four sentences rather than one, because this is the engine somebody
       // can choose and then wonder why every sentence arrives late. What it
       // costs is said in the same breath as what it is, not discovered.
       return (
@@ -1004,8 +1110,11 @@ function engineHint(engine: string, installed: boolean): string {
         ' ' +
         t('audio.engineOmniHint') +
         ' ' +
+        ceiling +
+        ' ' +
         t('audio.engineOmniSlow')
       )
+    }
     case 'windows':
       return t('audio.engineWindowsHint')
     default:

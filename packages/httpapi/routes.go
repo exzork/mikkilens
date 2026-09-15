@@ -11,6 +11,7 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/exzork/mikkilens/packages/audio/assets"
 	"github.com/exzork/mikkilens/packages/audio/devices"
 	"github.com/exzork/mikkilens/packages/audio/feedback"
 	"github.com/exzork/mikkilens/packages/audio/tts"
@@ -581,6 +582,10 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 		// and it comes from the engine rather than being written into the
 		// wording, so it cannot drift away from what the engine enforces.
 		payload["_local_speed_ceiling"] = tts.LocalSpeedCeiling()
+		// And OmniVoice's, which is lower and matters more: that engine
+		// answers too much speed by dropping the end of the sentence rather
+		// than by refusing, so the number is worth saying before she picks it.
+		payload["_omni_speed_ceiling"] = tts.OmniSpeedCeiling()
 		respond(writer, http.StatusOK, payload)
 	case http.MethodPut:
 		s.putConfig(writer, request)
@@ -598,6 +603,7 @@ func (s *Server) putConfig(writer http.ResponseWriter, request *http.Request) {
 	}
 	delete(body, "_languages")
 	delete(body, "_local_speed_ceiling")
+	delete(body, "_omni_speed_ceiling")
 
 	merged := s.engine.Config().ToMap()
 	for section, values := range body {
@@ -624,7 +630,37 @@ func (s *Server) putConfig(writer http.ResponseWriter, request *http.Request) {
 		fail(writer, http.StatusInternalServerError, "could not save the configuration: "+err.Error())
 		return
 	}
-	respond(writer, http.StatusOK, map[string]any{"ok": true, "config": updated.ToMap()})
+
+	// Choosing a voice engine whose models are not on the machine yet starts
+	// fetching them, here, rather than leaving her with an engine that reads in
+	// something else until the next restart and never says why.
+	//
+	// After the save and not before: a configuration that was rejected a few
+	// lines up should not have spent two gigabytes on its way to being
+	// rejected. It does not wait for the download -- what comes back is only
+	// what was started, so the page can put a bar up straight away instead of
+	// waiting for the first report to arrive over the socket.
+	respond(writer, http.StatusOK, map[string]any{
+		"ok":          true,
+		"config":      updated.ToMap(),
+		"downloading": startedDownload(s.engine.EnsureSpeechAssets()),
+	})
+}
+
+// startedDownload describes a download the save just began, or nothing at all.
+//
+// Null rather than an empty object when there is nothing to fetch, because the
+// page treats this as the answer to "is anything happening?" and an object
+// full of zeroes is a much easier thing to get wrong than a missing one.
+func startedDownload(wanted assets.Wanted) map[string]any {
+	if wanted.Empty() {
+		return nil
+	}
+	stages := make([]string, 0, len(wanted.Stages))
+	for _, stage := range wanted.Stages {
+		stages = append(stages, string(stage))
+	}
+	return map[string]any{"stages": stages, "bytes": wanted.Bytes}
 }
 
 func (s *Server) putSecret(writer http.ResponseWriter, request *http.Request) {

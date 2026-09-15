@@ -59,6 +59,18 @@ type Engine struct {
 	// stage is announced, and the status page reads its progress.
 	installer *assets.Installer
 
+	// runCtx is the context Start was given, kept so that work begun from an
+	// HTTP handler outlives the request that asked for it.
+	//
+	// A context on a struct is usually the wrong shape, and it is the right one
+	// here for a specific reason: saving the settings page can start a two
+	// gigabyte download, and the request context is cancelled the moment the
+	// reply is written. Hung off the request, the download would be killed a
+	// few milliseconds after it began -- which looks exactly like an engine
+	// that ignored the setting. This ties it to the life of the application
+	// instead, so closing MikkiLens still stops it.
+	runCtx context.Context
+
 	microphone  *capture.Stream
 	removeWake  func()
 	wake        *wake.Detector
@@ -358,6 +370,10 @@ func (e *Engine) handleHelp(map[string]string) error {
 
 // Start brings everything up and says so when it is ready.
 func (e *Engine) Start(ctx context.Context) {
+	e.mu.Lock()
+	e.runCtx = ctx
+	e.mu.Unlock()
+
 	e.bus.Start()
 	e.bus.SayKey("app.starting", feedback.Result)
 	e.announceCommandWarnings()
@@ -484,6 +500,76 @@ func (e *Engine) installAssets(ctx context.Context) {
 	if wanted.Has(assets.StageWake) && e.WakeError() != "" {
 		e.restartWakeWord()
 	}
+}
+
+// context is the life of the application, for work that must not be tied to
+// the request that started it. Background until Start has been called, which
+// is the case in tests and in nothing else.
+func (e *Engine) context() context.Context {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.runCtx == nil {
+		return context.Background()
+	}
+	return e.runCtx
+}
+
+// speechAssets is what the voice engine she has chosen still needs.
+//
+// The three stages that belong to a voice rather than to recognition: the
+// local voice's models, OmniVoice's, and the graphics runtime that decides
+// whether OmniVoice is fast enough to stream with. Each answers with nothing
+// unless it is the engine actually selected, so this is empty for the two
+// engines that have no models at all.
+//
+// Kept apart from installAssets rather than shared with it, because that one
+// threads the music programs between these stages for reasons of its own.
+// Choosing a voice is not a reason to start downloading a speech model, and
+// this is the list that says so.
+func speechAssets(settings config.Config) assets.Wanted {
+	wanted := assets.WithVoice(assets.Wanted{}, assets.MissingVoice(settings.Speech.Engine))
+	wanted = assets.WithOmni(wanted, assets.MissingOmni(settings.Speech.Engine))
+	return assets.WithCUDA(wanted, assets.MissingCUDA(settings.Speech.Engine))
+}
+
+// EnsureSpeechAssets fetches whatever the chosen voice engine is missing and
+// returns what it started, for the page that asked.
+//
+// Unlike installAssets this does not wait. What is waiting on it is a settings
+// window that has to stay answerable, so the download runs behind the reply and
+// reports itself through the status snapshot -- which is what draws the bar and
+// what the engine reads aloud, stage by stage.
+//
+// Finding nothing to do is the ordinary case, not a failure: choosing an engine
+// whose models are already here returns an empty Wanted and says nothing. The
+// caller tells those apart by asking whether it is empty, so a save that
+// started no download can avoid promising one.
+func (e *Engine) EnsureSpeechAssets() assets.Wanted {
+	settings := e.Config()
+	wanted := speechAssets(settings)
+	if wanted.Empty() {
+		return assets.Wanted{}
+	}
+
+	// Install would refuse a second download anyway. Refusing it here as well
+	// keeps the page from putting a bar up for something it did not start, and
+	// then watching it report a completely different stage's progress.
+	if e.installer.Running() {
+		return assets.Wanted{}
+	}
+
+	locale := e.Locale()
+	e.bus.Say(locale.T("assets.starting", i18n.Args{
+		"size": megabytes(wanted.Bytes),
+	}), feedback.Result)
+
+	err := e.installer.Install(e.context(), wanted, settings.STT.ModelSize,
+		func(progress assets.Progress) { e.announceStage(progress, wanted) }, nil)
+	if err != nil {
+		slog.Error("could not start the download", "error", err)
+		return assets.Wanted{}
+	}
+	return wanted
 }
 
 // announceStage turns one installer report into a sentence.

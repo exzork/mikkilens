@@ -1,6 +1,11 @@
 package tts
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+
+	"github.com/exzork/mikkilens/packages/audio/tts/omnivoice"
+)
 
 func TestOmniVoiceIsAnEngine(t *testing.T) {
 	if got := resolveEngine(EngineOmni); got != EngineOmni {
@@ -62,6 +67,34 @@ func TestOmniSpeedReadsTheRateTheWayEveryEngineDoes(t *testing.T) {
 		if got := omniSpeed(test.rate); got != test.want {
 			t.Errorf("omniSpeed(%q) = %v, want %v", test.rate, got, test.want)
 		}
+	}
+}
+
+// Asking OmniVoice to go faster than it can does not produce fast speech: the
+// model fills the time it is given, so too little time is answered by slurring
+// and by stopping before the last word. The rate is clamped in the engine, and
+// these are the two ends of what the settings page is told about it.
+
+func TestTheOmniCeilingIsTheLastRateThatWorks(t *testing.T) {
+	ceiling := omniSpeed(fmt.Sprintf("+%d%%", OmniSpeedCeiling()))
+	if ceiling > omnivoice.MaxSpeed+0.001 {
+		t.Errorf("the ceiling rate maps to %v, past the model's %v",
+			ceiling, omnivoice.MaxSpeed)
+	}
+	// And just past it, the number she is told is the last one that works.
+	beyond := omniSpeed(fmt.Sprintf("+%d%%", OmniSpeedCeiling()+1))
+	if beyond <= omnivoice.MaxSpeed {
+		t.Errorf("+%d%% maps to %v, still within the model's %v -- the ceiling "+
+			"is being reported lower than it is",
+			OmniSpeedCeiling()+1, beyond, omnivoice.MaxSpeed)
+	}
+}
+
+// The ceiling is quoted to her as a rate she can actually set, so it has to be
+// a whole percentage that is not itself clamped.
+func TestTheOmniCeilingIsAWholeUsableRate(t *testing.T) {
+	if got := OmniSpeedCeiling(); got != 20 {
+		t.Errorf("OmniSpeedCeiling() = %d, want 20", got)
 	}
 }
 

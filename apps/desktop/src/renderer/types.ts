@@ -53,6 +53,31 @@ declare global {
 
 export type Health = 'unknown' | 'connected' | 'disconnected' | 'error'
 
+/**
+ * One downloadable piece, named as the engine names it.
+ *
+ * Every one of these has an `install.stage.*` line to be called by, and the
+ * list is written out rather than left as `string` so that adding a stage in Go
+ * without a name to say it by fails here rather than showing her a bar labelled
+ * with a key that was never translated.
+ */
+export type DownloadStage =
+  | 'engine'
+  | 'model'
+  | 'wake'
+  | 'gpu'
+  | 'voice'
+  | 'player'
+  | 'ffmpeg'
+  | 'omnivoice'
+  | 'cuda'
+
+/** What a save started fetching, or null when it started nothing. */
+export interface StartedDownload {
+  stages: DownloadStage[]
+  bytes: number
+}
+
 export interface Snapshot {
   obs?: Health
   youtube?: Health
@@ -74,9 +99,16 @@ export interface Snapshot {
   last_transcript?: string
   last_command?: string
   stt_backend?: string
-  /** The first-run download, absent once there is nothing left to fetch. */
+  /**
+   * A download in progress, absent once there is nothing left to fetch.
+   *
+   * Not only the first-run one: choosing a voice engine whose models are not
+   * here yet starts one of these from the Audio tab, which is why the stages
+   * below include the two voices and the graphics runtime rather than just
+   * what a fresh installation fetches.
+   */
   installing?: {
-    stage: 'engine' | 'model' | 'wake' | 'gpu'
+    stage: DownloadStage
     downloaded: number
     total: number
     percent: number
@@ -233,6 +265,12 @@ export interface AppConfig {
   _languages?: string[]
   /** Rate percentage past which the local voice stops getting any faster. */
   _local_speed_ceiling?: number
+  /**
+   * The same for OmniVoice, which is lower. Worth showing for a different
+   * reason: above it that engine drops the end of the sentence rather than
+   * simply stopping getting faster.
+   */
+  _omni_speed_ceiling?: number
   [key: string]: unknown
 }
 

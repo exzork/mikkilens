@@ -200,6 +200,27 @@
               </select>
             </p>
             <p class="hint" id="voice-engine-hint"></p>
+
+            <!--
+              The download that choosing an engine can start. Hidden until
+              there is one: a bar sitting at nothing describes a download that
+              is not happening, which is worse than no bar at all.
+
+              It is a live region as well as a bar, because the bar is for the
+              person helping her set the machine up and the words are for her.
+              The engine says every stage aloud too; this is what the window
+              has to add.
+            -->
+            <p id="voice-download" class="download" hidden>
+              <progress id="voice-download-bar" max="100" value="0"></progress>
+              <span
+                id="voice-download-text"
+                class="hint"
+                role="status"
+                aria-live="polite"
+              ></span>
+            </p>
+
             <p>
               <label for="voice" data-i18n="audio.voice">Voice</label>
               <select id="voice"></select>
