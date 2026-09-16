@@ -22,6 +22,19 @@ confirm_prompt = "confirm.stop_stream"
 [commands.is_live]
 phrases = ["am i live", "am i streaming", "are we live right now"]
 
+# Packing up after a stream: it stops the stream, ends the broadcast, then asks
+# every open application to close. It does not switch the machine off -- what
+# it leaves is a computer with nothing running and nothing unsaved, so the
+# power button is safe whenever you want it.
+#
+# The phrasing stays well clear of "stop the stream" on purpose. One of them
+# ends the broadcast; this one closes everything on the screen, and mishearing
+# between the two would close every application mid-stream.
+[commands.close_stream]
+phrases = ["close everything", "close all applications", "close everything down", "tidy up and close everything"]
+confirm = true
+confirm_prompt = "confirm.close_stream"
+
 # --------------------------------------------------------------- channel ----
 
 # A channel is an OBS profile and a YouTube sign-in together: switching moves

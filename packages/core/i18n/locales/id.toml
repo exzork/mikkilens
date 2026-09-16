@@ -62,10 +62,23 @@ not_streaming = "Kamu memang belum siaran."
 
 [confirm]
 stop_stream = "Hentikan siaran dan akhiri siaran di YouTube? Jawab ya atau tidak."
+# Menyebut keduanya karena keduanya memang terjadi, dan yang kedua tidak bisa
+# ditarik kembali: aplikasi yang sudah ditutup tidak bisa dibuka lagi olehku.
+close_stream = "Hentikan siaran dan tutup semua aplikasi yang terbuka? Jawab ya atau tidak."
 set_title = "Ganti judul menjadi {text}? Jawab ya atau tidak."
 timeout = "Tidak ada jawaban. Dibatalkan."
 cancelled = "Dibatalkan."
 not_understood = "Aku tidak paham. Jawab ya atau tidak."
+
+# Beres-beres setelah siaran. Komputernya tidak dimatikan: yang dikatakan
+# adalah bahwa mesinnya sudah aman untuk dimatikan, dan tombolnya tetap di
+# tangannya.
+[session]
+closing = "Menutup semua aplikasinya."
+ready = "Semua sudah ditutup. Komputernya siap dimatikan."
+still_open = "Semua sudah ditutup, kecuali {apps}. Mungkin masih ada yang belum tersimpan."
+nothing_open = "Tidak ada aplikasi yang perlu ditutup."
+close_failed = "Tidak bisa menutup aplikasinya: {reason}"
 
 [listen]
 heard = "Saya mendengar: {text}"

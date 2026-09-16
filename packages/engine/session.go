@@ -1,0 +1,77 @@
+package engine
+
+import (
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/exzork/mikkilens/packages/audio/feedback"
+	"github.com/exzork/mikkilens/packages/controllers/desktop"
+	"github.com/exzork/mikkilens/packages/core/i18n"
+	"github.com/exzork/mikkilens/packages/core/intent"
+	"github.com/exzork/mikkilens/packages/core/state"
+)
+
+// Finishing for the day, as one sentence.
+//
+// The end of a stream is a dozen windows to find and close on a machine she is
+// not looking at -- and it is the moment she most wants to be finished. So
+// "tutup semua" stops the stream, ends the broadcast and asks every open
+// application to close, then says the machine is ready to be switched off.
+//
+// It does not switch anything off itself. What is left is a machine with
+// nothing running and nothing unsaved, so pressing the power button is safe;
+// deciding to press it stays hers.
+
+// closeSettle is how long applications are given to go before what is left is
+// reported as refusing.
+//
+// Long enough for a browser with many tabs, short enough that she is not left
+// listening to silence wondering whether the command worked. Anything still
+// there after this is almost always asking about unsaved work, which is a
+// thing to be told about rather than waited out.
+const closeSettle = 6 * time.Second
+
+func sessionHandlers(e *Engine) map[string]intent.Handler {
+	return map[string]intent.Handler{"close_stream": e.closeStream}
+}
+
+func (e *Engine) closeStream(map[string]string) error {
+	// The stream first. Closing OBS while it is still streaming ends the
+	// broadcast by pulling the cable out, which is what everybody watching
+	// would see.
+	if controller := e.OBS(); controller != nil && controller.Connected() {
+		if live, err := controller.IsStreaming(); err == nil && live {
+			if err := controller.StopStream(); err != nil {
+				slog.Error("could not stop the stream", "error", err)
+			} else {
+				e.store.Update(state.Changes{"streaming": false})
+				e.bus.SayKey("obs.stream_stopped", feedback.Result)
+			}
+		}
+	}
+	e.endBroadcast()
+
+	locale := e.Locale()
+	e.bus.SayKey("session.closing", feedback.Result)
+
+	asked, remaining, err := desktop.CloseAll(closeSettle)
+	switch {
+	case err != nil:
+		slog.Error("could not close the open applications", "error", err)
+		e.bus.SayKey("session.close_failed", feedback.Error,
+			i18n.Args{"reason": err.Error()})
+	case len(asked) == 0:
+		e.bus.SayKey("session.nothing_open", feedback.Result)
+	case len(remaining) == 0:
+		e.bus.SayKey("session.ready", feedback.Result)
+	default:
+		// Named rather than counted: "two still open" leaves her hunting, and
+		// the one still open is nearly always the one asking about unsaved
+		// work, which she can answer once she knows which it is.
+		e.bus.Say(locale.T("session.still_open", i18n.Args{
+			"apps": strings.Join(remaining, ", "),
+		}), feedback.Result)
+	}
+	return nil
+}

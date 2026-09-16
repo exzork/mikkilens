@@ -28,6 +28,19 @@ confirm_prompt = "confirm.stop_stream"
 [commands.is_live]
 phrases = ["apakah saya sedang siaran", "apa saya sudah live", "saya sudah live belum", "cek siaran"]
 
+# Beres-beres setelah siaran: siarannya dihentikan, broadcast-nya diakhiri,
+# lalu semua aplikasi yang terbuka diminta menutup diri. Komputernya tidak
+# dimatikan -- yang ditinggalkan adalah mesin tanpa apa-apa yang jalan dan
+# tanpa yang belum tersimpan, jadi tombol power aman ditekan kapan saja.
+#
+# Kalimatnya sengaja jauh dari "hentikan siaran": yang satu menghentikan
+# siaran, yang ini menutup seisi layar, dan salah dengar di antara keduanya
+# akan menutup semua aplikasi di tengah siaran.
+[commands.close_stream]
+phrases = ["tutup semua aplikasi", "tutup semuanya", "beres-beres", "bersih-bersih", "tutup semua"]
+confirm = true
+confirm_prompt = "confirm.close_stream"
+
 # --------------------------------------------------------------- channel ----
 
 # Channel di sini artinya profil OBS ditambah login YouTube sekaligus: sekali

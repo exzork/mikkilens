@@ -60,10 +60,22 @@ not_streaming = "You are not streaming."
 
 [confirm]
 stop_stream = "Stop the stream and end the YouTube broadcast? Say yes or no."
+# Both halves are named because both happen, and the second cannot be taken
+# back: an application I have closed is not one I can open again.
+close_stream = "Stop the stream and close every open application? Say yes or no."
 set_title = "Change the title to {text}? Say yes or no."
 timeout = "No answer. Cancelled."
 cancelled = "Cancelled."
 not_understood = "I did not understand. Say yes or no."
+
+# Packing up after a stream. The machine is not switched off: what is said is
+# that it is safe to switch off, and the button stays hers.
+[session]
+closing = "Closing everything."
+ready = "Everything is closed. The computer is ready to switch off."
+still_open = "Everything closed except {apps}. One of them may be asking about unsaved work."
+nothing_open = "Nothing was open to close."
+close_failed = "I could not close the applications: {reason}"
 
 [listen]
 heard = "I heard: {text}"

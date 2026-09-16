@@ -355,6 +355,7 @@ func (e *Engine) registerBuiltinHandlers() {
 	e.router.RegisterAll(musicHandlers(e))
 	e.router.RegisterAll(musicPlaybackHandlers(e))
 	e.router.RegisterAll(volumeHandlers(e))
+	e.router.RegisterAll(sessionHandlers(e))
 }
 
 func (e *Engine) handleHelp(map[string]string) error {
