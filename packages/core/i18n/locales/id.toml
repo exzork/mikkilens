@@ -83,6 +83,11 @@ already_playing = "Chat memang sedang dibacakan."
 muted = "Chat dibisukan."
 unmuted = "Chat dibunyikan lagi."
 skipped = "Melompati {count} chat. Sekarang sudah paling baru."
+# Said when the reading skips ahead by itself because it had fallen behind. It
+# does not claim to be up to date the way the line above does: the newest few
+# are still waiting, which is the point of catching up rather than jumping to
+# the end.
+caught_up = "Melompati {count} chat biar tidak ketinggalan."
 behind = "Kamu tertinggal {count} chat, sekitar {minutes} menit."
 up_to_date = "Chat sudah paling baru."
 message = "{author}, {text}"

@@ -94,16 +94,19 @@ func synthesizeOmni(ctx context.Context, text string, options Options) (Audio, e
 		}
 	}
 
+	// Spoken at its own pace, whatever the rate says. The model has no speed
+	// control -- only the number of frames it is given to fill -- so asking it
+	// for less time is what made it slur and stop before the last word. The
+	// rate is applied to the finished audio instead; see stretch.
 	samples, err := engine.Speak(ctx, text, omnivoice.Options{
 		Voice:    voice,
 		Language: options.Language,
-		Speed:    omniSpeed(options.Rate),
 	})
 	if err != nil {
 		return Audio{}, err
 	}
 	return Audio{
-		Samples:    samples,
+		Samples:    stretch(samples, engine.SampleRate(), omniSpeed(options.Rate)),
 		SampleRate: engine.SampleRate(),
 		Channels:   1,
 		Text:       text,
@@ -116,9 +119,8 @@ func synthesizeOmni(ctx context.Context, text string, options Options) (Audio, e
 // has no speed of its own, only the length it is asked to fill, so "+0%" is
 // exactly 1 and the arithmetic is the plain reading of the number.
 //
-// Past OmniSpeedCeiling the engine clamps; see omnivoice.MaxSpeed for what
-// goes wrong above it. The number is not converted here, so that what the
-// engine enforces and what the settings page quotes cannot drift apart.
+// The number is what the finished audio is compressed by rather than what the
+// model is asked for, so nothing here can cost a word; see stretch.
 func omniSpeed(rate string) float32 {
 	return 1 + float32(parsePercent(rate))/100
 }
@@ -127,12 +129,11 @@ func omniSpeed(rate string) float32 {
 // any faster, for the settings page to say so rather than leave the top of the
 // slider silently doing nothing.
 //
-// The same promise the local voice makes, and it matters more here: this
-// engine answers too much speed by dropping the end of the sentence rather
-// than by refusing, so a rate above this is not a slider that does nothing but
-// one that quietly damages what she hears.
+// It used to be the model's own limit, twenty percent, past which it dropped
+// the end of the sentence. The model is no longer the thing being hurried --
+// the audio it produced is -- so what decides this now is how far overlapping
+// pieces of speech can be pushed together before they stop landing on the same
+// sound, which is twice speed.
 func OmniSpeedCeiling() int {
-	// Floor for the same reason as the local voice: this number is quoted as a
-	// rate that works, so it must not name a setting that is itself clamped.
-	return int(math.Floor((omnivoice.MaxSpeed - 1) * 100))
+	return int(math.Floor((stretchMax - 1) * 100))
 }

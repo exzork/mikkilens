@@ -41,6 +41,10 @@ type Bus interface {
 	SayKey(key string, priority intent.Priority, args ...i18n.Args)
 	Clear(priority intent.Priority) int
 	InterruptCurrent()
+
+	// SetChatHurry reads chat faster while it is behind. One is the rate she
+	// configured; the bus holds the total at its own ceiling.
+	SetChatHurry(hurry float32)
 }
 
 // Reader reads chat aloud, with a cursor she controls.
@@ -55,6 +59,10 @@ type Reader struct {
 	playing    bool
 	lastSpoken string
 	onBacklog  func(count int)
+
+	// lastCaughtUp is when skipping ahead was last announced, so a flood is
+	// one sentence rather than one every few seconds.
+	lastCaughtUp time.Time
 
 	running bool
 	wake    chan struct{}
@@ -267,6 +275,114 @@ func (r *Reader) PendingMessages() []Message {
 	return pending
 }
 
+// hurry reads chat faster the further behind it is.
+//
+// It is the gentler half of catching up and it happens first: speeding up
+// clears a backlog without costing anybody their message, where skipping ahead
+// throws messages away. So nothing changes while the backlog is small, the
+// rate climbs as it fills, and only past the cap does catchUp start dropping.
+func (r *Reader) hurry() {
+	r.mu.Lock()
+	limit := r.settings.MaxBacklog
+	r.mu.Unlock()
+
+	r.bus.SetChatHurry(hurryFor(r.Backlog(), limit))
+}
+
+// hurryFor is how much faster to read, given how many messages are waiting.
+//
+// Flat until half the cap, because a couple of messages in hand is the
+// ordinary state of a busy chat and is not worth changing her voice over.
+// From there it climbs to the ceiling at the cap, so the fastest reading and
+// the first dropped message arrive together rather than the rate jumping at
+// the moment messages start going missing.
+func hurryFor(backlog, limit int) float32 {
+	if limit <= 0 {
+		// Catching up is switched off, so nothing is ever dropped -- which
+		// makes reading faster the only way back. The numbers below stand in
+		// for a cap nobody set.
+		limit = 20
+	}
+	from := max(1, limit/2)
+	if backlog <= from {
+		return 1
+	}
+	if backlog >= limit {
+		return maxHurry
+	}
+	return 1 + (maxHurry-1)*float32(backlog-from)/float32(limit-from)
+}
+
+// maxHurry is the most the reading is sped up by.
+//
+// The same number as the bus's own ceiling rather than a smaller one, because
+// this is a multiplier on the rate she configured: at +0% the two agree, and at
+// a faster configured rate the bus is what holds the total down. A lower number
+// here would mean somebody reading chat at its ordinary pace could never reach
+// the ceiling at all.
+const maxHurry = 1.8
+
+// catchUpEvery is the least time between two "skipped ahead" sentences.
+//
+// The skipping itself is not rate limited -- falling behind again is answered
+// again, at once -- only saying so is. A stream that floods for a minute would
+// otherwise spend that minute announcing that it is skipping, which is both the
+// noise she was trying to get away from and time not spent reading chat.
+const catchUpEvery = 30 * time.Second
+
+// catchUp drops the oldest messages once the reading has fallen too far behind.
+//
+// Chat arrives in bursts and is read one message at a time, so a busy minute
+// leaves the reading minutes behind: she hears, at length, what was said before
+// the thing everyone is talking about now, and answers it live. The cure is the
+// one she already has by voice -- skip to now -- applied without her having to
+// notice and ask for it.
+//
+// Only ordinary messages go. A super chat, a membership or a gift is somebody
+// spending money to be heard, and those are left in the buffer to be read next,
+// however far behind the reading is.
+func (r *Reader) catchUp() {
+	r.mu.Lock()
+	limit, locale, cursor := r.settings.MaxBacklog, r.locale, r.cursor
+	r.mu.Unlock()
+	if limit <= 0 {
+		return
+	}
+
+	pending, _ := r.ingest.From(cursor)
+	excess := len(pending) - limit
+	if excess <= 0 {
+		return
+	}
+
+	// Backwards, because removing a message shifts everything after it: taken
+	// from the end of the skipped run, the indexes in front of it still stand.
+	dropped := 0
+	for offset := excess - 1; offset >= 0; offset-- {
+		if pending[offset].IsEvent() {
+			continue
+		}
+		r.ingest.Remove(cursor + offset)
+		dropped++
+	}
+	if dropped == 0 {
+		return
+	}
+
+	r.mu.Lock()
+	announce := time.Since(r.lastCaughtUp) >= catchUpEvery
+	if announce {
+		r.lastCaughtUp = time.Now()
+	}
+	r.mu.Unlock()
+
+	slog.Info("skipped ahead to catch up with chat", "dropped", dropped, "limit", limit)
+	if announce {
+		r.bus.Say(locale.T("chat.caught_up", i18n.Args{"count": dropped}), intent.PriorityResult)
+	}
+	r.reportBacklog()
+}
+
 // -- filtering ----------------------------------------------------------------
 
 func (r *Reader) shouldRead(message Message) bool {
@@ -453,6 +569,12 @@ func (r *Reader) run(stop <-chan struct{}, done chan struct{}) {
 			}
 			continue
 		}
+
+		// Before taking the next one: the point is to read what is current,
+		// which means deciding how fast to read and what to skip before
+		// choosing what to read.
+		r.hurry()
+		r.catchUp()
 
 		message, ok := r.next()
 		if !ok {

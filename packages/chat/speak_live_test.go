@@ -72,7 +72,13 @@ func TestSpeakRealChatLive(t *testing.T) {
 	bus.Start()
 	defer bus.Stop()
 
-	reader := NewReader(nil, bus, locale, settings.Chat, nil)
+	// Through a real ingest buffer rather than straight from the transport.
+	// The buffer is what numbers a gifted membership -- which recipient this
+	// is, and how many were bought -- so a harness that skipped it read all
+	// fifty names of a batch the application itself folds into "and the
+	// others", and said the reader was at fault.
+	ingest := NewIngest(nil, IngestOptions{})
+	reader := NewReader(ingest, bus, locale, settings.Chat, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), window)
 	defer cancel()
@@ -80,58 +86,93 @@ func TestSpeakRealChatLive(t *testing.T) {
 	var mu sync.Mutex
 	counts := map[string]int{}
 
-	transport := &scrapeTransport{}
-	err = transport.Run(ctx, Target{VideoID: video},
-		func(batch []Message) {
-			for _, message := range batch {
-				if !reader.shouldRead(message) {
-					continue
-				}
-				if eventsOnly && !message.IsEvent() {
-					continue
-				}
+	// Fetching and speaking on separate goroutines, the way the application
+	// runs them. Done in the delivery callback, chat stopped being fetched for
+	// as long as it took to say each message -- so it arrived in late lumps and
+	// looked like YouTube being slow, when it was this harness holding the line
+	// open and not reading from it.
+	speaking := make(chan struct{})
+	go func() {
+		defer close(speaking)
 
-				kind := "chat"
-				switch {
-				case message.IsSuperchat:
-					kind = "SUPERCHAT"
-				case message.IsMember:
-					kind = "MEMBERSHIP"
-				case message.IsGift:
-					kind = "GIFT"
-				case message.IsGiftReceived:
-					kind = "GIFT RECEIVED"
-				}
-				mu.Lock()
-				counts[kind]++
-				mu.Unlock()
+		idle := time.NewTicker(250 * time.Millisecond)
+		defer idle.Stop()
 
-				sentence := reader.Render(message)
-				fmt.Printf("[%s] %s\n", kind, sentence)
-				if message.IsEvent() {
-					fmt.Printf("    author=%q member_badge=%v level=%q months=%d\n",
-						message.Author, message.AuthorIsMember,
-						message.MemberLevel, message.MemberMonths)
-				}
+		for ctx.Err() == nil {
+			// The same two decisions the reader makes before each message:
+			// how fast to read, and what is too old to be worth reading.
+			reader.hurry()
+			reader.catchUp()
 
-				// One at a time with the reader's own gap after it, rather
-				// than queueing the batch: the spacing between messages is
-				// half of what is being listened for here, and a probe that
-				// ran them together would not be reproducing what she hears.
-				spoken := make(chan struct{})
-				var once sync.Once
-				bus.SayChat(sentence, message.IsPaid(), func(bool) {
-					once.Do(func() { close(spoken) })
-				})
+			// Taken through the reader's own cursor rather than a second one
+			// kept here. Skipping ahead moves that cursor and drops what it
+			// passed, so a harness counting separately went on asking for
+			// messages that were no longer there -- which is what left it
+			// announcing a skip and then reading nothing ever again.
+			message, ok := reader.next()
+			if !ok {
 				select {
-				case <-spoken:
 				case <-ctx.Done():
 					return
-				case <-time.After(30 * time.Second):
+				case <-idle.C:
 				}
-				time.Sleep(minGap)
+				continue
 			}
-		},
+			if !reader.shouldRead(message) {
+				continue
+			}
+			if eventsOnly && !message.IsEvent() {
+				continue
+			}
+
+			kind := "chat"
+			switch {
+			case message.IsSuperchat:
+				kind = "SUPERCHAT"
+			case message.IsMember:
+				kind = "MEMBERSHIP"
+			case message.IsGift:
+				kind = "GIFT"
+			case message.IsGiftReceived:
+				kind = "GIFT RECEIVED"
+			}
+			mu.Lock()
+			counts[kind]++
+			mu.Unlock()
+
+			sentence := reader.Render(message)
+			fmt.Printf("[%s] %s\n", kind, sentence)
+			if message.IsEvent() {
+				fmt.Printf("    author=%q member_badge=%v level=%q months=%d\n",
+					message.Author, message.AuthorIsMember,
+					message.MemberLevel, message.MemberMonths)
+			}
+
+			// One at a time with the reader's own gap after it, rather than
+			// queueing them: the spacing between messages is half of what is
+			// being listened for here, and a probe that ran them together
+			// would not be reproducing what she hears.
+			spoken := make(chan struct{})
+			var once sync.Once
+			bus.SayChat(sentence, message.IsPaid(), func(bool) {
+				once.Do(func() { close(spoken) })
+			})
+			select {
+			case <-spoken:
+			case <-ctx.Done():
+				return
+			case <-time.After(30 * time.Second):
+			}
+			time.Sleep(minGap)
+		}
+	}()
+
+	// The connection does nothing but collect. Everything said happens on the
+	// goroutine above, so a long message never holds the fetch open -- which is
+	// what had chat arriving in late lumps and looking like YouTube's fault.
+	transport := &scrapeTransport{}
+	err = transport.Run(ctx, Target{VideoID: video},
+		func(batch []Message) { ingest.Accept(batch) },
 		func() { t.Logf("connected to the chat page for %s", video) },
 	)
 
@@ -139,8 +180,11 @@ func TestSpeakRealChatLive(t *testing.T) {
 		t.Fatalf("reading chat failed: %v", err)
 	}
 
-	// Let the queue drain, so the last thing said is heard in full rather
-	// than cut off by the test returning.
+	// Stop the speaking goroutine and wait for it before draining the queue, so
+	// the last thing said is heard in full rather than cut off by the test
+	// returning.
+	cancel()
+	<-speaking
 	bus.WaitUntilIdle(30 * time.Second)
 	t.Logf("read aloud in %s: %v", window, counts)
 }

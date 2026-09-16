@@ -121,6 +121,7 @@ type Bus struct {
 	current    *Utterance
 	chatHeld   time.Time
 	chatMuted  bool
+	chatHurry  float32 // 1 is the configured rate; see SetChatHurry
 	running    bool
 	idle       chan struct{}
 	history    []Spoken
@@ -332,7 +333,7 @@ func (b *Bus) SayChat(text string, paid bool, onSpoken func(bool)) {
 		Priority:             priority,
 		Earcon:               earcon,
 		Voice:                settings.VoiceForChat(locale.DefaultVoice()),
-		Rate:                 settings.Speech.ChatRate,
+		Rate:                 b.chatRate(settings.Speech.ChatRate),
 		Volume:               At(settings.Speech.ChatVolume),
 		RequeueIfInterrupted: true,
 		OnSpoken:             onSpoken,

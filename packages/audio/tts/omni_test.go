@@ -74,31 +74,39 @@ func TestOmniSpeedReadsTheRateTheWayEveryEngineDoes(t *testing.T) {
 	}
 }
 
-// Asking OmniVoice to go faster than it can does not produce fast speech: the
-// model fills the time it is given, so too little time is answered by slurring
-// and by stopping before the last word. The rate is clamped in the engine, and
-// these are the two ends of what the settings page is told about it.
+// The rate is applied to the audio after it has been spoken, not asked of the
+// model, so the ceiling is where overlapping pieces of speech stop landing on
+// the same sound rather than where the model starts dropping words.
 
 func TestTheOmniCeilingIsTheLastRateThatWorks(t *testing.T) {
 	ceiling := omniSpeed(fmt.Sprintf("+%d%%", OmniSpeedCeiling()))
-	if ceiling > omnivoice.MaxSpeed+0.001 {
-		t.Errorf("the ceiling rate maps to %v, past the model's %v",
-			ceiling, omnivoice.MaxSpeed)
+	if ceiling > stretchMax+0.001 {
+		t.Errorf("the ceiling rate maps to %v, past the %v speeding up holds at",
+			ceiling, stretchMax)
 	}
 	// And just past it, the number she is told is the last one that works.
 	beyond := omniSpeed(fmt.Sprintf("+%d%%", OmniSpeedCeiling()+1))
-	if beyond <= omnivoice.MaxSpeed {
-		t.Errorf("+%d%% maps to %v, still within the model's %v -- the ceiling "+
-			"is being reported lower than it is",
-			OmniSpeedCeiling()+1, beyond, omnivoice.MaxSpeed)
+	if beyond <= stretchMax {
+		t.Errorf("+%d%% maps to %v, still within %v -- the ceiling is being "+
+			"reported lower than it is", OmniSpeedCeiling()+1, beyond, stretchMax)
 	}
 }
 
 // The ceiling is quoted to her as a rate she can actually set, so it has to be
 // a whole percentage that is not itself clamped.
 func TestTheOmniCeilingIsAWholeUsableRate(t *testing.T) {
-	if got := OmniSpeedCeiling(); got != 20 {
-		t.Errorf("OmniSpeedCeiling() = %d, want 20", got)
+	if got := OmniSpeedCeiling(); got != 100 {
+		t.Errorf("OmniSpeedCeiling() = %d, want 100", got)
+	}
+}
+
+// The model keeps its own guard for anything that still sets its speed
+// directly, which is what a test or a future caller would do.
+func TestTheModelKeepsItsOwnSpeedGuard(t *testing.T) {
+	if omnivoice.MaxSpeed >= stretchMax {
+		t.Errorf("the model's guard is %v, no longer below the %v the audio is "+
+			"sped up to -- rushing the model is back on the table",
+			omnivoice.MaxSpeed, stretchMax)
 	}
 }
 

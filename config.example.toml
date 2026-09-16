@@ -97,7 +97,12 @@ rate = "+0%"          # Speed of confirmations. "+25%" is noticeably faster.
 # can: "atur volume bicara lima puluh persen".
 volume = 100          # Loudness of confirmations.
 chat_voice = ""       # Empty means the same voice as above.
-chat_rate = "+15%"    # Chat is usually wanted faster than system feedback.
+chat_rate = "+30%"    # Chat is read faster than MikkiLens' own confirmations:
+                      # it is other people's words to keep half an ear on
+                      # rather than something said to you. This is the floor
+                      # rather than a fixed pace -- the reading speeds up on
+                      # its own, up to 1.8x, while it is behind, and skips
+                      # ahead past `max_backlog` if that is not enough.
 chat_volume = 100     # Chat is often wanted quieter than confirmations, so it
                       # sits under the stream instead of over it. Try 70.
 
@@ -442,6 +447,14 @@ collapse_duplicates = true
 read_superchats_first = true
 max_message_chars = 200      # Longer messages are cut off.
 muted_users = []             # Names here are never read aloud.
+max_backlog = 10             # How far behind the reading may fall before it
+                             # catches up by skipping. Chat arrives in bursts
+                             # and is read one message at a time, so a busy
+                             # minute leaves her hearing what was said two
+                             # minutes ago. Past this many waiting, the oldest
+                             # are dropped and "melompati N chat" is said once.
+                             # Super chats, memberships and gifts are never
+                             # dropped. Zero reads everything, however late.
 max_gift_recipients = 5      # When somebody gifts memberships in bulk, YouTube
                              # sends one message per recipient. Read this many
                              # names, then "and 45 others" once. 0 reads all.

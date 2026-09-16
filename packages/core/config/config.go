@@ -357,6 +357,21 @@ type Chat struct {
 	// that has just had something worth reacting to happen on it. Past the
 	// cap she hears "and forty-five others" once instead. Zero reads them all.
 	MaxGiftRecipients int `toml:"max_gift_recipients" json:"max_gift_recipients"`
+
+	// MaxBacklog is how far behind the reading may fall before it catches up
+	// by skipping ahead.
+	//
+	// Chat arrives in bursts and is read one message at a time, so a busy
+	// minute puts the reading behind and nothing ever gives that time back:
+	// she ends up hearing, at some length, what was said two minutes ago and
+	// answering it live. Past this many waiting messages the oldest are
+	// dropped and "melompati N chat" is said once, which is the same thing
+	// "skip to now" does by voice -- only without her having to notice and ask.
+	//
+	// Nothing anybody paid for is ever dropped: super chats, memberships and
+	// gifts are read whatever the backlog. Zero switches catching up off and
+	// reads everything, however late it gets.
+	MaxBacklog int `toml:"max_backlog" json:"max_backlog"`
 }
 
 // Tako is the donation overlay, watched so that chat stops being read while an
@@ -534,7 +549,13 @@ func Default() Config {
 			// the names honest.
 			Engine: "omnivoice",
 			Voice:  "mikkiru",
-			Rate:   "+0%", Volume: 100, ChatRate: "+15%", ChatVolume: 100,
+			// Chat is read faster than she speaks: it is a stream of other
+			// people's words to keep half an ear on, not something said to
+			// her. Thirty percent is where it stops feeling slow without
+			// needing attention -- and it is a floor rather than a fixed pace,
+			// since the reading speeds up further on its own when it falls
+			// behind. See feedback.maxChatSpeed.
+			Rate: "+0%", Volume: 100, ChatRate: "+30%", ChatVolume: 100,
 			DonationRate: "+0%", DonationVolume: 100,
 			EarconVolume: 25, ConfirmTimeoutS: 8.0,
 			LeadInMs: 300,
@@ -588,6 +609,11 @@ func Default() Config {
 			CollapseDuplicates: true, ReadSuperchatsFirst: true,
 			MaxMessageChars: 200, MutedUsers: []string{},
 			MaxGiftRecipients: 5,
+			// Ten, because reading one message takes the better part of ten
+			// seconds all in -- so ten waiting is already a minute and a half
+			// of lag, which is the point where an answer stops matching what
+			// chat is talking about.
+			MaxBacklog: 10,
 		},
 		Tako: Tako{
 			OverlayKeyEnv: "MIKKILENS_TAKO_OVERLAY_KEY",

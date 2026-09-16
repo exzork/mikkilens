@@ -1096,9 +1096,9 @@ function engineHint(engine: string, installed: boolean): string {
     }
     case 'omnivoice': {
       // The rate cap is said for a sharper reason than the local voice's. That
-      // one stops getting faster; this one starts dropping the end of the
-      // sentence, which is a thing she would hear as chat arriving wrong
-      // rather than as a setting being too high.
+      // one stops getting faster; this one is sped up after it has spoken, so
+      // the ceiling is where the audio starts sounding choppy rather than
+      // where words go missing.
       const ceiling = t('audio.engineOmniRateCap', {
         percent: String(settings?._omni_speed_ceiling ?? 20),
       })

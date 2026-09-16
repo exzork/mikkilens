@@ -60,9 +60,9 @@ func TestClarityLive(t *testing.T) {
 		Steps:    envInt("MIKKILENS_STEPS"),
 		Guidance: envFloat("MIKKILENS_GUIDANCE"),
 	}
-	// The rates she actually has: +10% for everything MikkiLens says, +15%
-	// for chat. Overridable as one number for both.
-	speech, chatSpeed := float32(1.10), float32(1.15)
+	// The shipped rates: +10% for everything MikkiLens says, +30% for chat.
+	// Overridable as one number for both.
+	speech, chatSpeed := float32(1.10), float32(1.30)
 	if speed := envFloat("MIKKILENS_SPEED"); speed > 0 {
 		speech, chatSpeed = speed, speed
 	}

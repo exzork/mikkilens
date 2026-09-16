@@ -26,6 +26,7 @@ type fakeBus struct {
 	otherSaid  []string
 	cleared    []intent.Priority
 	interrupts int
+	hurry      float32
 }
 
 func newFakeBus() *fakeBus { return &fakeBus{locale: i18n.Load("id")} }
@@ -62,6 +63,12 @@ func (b *fakeBus) InterruptCurrent() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.interrupts++
+}
+
+func (b *fakeBus) SetChatHurry(hurry float32) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.hurry = hurry
 }
 
 func (b *fakeBus) chat() []string {
