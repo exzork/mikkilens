@@ -385,7 +385,25 @@ func (b *Bus) Earcon(name string) {
 	}
 	device := b.currentDevice()
 	go func() {
-		if _, err := devices.Play(device, wave, earcons.SampleRate, 1, nil); err != nil {
+		if _, err := devices.Play(device, wave, earcons.SampleRate, 1, nil); err == nil {
+			return
+		} else if settings.Speech.OutputDevice == "" {
+			slog.Warn("could not play an earcon", "name", name, "error", err)
+			return
+		}
+
+		// A headset that dropped and came back leaves the endpoint resolved at
+		// startup invalid, and every tone after that was lost to a line in the
+		// log -- the acknowledgement she works by, gone until a restart. So
+		// resolve the configured device again and try once. The speaker is told
+		// the new one too, because the voice was about to fail the same way.
+		fresh, resolveErr := devices.Resolve(settings.Speech.OutputDevice, devices.Output)
+		if resolveErr != nil {
+			slog.Warn("could not play an earcon", "name", name, "error", err)
+			return
+		}
+		b.SetDevice(fresh)
+		if _, err := devices.Play(fresh, wave, earcons.SampleRate, 1, nil); err != nil {
 			slog.Warn("could not play an earcon", "name", name, "error", err)
 		}
 	}()
