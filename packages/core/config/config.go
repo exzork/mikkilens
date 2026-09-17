@@ -72,6 +72,12 @@ type Speech struct {
 	Voice string `toml:"voice" json:"voice"`
 	Rate  string `toml:"rate" json:"rate"`
 
+	// DefaultVoiceGiven is the default voice this file has already been moved
+	// onto, once, on upgrading. Bookkeeping rather than a setting: while it
+	// names the default, the engine and voice above are hers and are left
+	// alone. See migrateToOwnVoice.
+	DefaultVoiceGiven string `toml:"default_voice_given" json:"default_voice_given"`
+
 	// Volume is how loud MikkiLens herself is, from 0 to 100, where 100 is the
 	// voice at its own level and 50 is half of it.
 	//
@@ -543,12 +549,11 @@ func Default() Config {
 		Language: Language{Output: "id", STT: "id", ChatTTS: "follow"},
 		Speech: Speech{
 			// OmniVoice, reading in her own voice, which ships prepared inside
-			// the executable. Spelled out rather than taken from tts.EngineOmni
-			// and omnivoice.DefaultVoice: this package sits under the audio
-			// packages, not above them. tts.TestTheDefaultIsHerOwnVoice keeps
-			// the names honest.
-			Engine: "omnivoice",
-			Voice:  "mikkiru",
+			// the executable. A new file has had nothing to be moved off, so
+			// it counts as given it already; see migrateToOwnVoice.
+			Engine:            ownVoiceEngine,
+			Voice:             ownVoice,
+			DefaultVoiceGiven: ownVoice,
 			// Chat is read faster than she speaks: it is a stream of other
 			// people's words to keep half an ear on, not something said to
 			// her. Thirty percent is where it stops feeling slow without
@@ -650,6 +655,7 @@ func Load(path string) (Config, error) {
 		return Default(), &Error{Reason: err.Error()}
 	}
 	migrateVolumes(document)
+	migrateToOwnVoice(document)
 	migrateVoiceEngine(document)
 	return FromMap(document), nil
 }

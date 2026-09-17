@@ -100,13 +100,21 @@ indexes code points directly through a 65 536-entry table, so there is no
 grapheme-to-phoneme dependency to ship — wrapped in a language tag that the
 encoder reads as part of the text.
 
-Upgrading does not change the voice anyone was already hearing.
-`migrateVoiceEngine` reads a file that names a voice and says nothing about an
-engine as meaning the engine that name belongs to: an Edge voice means
-**online**, a Supertonic preset (`F1`–`M5`) means **local**. A file that names
-no voice takes the new default, voice and all — an empty `voice` there meant
-"whatever the engine starts with", and under OmniVoice empty means a voice the
-model invents, so it is dropped rather than carried across.
+Upgrading moves a machine onto her voice once. `migrateToOwnVoice` sets the
+engine to OmniVoice and the voice to `mikkiru` in any file without
+`speech.default_voice_given = "mikkiru"`, clears a chat or donation voice that
+names an Edge or Supertonic voice (OmniVoice would invent a voice for it), and
+records the marker. It overrules the old engine on purpose: the settings page
+saves the whole speech section, so every file that has been saved once names
+an engine outright, and an engine written down cannot be told apart from one
+chosen. Keeping it left a used machine on Supertonic with OmniVoice never
+downloaded, because the download follows the engine. Whatever is chosen after
+the move is saved with the marker and never moved again.
+
+`migrateVoiceEngine` still runs after it, for a file that has the marker but
+had its engine taken out by hand: an Edge voice means **online**, a Supertonic
+preset (`F1`–`M5`) means **local**, and an empty `voice` is dropped so the
+default voice arrives with the default engine.
 
 The default voice, `mikkiru`, ships inside the engine (`omnivoice/builtin`,
 `go:embed`) as a recording, its transcript and the prepared codes, and is

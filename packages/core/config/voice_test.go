@@ -6,9 +6,10 @@ import (
 	"testing"
 )
 
-// Upgrading must not quietly change which voice reads. These go through Load
-// rather than calling the migration directly, because reading a real file is
-// the thing that actually happens to somebody upgrading.
+// Upgrading moves a machine onto her voice once, and after that never changes
+// which voice reads. These go through Load rather than calling the migrations
+// directly, because reading a real file is the thing that actually happens to
+// somebody upgrading.
 
 func load(t *testing.T, contents string) Config {
 	t.Helper()
@@ -34,10 +35,74 @@ func wantDefaultVoice(t *testing.T, settings Config) {
 	}
 }
 
-// The case that matters: a machine running 0.10 today, upgraded.
+// The case that matters: a machine that has been used, upgraded. The settings
+// page saves the engine with everything else, so it is written down whether or
+// not anybody chose it -- and it was still left reading in Supertonic, with
+// OmniVoice never downloaded.
+func TestASavedFileIsMovedOntoHerVoice(t *testing.T) {
+	settings := load(t, `
+[speech]
+engine = 'local'
+voice = 'F1'
+rate = '+0%'
+`)
+	wantDefaultVoice(t, settings)
+	if settings.Speech.DefaultVoiceGiven != "mikkiru" {
+		t.Errorf("default_voice_given = %q, want it recorded", settings.Speech.DefaultVoiceGiven)
+	}
+}
+
+// A chat or donation voice from another engine would read in a voice OmniVoice
+// invents, so it goes back to following the main voice. One of her own
+// recordings is an OmniVoice voice already, and stays.
+func TestOtherEnginesChatVoicesFollowHerVoice(t *testing.T) {
+	settings := load(t, `
+[speech]
+engine = 'online'
+voice = 'id-ID-GadisNeural'
+chat_voice = 'id-ID-ArdiNeural'
+donation_voice = 'mikki'
+`)
+	wantDefaultVoice(t, settings)
+	if settings.Speech.ChatVoice != "" {
+		t.Errorf("chat_voice = %q, want it following her voice", settings.Speech.ChatVoice)
+	}
+	if settings.Speech.DonationVoice != "mikki" {
+		t.Errorf("donation_voice = %q, want her recording kept", settings.Speech.DonationVoice)
+	}
+}
+
+// Once, and only once: a voice she picks afterwards survives being saved and
+// read back.
+func TestAVoiceChosenAfterwardsIsKept(t *testing.T) {
+	settings := load(t, `
+[speech]
+engine = 'local'
+voice = 'F1'
+`)
+	settings.Speech.Engine = "online"
+	settings.Speech.Voice = "id-ID-ArdiNeural"
+
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if _, err := settings.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	again, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if again.Speech.Engine != "online" || again.Speech.Voice != "id-ID-ArdiNeural" {
+		t.Errorf("speech = %q/%q, want her online/id-ID-ArdiNeural",
+			again.Speech.Engine, again.Speech.Voice)
+	}
+}
+
+// After that, a file with the engine taken out by hand still reads as the
+// engine its voice belongs to.
 func TestAnOnlineVoiceSurvivesTheUpgrade(t *testing.T) {
 	settings := load(t, `
 [speech]
+default_voice_given = 'mikkiru'
 voice = 'id-ID-GadisNeural'
 rate = '+0%'
 `)
@@ -54,6 +119,7 @@ rate = '+0%'
 func TestAnOnlineChatVoiceAloneAlsoSurvives(t *testing.T) {
 	settings := load(t, `
 [speech]
+default_voice_given = 'mikkiru'
 chat_voice = 'id-ID-ArdiNeural'
 `)
 	if settings.Speech.Engine != "online" {
@@ -64,6 +130,7 @@ chat_voice = 'id-ID-ArdiNeural'
 func TestAnOnlineDonationVoiceAloneAlsoSurvives(t *testing.T) {
 	settings := load(t, `
 [speech]
+default_voice_given = 'mikkiru'
 donation_voice = 'en-US-AriaNeural'
 `)
 	if settings.Speech.Engine != "online" {
@@ -105,6 +172,7 @@ func TestAFreshInstallGetsHerOwnVoice(t *testing.T) {
 func TestAnExplicitEngineIsNeverOverruled(t *testing.T) {
 	settings := load(t, `
 [speech]
+default_voice_given = 'mikkiru'
 engine = 'local'
 voice = 'id-ID-GadisNeural'
 `)
@@ -114,6 +182,7 @@ voice = 'id-ID-GadisNeural'
 
 	settings = load(t, `
 [speech]
+default_voice_given = 'mikkiru'
 engine = 'windows'
 voice = 'id-ID-GadisNeural'
 `)
@@ -127,6 +196,7 @@ voice = 'id-ID-GadisNeural'
 func TestAnEmptyVoiceBesideAnExplicitEngineStaysEmpty(t *testing.T) {
 	settings := load(t, `
 [speech]
+default_voice_given = 'mikkiru'
 engine = 'omnivoice'
 voice = ''
 `)
@@ -135,11 +205,12 @@ voice = ''
 	}
 }
 
-// A Supertonic voice name, from somebody who chose it while the local voice was
-// the default and never wrote the engine down, keeps the local voice.
+// Likewise a Supertonic voice name with no engine beside it keeps the local
+// voice.
 func TestASupertonicVoiceKeepsTheLocalEngine(t *testing.T) {
 	settings := load(t, `
 [speech]
+default_voice_given = 'mikkiru'
 voice = 'F3'
 `)
 	if settings.Speech.Engine != "local" {

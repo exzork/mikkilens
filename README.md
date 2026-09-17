@@ -395,11 +395,12 @@ merekam siaran, itu bedanya nyata.
 Kalau modelnya belum selesai diunduh, dia membaca pakai suara daring dulu.
 Tidak ada yang jadi sunyi karena unduhan yang belum selesai.
 
-**Kalau kamu memperbarui dari versi lama**, suara yang kamu dengar tidak
-berubah. Kalau kamu dulu sudah memilih suara Edge TTS atau Supertonic 3, pilihan
-itu tetap dipakai — bawaan yang baru bukan alasan untuk menimpa pilihanmu. Yang
-belum pernah memilih suara apa pun ikut pindah ke bawaan yang baru: OmniVoice,
-dengan suara Mikkiru.
+**Kalau kamu memperbarui dari versi lama**, MikkiLens pindah sekali ke bawaan
+yang baru: OmniVoice, dengan suara Mikkiru, dan modelnya langsung diunduh.
+Halaman pengaturan selalu menyimpan mesin suaranya, jadi berkas lama tidak bisa
+membedakan suara yang sengaja dipilih dari suara yang cuma belum pernah diganti.
+Kalau kamu memang lebih suka suara yang lama, pilih lagi di halaman **Suara** —
+sesudah perpindahan itu, pilihanmu tidak diubah lagi.
 
 <a name="omnivoice"></a>
 

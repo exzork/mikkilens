@@ -51,11 +51,12 @@ chat_tts = "follow" # "follow" reads chat in the output-language voice.
 #              cached and pay that once; chat and donations pay it every time.
 #              Nothing falls back to it, for the same reason.
 #
-# Upgrading does not change the voice you were hearing. A file that names an
-# Edge voice and says nothing here is taken to mean "online", and one that names
-# a Supertonic voice (F1 to M5) is taken to mean "local" -- you picked that
-# voice, and a new default is not a reason to overrule you. A file that names
-# no voice at all takes the default.
+# Upgrading from a version before her voice shipped moves the file onto it once:
+# this engine, the voice below, and a chat or donation voice that belonged to
+# another engine. The settings page writes the engine down with everything
+# else, so a file cannot tell a voice somebody chose from one that was only
+# never changed. `default_voice_given` records that it happened; whatever you
+# choose after that stays.
 engine = "omnivoice"
 
 # The voice name, in whatever scheme the engine above uses.
@@ -81,6 +82,7 @@ engine = "omnivoice"
 # that engine's own default, because a voice you did not pick is a much better
 # answer than nothing being read.
 voice = "mikkiru"
+default_voice_given = "mikkiru" # Bookkeeping for the move above; leave it.
 rate = "+0%"          # Speed of confirmations. "+25%" is noticeably faster.
                       # It means the same thing to every engine, but the local
                       # voice stops getting faster past about +23%: beyond that

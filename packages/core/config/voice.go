@@ -2,6 +2,53 @@ package config
 
 import "strings"
 
+// ownVoiceEngine and ownVoice are the default: OmniVoice, reading in the voice
+// that ships inside MikkiLens. Spelled out rather than taken from tts.EngineOmni
+// and omnivoice.DefaultVoice, because this package sits under the audio
+// packages, not above them; tts.TestTheDefaultIsHerOwnVoice keeps the names
+// honest.
+const (
+	ownVoiceEngine = "omnivoice"
+	ownVoice       = "mikkiru"
+)
+
+// migrateToOwnVoice moves a file written before her own voice shipped onto it,
+// once.
+//
+// migrateVoiceEngine alone never did this on a machine that had been used. The
+// settings page saves the whole speech section, engine included, so every file
+// that has been saved even once says engine = 'local' or 'online' outright --
+// and an engine written down is indistinguishable from an engine chosen. Her
+// upgrade kept the old voice, and since the download follows the engine,
+// OmniVoice's models never came down either.
+//
+// So a file that has not yet been given her voice is given it: the engine, the
+// voice, and a chat or donation voice that names another engine's voice, which
+// under OmniVoice would read in a voice the model invents. default_voice_given
+// records that it happened. Anything she chooses after that is hers, and is
+// never moved again.
+//
+// Only for a document read from disk, like migrateVolumes.
+func migrateToOwnVoice(document map[string]any) {
+	speech, ok := document["speech"].(map[string]any)
+	if !ok {
+		// No speech section: every value in it is already the default.
+		return
+	}
+	if given, ok := speech["default_voice_given"].(string); ok && given == ownVoice {
+		return
+	}
+
+	speech["engine"] = ownVoiceEngine
+	speech["voice"] = ownVoice
+	for _, key := range []string{"chat_voice", "donation_voice"} {
+		if name, ok := speech[key].(string); ok && (strings.Contains(name, "-") || supertonicVoice(name)) {
+			speech[key] = ""
+		}
+	}
+	speech["default_voice_given"] = ownVoice
+}
+
 // migrateVoiceEngine keeps the voice she already picked.
 //
 // The engine setting did not exist before 0.11, and its default has changed
@@ -19,9 +66,11 @@ import "strings"
 // A file that names no voice at all takes the new default, voice and all.
 // Nothing was chosen there, so there is nothing to preserve.
 //
-// Only for a document read from disk, like migrateVolumes. The settings page
-// sends the engine explicitly, and a value she has just chosen is never
-// something to second-guess.
+// Only for a document read from disk, like migrateVolumes, and after
+// migrateToOwnVoice -- so by now it only meets a file that has already been
+// given her voice and had its engine taken out by hand. The settings page sends
+// the engine explicitly, and a value she has just chosen is never something to
+// second-guess.
 func migrateVoiceEngine(document map[string]any) {
 	speech, ok := document["speech"].(map[string]any)
 	if !ok {
