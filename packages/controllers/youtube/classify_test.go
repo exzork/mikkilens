@@ -3,8 +3,12 @@ package youtube
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"testing"
+
+	"golang.org/x/oauth2"
+	yt "google.golang.org/api/youtube/v3"
 )
 
 // The streaming endpoint is called by hand, so its failures arrive as a status
@@ -304,5 +308,44 @@ func TestAMalformedRequestFallsThroughToTheOtherTransport(t *testing.T) {
 	}
 	if err != original {
 		t.Errorf("error is %v, want the original left alone", err)
+	}
+}
+
+// A refresh token Google has stopped accepting fails before any request goes
+// out, so it never arrives as a 401. Classified as an ordinary failure, it was
+// retried every fifteen seconds for the rest of the stream, and chat stayed
+// silent without a word about why.
+func TestARefusedRefreshTokenIsAnExpiredSignIn(t *testing.T) {
+	isolate(t)
+
+	controller := &Controller{Quota: NewLedger(10000, 80), service: &yt.Service{}}
+	refused := &url.Error{Op: "Get", URL: "https://www.googleapis.com/youtube/v3/liveBroadcasts",
+		Err: &oauth2.RetrieveError{ErrorCode: "invalid_grant"}}
+
+	var expired *ExpiredCredentialsError
+	if err := controller.classify(refused); !errors.As(err, &expired) {
+		t.Fatalf("error is %T, want ExpiredCredentialsError", err)
+	}
+	// Signed out on the spot, so the next look asks her to connect again
+	// rather than repeating a request that can never work.
+	if controller.Authenticated() {
+		t.Error("the refused sign-in must be dropped")
+	}
+}
+
+// A network that fails for a moment is not a reason to sign her out.
+func TestANetworkFailureKeepsTheSignIn(t *testing.T) {
+	isolate(t)
+
+	controller := &Controller{Quota: NewLedger(10000, 80), service: &yt.Service{}}
+	err := controller.classify(&url.Error{Op: "Get", URL: "https://www.googleapis.com",
+		Err: errors.New("dial tcp: i/o timeout")})
+
+	var expired *ExpiredCredentialsError
+	if errors.As(err, &expired) {
+		t.Fatal("a network failure must not read as an expired sign-in")
+	}
+	if !controller.Authenticated() {
+		t.Error("a network failure must not sign her out")
 	}
 }

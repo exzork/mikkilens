@@ -311,6 +311,26 @@ func chatIsGone(err error, more bool) bool {
 	return errors.As(err, &missing)
 }
 
+// waitingFor names why there is no chat to connect to yet, as the status the
+// engine is told. Each one is said differently, because each has a different
+// fix: going live, signing in again, or nothing but waiting.
+func waitingFor(err error) string {
+	var (
+		none    *youtube.NoBroadcastError
+		expired *youtube.ExpiredCredentialsError
+		signed  *youtube.NotAuthenticatedError
+	)
+	switch {
+	case errors.As(err, &none):
+		return "no_broadcast"
+	case errors.As(err, &expired):
+		return "sign_in_expired"
+	case errors.As(err, &signed):
+		return "signed_out"
+	}
+	return "waiting"
+}
+
 // IngestOptions configure ingestion.
 type IngestOptions struct {
 	Transport string // "auto" | "page" | "api" | "stream" | "poll"
@@ -500,7 +520,7 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 		videoID, liveChatID, err := i.youtube.ChatTarget(ctx)
 		if err != nil {
 			i.note(err.Error())
-			i.status("waiting", err.Error())
+			i.status(waitingFor(err), err.Error())
 			// Waiting for a broadcast to exist at all: going live is exactly
 			// the event that ends this wait.
 			if i.waitOrRecheck(ctx, 15*time.Second) {
@@ -593,7 +613,9 @@ func (i *Ingest) run(ctx context.Context, done chan struct{}) {
 				continue
 			}
 			i.status("disconnected", err.Error())
-			if sleep(ctx, delay) {
+			// Woken early by a retry she asked for: waiting out a minute of
+			// backoff after "lanjutkan chat" would sound like nothing happened.
+			if i.waitOrRecheck(ctx, delay) {
 				return
 			}
 			delay = min(60*time.Second, delay*2)

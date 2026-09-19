@@ -115,6 +115,13 @@ gift_others = "And {count} others received one too."
 connected = "YouTube chat connected."
 disconnected = "YouTube chat disconnected. Reconnecting."
 unavailable = "This broadcast does not have live chat switched on, so there is nothing to read. I will keep checking."
+# Nothing to connect to yet. The channel is named because the likeliest cause
+# mid-stream is being signed in as a different channel from the one that is
+# live.
+no_broadcast = "There is no live broadcast on {channel} yet, so there is no chat to read. I will keep checking."
+no_broadcast_unnamed = "There is no live broadcast on the connected channel yet, so there is no chat to read. I will keep checking."
+not_connected = "YouTube chat could not connect yet. I will keep trying."
+retrying = "YouTube chat is not connected. Trying again."
 summarizing = "Summarizing chat."
 summary = "Chat summary: {text}"
 quota_warning = "YouTube quota is {percent} percent used. Slowing chat down."

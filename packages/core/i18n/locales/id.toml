@@ -118,6 +118,13 @@ gift_others = "Dan {count} orang lainnya juga mendapatkannya."
 connected = "Chat YouTube tersambung."
 disconnected = "Chat YouTube terputus. Mencoba menyambung lagi."
 unavailable = "Siaran ini tidak mengaktifkan live chat, jadi tidak ada yang bisa dibacakan. Saya akan terus memeriksa."
+# Belum ada yang bisa disambungkan. Nama channel-nya disebut karena penyebab
+# yang paling mungkin di tengah siaran adalah login ke channel yang berbeda dari
+# channel yang sedang live.
+no_broadcast = "Belum ada siaran live di {channel}, jadi belum ada chat yang bisa dibacakan. Saya akan terus memeriksa."
+no_broadcast_unnamed = "Belum ada siaran live di channel yang tersambung, jadi belum ada chat yang bisa dibacakan. Saya akan terus memeriksa."
+not_connected = "Chat YouTube belum bisa tersambung. Saya akan terus mencoba."
+retrying = "Chat YouTube belum tersambung. Saya coba sambungkan lagi."
 summarizing = "Sedang merangkum chat."
 summary = "Ringkasan chat: {text}"
 quota_warning = "Kuota YouTube sudah terpakai {percent} persen. Pembacaan chat diperlambat."

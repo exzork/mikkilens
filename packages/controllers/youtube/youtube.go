@@ -89,6 +89,15 @@ type ExpiredCredentialsError struct{ Reason string }
 
 func (e *ExpiredCredentialsError) Error() string { return e.Reason }
 
+// NoBroadcastError means the signed-in channel has nothing live or scheduled.
+//
+// Its own type because it is the usual reason chat never connects, and the one
+// she can do something about: either the stream has not started, or MikkiLens
+// is signed in as a different channel from the one she is streaming on.
+type NoBroadcastError struct{ Reason string }
+
+func (e *NoBroadcastError) Error() string { return e.Reason }
+
 // ChatUnavailableError means this broadcast has no live chat to read.
 //
 // Chat can be switched off for a broadcast, and it ends when the stream ends.
@@ -513,7 +522,7 @@ func (c *Controller) AuthorizeStream(request *http.Request) error {
 	// an hour, and a stream can easily run longer than that.
 	token, err := source.Token()
 	if err != nil {
-		return err
+		return c.classify(err)
 	}
 	request.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	return nil
@@ -622,6 +631,16 @@ func (c *Controller) ClassifyHTTP(status int, body []byte, fallback error) error
 func (c *Controller) classify(err error) error {
 	if err == nil {
 		return nil
+	}
+	// A refresh token Google has stopped accepting fails before the request is
+	// ever sent, so it arrives as the token endpoint's error rather than as a
+	// 401 from the API -- and without this it was an ordinary failure, retried
+	// every few seconds for the rest of the stream while chat said nothing.
+	// Seven days after signing in, for a project still in Testing.
+	if isRevokedGrant(err) {
+		c.SignOut()
+		return &ExpiredCredentialsError{Reason: "your YouTube sign-in has expired: " +
+			"open the settings app and press Connect YouTube again"}
 	}
 	var apiErr *googleapi.Error
 	if errors.As(err, &apiErr) && apiErr.Code == http.StatusUnauthorized {
@@ -914,7 +933,7 @@ func (c *Controller) currentBroadcast(ctx context.Context) (*Broadcast, error) {
 		}
 	}
 	if broadcast == nil {
-		return nil, &Error{Reason: "there is no active broadcast"}
+		return nil, &NoBroadcastError{Reason: "there is no active broadcast"}
 	}
 	return broadcast, nil
 }

@@ -364,7 +364,7 @@ func (e *Engine) viewerCount(map[string]string) error {
 func chatHandlers(e *Engine) map[string]intent.Handler {
 	return map[string]intent.Handler{
 		"chat_pause":       func(map[string]string) error { return e.withReader((*chat.Reader).Pause) },
-		"chat_resume":      func(map[string]string) error { return e.withReader((*chat.Reader).Resume) },
+		"chat_resume":      func(map[string]string) error { e.ResumeChat(); return nil },
 		"chat_skip_to_now": func(map[string]string) error { return e.withReaderInt((*chat.Reader).SkipToNow) },
 		"chat_behind":      func(map[string]string) error { return e.withReaderInt((*chat.Reader).ReportBacklog) },
 		"chat_summarize":   e.summarizeChat,

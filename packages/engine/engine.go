@@ -83,6 +83,12 @@ type Engine struct {
 	obs         *obs.Controller
 	obsSeen     bool
 
+	// chatProblem is why chat is not connected, as last announced, so each
+	// reason is said once on the way in rather than on every retry. Empty
+	// while connected, and cleared when she asks for a retry so that its
+	// outcome is said whatever it is.
+	chatProblem string
+
 	// switching serialises channel changes, and expectedProfile is the one
 	// MikkiLens asked OBS for. Both exist because switching a profile makes OBS
 	// announce the change back, and that announcement is indistinguishable from
@@ -1006,10 +1012,13 @@ func (e *Engine) startOBS() {
 	controller.Start()
 }
 
-func (e *Engine) startYouTube(ctx context.Context) {
+// startYouTube signs in with the saved sign-in and starts chat on it. It reports
+// whether it said anything, so a caller retrying on her behalf does not repeat
+// the answer.
+func (e *Engine) startYouTube(ctx context.Context) (announced bool) {
 	settings := e.Config()
 	if !settings.YouTube.Enabled {
-		return
+		return false
 	}
 
 	controller := youtube.New(settings.YouTube)
@@ -1034,13 +1043,14 @@ func (e *Engine) startYouTube(ctx context.Context) {
 			// A sign-in that worked and stopped has an action attached to it,
 			// so it is worth saying aloud. Never having signed in does not.
 			e.bus.SayKey("youtube.sign_in_expired", feedback.Error)
+			announced = true
 		} else {
 			slog.Info("YouTube is not connected", "reason", err)
 		}
 	}
 	if !loaded {
 		e.store.Update(state.Changes{"youtube": state.Disconnected})
-		return
+		return announced
 	}
 
 	e.store.Update(state.Changes{"youtube": state.Connected})
@@ -1048,6 +1058,7 @@ func (e *Engine) startYouTube(ctx context.Context) {
 		i18n.Args{"channel": e.channelName(ctx)})
 	e.rememberActiveChannel(controller.ActiveChannelID())
 	e.startChat()
+	return true
 }
 
 // ConnectYouTube is the Connect button: the consent screen, once.
@@ -1248,6 +1259,7 @@ func (e *Engine) startChat() {
 
 	e.mu.Lock()
 	e.ingest, e.reader = ingest, reader
+	e.chatProblem = ""
 	e.mu.Unlock()
 
 	ingest.Start()
@@ -1452,6 +1464,7 @@ func (e *Engine) onTrakteerStatus(status, detail string) {
 func (e *Engine) onChatStatus(status, detail string) {
 	switch status {
 	case "connected":
+		e.noteChatProblem("")
 		if e.store.Get("chat") != state.Connected {
 			e.store.Update(state.Changes{"chat": state.Connected})
 			e.bus.SayKey("chat.connected", feedback.Result)
@@ -1463,17 +1476,128 @@ func (e *Engine) onChatStatus(status, detail string) {
 		// This is a condition that can persist for a whole stream, and it is
 		// checked every couple of minutes in case she switches chat on --
 		// announcing each of those checks would be unbearable.
-		if e.store.Get("chat") != state.Errored {
-			e.store.Update(state.Changes{"chat": state.Errored})
+		e.store.Update(state.Changes{"chat": state.Errored})
+		if e.noteChatProblem(status) {
 			e.bus.SayKey("chat.unavailable", feedback.Error)
 		}
 	case "disconnected":
-		if e.store.Get("chat") == state.Connected {
-			e.store.Update(state.Changes{"chat": state.Disconnected})
+		e.store.Update(state.Changes{"chat": state.Disconnected})
+		if e.noteChatProblem(status) {
 			e.bus.SayKey("chat.disconnected", feedback.Error)
+		}
+
+	// There is nothing to connect to yet. These used to be said nowhere at
+	// all: the reader stayed on, answered "chat is already being read" and
+	// read nothing, with the reason only in a debug log. Once each, like
+	// "unavailable", because the check behind them runs every few seconds.
+	case "no_broadcast", "waiting":
+		e.store.Update(state.Changes{"chat": state.Disconnected})
+		if e.noteChatProblem(status) {
+			slog.Warn("chat is not connected", "status", status, "reason", detail)
+			e.sayChatProblem(status)
+		}
+	case "signed_out", "sign_in_expired":
+		e.store.Update(state.Changes{"youtube": state.Disconnected, "chat": state.Disconnected})
+		// One problem, not two: an expired sign-in is signed out on the spot,
+		// and the next check finds it signed out. Hearing both would be the
+		// same news twice.
+		if e.noteChatProblem("signed_out") {
+			slog.Warn("chat is not connected", "status", status, "reason", detail)
+			e.sayChatProblem(status)
 		}
 	}
 	slog.Debug("chat status", "status", status, "detail", detail)
+}
+
+// noteChatProblem records why chat is not connected, and reports whether that
+// is news -- a different reason from the one last announced.
+func (e *Engine) noteChatProblem(problem string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	changed := e.chatProblem != problem
+	e.chatProblem = problem
+	return changed
+}
+
+// sayChatProblem says why there is no chat, in the words that point at the fix.
+func (e *Engine) sayChatProblem(status string) {
+	switch status {
+	case "no_broadcast":
+		// Naming the channel is the point. The likeliest reason for this in
+		// the middle of a stream is being signed in as a different channel
+		// from the one she is live on, and the name is how she hears that.
+		channel := ""
+		if controller := e.YouTube(); controller != nil {
+			channel = controller.ChannelTitle()
+		}
+		if channel == "" {
+			e.bus.SayKey("chat.no_broadcast_unnamed", feedback.Error)
+			return
+		}
+		e.bus.SayKey("chat.no_broadcast", feedback.Error, i18n.Args{"channel": channel})
+	case "sign_in_expired":
+		e.bus.SayKey("youtube.sign_in_expired", feedback.Error)
+	case "signed_out":
+		e.bus.SayKey("youtube.not_connected", feedback.Error)
+	default:
+		e.bus.SayKey("chat.not_connected", feedback.Error)
+	}
+}
+
+// ResumeChat is "lanjutkan chat": carry on reading, and if there is nothing to
+// read from, try connecting again rather than claiming it is being read.
+//
+// The retry is the half that matters. Before it, a chat that had never
+// connected answered "chat is already being read" and went on reading
+// nothing; now she hears that it is not connected, and then how the retry
+// went -- "Chat YouTube tersambung", or the reason it still is not.
+func (e *Engine) ResumeChat() {
+	controller := e.YouTube()
+	if controller == nil || !controller.Authenticated() {
+		// No sign-in to read with, so no chat either. Loading the saved
+		// sign-in again picks up one made in the settings app since, or a
+		// network that has come back; startYouTube says how that went.
+		e.OnYouTubeDisconnected()
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		announced := e.startYouTube(ctx)
+		cancel()
+
+		controller = e.YouTube()
+		if controller == nil || !controller.Authenticated() {
+			if !announced {
+				e.bus.SayKey("youtube.not_connected", feedback.Error)
+			}
+			return
+		}
+		// Freshly started: chat is connecting as this is said, and whether it
+		// managed to is announced on its own. Nothing to retry yet.
+		if reader := e.requireReader(); reader != nil && !reader.Playing() {
+			reader.Resume()
+		}
+		return
+	}
+
+	reader := e.requireReader()
+	if reader == nil {
+		return
+	}
+	if e.store.Get("chat") == state.Connected {
+		reader.Resume()
+		return
+	}
+
+	if !reader.Playing() {
+		reader.Resume()
+	}
+	e.bus.SayKey("chat.retrying", feedback.Result)
+
+	// Forgotten so that whatever the retry finds is said, even when it is the
+	// same reason as before: she asked, and silence would not be an answer.
+	e.noteChatProblem("")
+	controller.InvalidateBroadcast()
+	if ingest := e.ChatIngest(); ingest != nil {
+		ingest.Recheck()
+	}
 }
 
 func (e *Engine) onQuotaWarning(percent int) {
