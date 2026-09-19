@@ -51,6 +51,7 @@ type App struct {
 
 	BroadcastTitle string `json:"broadcast_title"`
 	ViewerCount    int    `json:"viewer_count"`
+	LikeCount      int    `json:"like_count"`
 
 	ChatReading ChatReading `json:"chat_reading"`
 	ChatBacklog int         `json:"chat_backlog"`

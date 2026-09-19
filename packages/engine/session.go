@@ -33,13 +33,56 @@ import (
 const closeSettle = 6 * time.Second
 
 func sessionHandlers(e *Engine) map[string]intent.Handler {
-	return map[string]intent.Handler{"close_stream": e.closeStream}
+	return map[string]intent.Handler{
+		"close_stream": e.closeStream,
+		"close_obs":    e.closeOBS,
+	}
 }
 
-func (e *Engine) closeStream(map[string]string) error {
-	// The stream first. Closing OBS while it is still streaming ends the
-	// broadcast by pulling the cable out, which is what everybody watching
-	// would see.
+// obsExecutables are the names OBS runs under: the 64-bit build everybody has
+// now, and the two older ones.
+var obsExecutables = []string{"obs64.exe", "obs32.exe", "obs.exe"}
+
+// obsCloseQuiet is how long after she closes OBS its disconnection goes
+// unannounced. "OBS terputus, mencoba menyambung lagi" straight after "OBS
+// sudah ditutup" would be MikkiLens contradicting itself.
+const obsCloseQuiet = 30 * time.Second
+
+// closeOBS closes OBS alone: the stream stopped and the broadcast ended first
+// if she is still live, then OBS asked to close the way the X would.
+func (e *Engine) closeOBS(map[string]string) error {
+	e.stopBeforeClosing()
+
+	e.mu.Lock()
+	e.obsClosedAt = time.Now()
+	e.mu.Unlock()
+
+	found, stillOpen, err := desktop.CloseApp(closeSettle, obsExecutables...)
+	switch {
+	case err != nil:
+		slog.Error("could not close OBS", "error", err)
+		e.bus.SayKey("session.close_failed", feedback.Error, i18n.Args{"reason": err.Error()})
+	case !found:
+		e.bus.SayKey("session.obs_not_open", feedback.Result)
+	case stillOpen:
+		e.bus.SayKey("session.obs_still_open", feedback.Error)
+	default:
+		e.bus.SayKey("session.obs_closed", feedback.Result)
+	}
+	return nil
+}
+
+// obsClosedOnPurpose reports whether OBS going away is the close she asked for.
+func (e *Engine) obsClosedOnPurpose() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return !e.obsClosedAt.IsZero() && time.Since(e.obsClosedAt) < obsCloseQuiet
+}
+
+// stopBeforeClosing stops a stream that is still running and ends its
+// broadcast. Closing OBS while it is streaming ends the broadcast by pulling
+// the cable out, which is what everybody watching would see.
+func (e *Engine) stopBeforeClosing() {
 	if controller := e.OBS(); controller != nil && controller.Connected() {
 		if live, err := controller.IsStreaming(); err == nil && live {
 			if err := controller.StopStream(); err != nil {
@@ -51,6 +94,15 @@ func (e *Engine) closeStream(map[string]string) error {
 		}
 	}
 	e.endBroadcast()
+}
+
+func (e *Engine) closeStream(map[string]string) error {
+	// The stream first; see stopBeforeClosing.
+	e.stopBeforeClosing()
+
+	e.mu.Lock()
+	e.obsClosedAt = time.Now()
+	e.mu.Unlock()
 
 	locale := e.Locale()
 	e.bus.SayKey("session.closing", feedback.Result)

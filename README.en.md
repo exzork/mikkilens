@@ -37,7 +37,7 @@ packages/
   audio/        devices, earcons, text to speech, capture, recognition,
                 wake word, global hotkey, and the first-run asset downloads
   controllers/  OBS, YouTube, the OpenAI-compatible client, screen description,
-                web and YouTube Music search, music playback, and the Tako and
+                web and YouTube song search, music playback, and the Tako and
                 Trakteer donation overlays
   chat/         live chat ingestion and the reader cursor
   engine/       the running application: wiring, handlers, the setup wizard
@@ -542,11 +542,16 @@ first-run download that failed, or music switched on afterwards, should be a
 slow song rather than no song. Anything already on the machine wins over both,
 which on a box that already runs ffmpeg is most of it.
 
-The search talks to the InnerTube endpoint `music.youtube.com` itself calls,
-with the client name it identifies itself by, and deliberately without the
-`key=` the web player sends. That key is public -- it is in the page source of
-music.youtube.com, it identifies the client and grants nothing -- and the
-endpoint answers the same with or without it, so carrying it bought nothing and
+The search talks to the InnerTube endpoint youtube.com's own search page
+calls, with the client name it identifies itself by, and deliberately without
+the `key=` the web page sends. It searches the whole of YouTube rather than
+YouTube Music's catalogue -- covers, live versions and smaller artists are often
+only there -- and sifts the answer: only videos between one and ten minutes, the
+length of a song rather than a short or a mix, and anything that looks like
+music (an official artist channel, or a title saying lyric, official, cover and
+so on) ahead of what does not, keeping YouTube's own order otherwise. The key is
+public -- it is in the page source, it identifies the client and grants nothing
+-- and the endpoint answers the same with or without it, so carrying it bought nothing and
 cost something: it has the exact shape of a Google API key, so every secret
 scanner that looks at this repository reports a credential that is not one.
 Don't add it back. Not the YouTube Data API, because
@@ -739,7 +744,7 @@ file much harder to read for the one job it exists to do.
   is quota rather than silence.
 - A global hotkey is Windows-only. The wake word and the settings app work
   anywhere Go and Electron do.
-- The music search uses YouTube Music's own InnerTube endpoint, which is not a
+- The music search uses youtube.com's own InnerTube search endpoint, which is not a
   published contract. It can change without notice, and when it does the parse
   returns nothing rather than nonsense -- so the failure mode is "I could not
   find anything", said out loud, rather than five results that do nothing when

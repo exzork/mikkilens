@@ -317,6 +317,7 @@ const statusLabels: Array<[keyof Snapshot & string, string]> = [
   ['current_scene', 'label.currentScene'],
   ['mic_muted', 'label.micMuted'],
   ['viewer_count', 'label.viewerCount'],
+  ['like_count', 'label.likeCount'],
   ['chat_reading', 'label.chatReading'],
   ['chat_backlog', 'label.chatBacklog'],
   // Worth its own row rather than folding into "chat reading": muted chat is
@@ -2415,6 +2416,18 @@ element('show-engine-log').addEventListener('click', async () => {
   view.textContent = await bridge.readLogTail(300)
   view.hidden = false
   view.focus()
+})
+
+// Copied fresh rather than from what is on screen: the log is usually wanted
+// to send to somebody else, and it should be the log as it is now, whether or
+// not it was opened first. The speech timings are in it, one line a sentence.
+element('copy-engine-log').addEventListener('click', async () => {
+  try {
+    await bridge.copyText(await bridge.readLogTail(300))
+    announce(t('log.copied'))
+  } catch (error) {
+    alarm(t('log.copyFailed', { reason: reason(error) }))
+  }
 })
 
 // -- boot ---------------------------------------------------------------------

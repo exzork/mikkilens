@@ -37,6 +37,9 @@ const api = {
   /** The tail of the engine log, for the diagnosis page. */
   readLogTail: (lines: number): Promise<string> => ipcRenderer.invoke('read-log-tail', lines),
 
+  /** Put text on the clipboard, for sending the engine log to somebody. */
+  copyText: (text: string): Promise<void> => ipcRenderer.invoke('clipboard:write', text),
+
   /** Read or set whether MikkiLens opens when she signs in. */
   loginItem: (enabled?: boolean): Promise<boolean> => ipcRenderer.invoke('login-item', enabled),
 

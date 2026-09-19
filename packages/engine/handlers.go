@@ -270,6 +270,7 @@ func youTubeHandlers(e *Engine) map[string]intent.Handler {
 		"get_title":    e.getTitle,
 		"set_title":    e.setTitle,
 		"viewer_count": e.viewerCount,
+		"like_count":   e.likeCount,
 	}
 }
 
@@ -356,6 +357,25 @@ func (e *Engine) viewerCount(map[string]string) error {
 	}
 	e.store.Update(state.Changes{"viewer_count": count})
 	e.bus.SayKey("status.viewers", feedback.Result, i18n.Args{"count": count})
+	return nil
+}
+
+// likeCount is viewerCount's twin: the same call, the same answers when there
+// is nothing to count.
+func (e *Engine) likeCount(map[string]string) error {
+	if !e.requireYouTube() {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	count, err := e.YouTube().LikeCount(ctx)
+	if err != nil {
+		e.bus.SayKey("youtube.no_broadcast", feedback.Error)
+		return nil
+	}
+	e.store.Update(state.Changes{"like_count": count})
+	e.bus.SayKey("status.likes", feedback.Result, i18n.Args{"count": count})
 	return nil
 }
 

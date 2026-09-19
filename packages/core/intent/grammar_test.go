@@ -404,3 +404,27 @@ func anyContains(values []string, needle string) bool {
 	}
 	return false
 }
+
+// "Tutup obs" sits next to "tutup semua", which closes every application on
+// the screen. Heard as each other, one would be a surprise and the other a
+// disaster, so both are pinned; likewise the like count beside the viewers.
+func TestClosingOBSAndCountingLikesAreTheirOwnCommands(t *testing.T) {
+	for language, cases := range map[string]map[string]string{
+		"id": {
+			"tutup obs": "close_obs", "tutup semua": "close_stream",
+			"berapa likenya": "like_count", "berapa penontonnya": "viewer_count",
+		},
+		"en": {
+			"close obs": "close_obs", "close everything": "close_stream",
+			"how many likes": "like_count", "how many viewers": "viewer_count",
+		},
+	} {
+		set := shipped(t, language)
+		for spoken, want := range cases {
+			match, rivals := set.Match(spoken)
+			if match == nil || match.Command != want || len(rivals) > 0 {
+				t.Errorf("%s: %q matched %+v (rivals %v), want %s", language, spoken, match, rivals, want)
+			}
+		}
+	}
+}

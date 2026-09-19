@@ -35,6 +35,13 @@ phrases = ["close everything", "close all applications", "close everything down"
 confirm = true
 confirm_prompt = "confirm.close_stream"
 
+# Closes OBS only. A stream still running is stopped first -- closing OBS
+# mid-stream is pulling the cable out -- so this asks first too.
+[commands.close_obs]
+phrases = ["close obs", "quit obs", "shut obs down", "exit obs"]
+confirm = true
+confirm_prompt = "confirm.close_obs"
+
 # --------------------------------------------------------------- channel ----
 
 # A channel is an OBS profile and a YouTube sign-in together: switching moves
@@ -104,6 +111,9 @@ phrases = ["what is my title", "what is the stream title", "read my title"]
 
 [commands.viewer_count]
 phrases = ["how many viewers", "how many people are watching", "viewer count"]
+
+[commands.like_count]
+phrases = ["how many likes", "how many people liked it", "like count"]
 
 # ------------------------------------------------------------------ chat ----
 
@@ -184,7 +194,7 @@ phrases = ["reload my commands", "reload the commands"]
 
 # ----------------------------------------------------------------- music ----
 
-# Searching YouTube Music, then playing what you pick.
+# Searching YouTube for a song, then playing what you pick.
 #
 # Song and artist names are what speech recognition is worst at -- they are not
 # sentences in any language, and the model was not trained on them. So the name

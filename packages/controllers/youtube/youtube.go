@@ -887,6 +887,36 @@ func (c *Controller) ViewerCount(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// LikeCount is how many people have liked the broadcast so far.
+//
+// The same one-unit call the viewer count makes, asking for the statistics
+// instead. A channel can hide its like count, and YouTube then leaves it out;
+// that reads as zero rather than as a failure, because there is nothing she
+// can do about it mid-stream.
+func (c *Controller) LikeCount(ctx context.Context) (int, error) {
+	broadcast, err := c.currentBroadcast(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	service, err := c.apiService("videos.list")
+	if err != nil {
+		return 0, err
+	}
+	response, err := service.Videos.
+		List([]string{"statistics"}).
+		Id(broadcast.ID).
+		Context(ctx).Do()
+	c.Quota.Spend("videos.list")
+	if err != nil {
+		return 0, c.classify(err)
+	}
+	if len(response.Items) == 0 || response.Items[0].Statistics == nil {
+		return 0, nil
+	}
+	return int(response.Items[0].Statistics.LikeCount), nil
+}
+
 // Title is the current broadcast title.
 func (c *Controller) Title(ctx context.Context) (string, error) {
 	broadcast, err := c.ActiveBroadcast(ctx, true)

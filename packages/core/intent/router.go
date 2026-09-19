@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,6 +77,11 @@ type pending struct {
 	slots    map[string]string
 	prompt   string
 	deadline time.Time
+
+	// choices makes this a question of which rather than whether: a sentence
+	// that matched several commands, read back as a numbered list for her to
+	// pick from. Empty for an ordinary yes-or-no.
+	choices []Match
 }
 
 // Router dispatches transcripts and gates the destructive commands.
@@ -207,6 +213,20 @@ type Resolution struct {
 	Answered bool
 }
 
+// Disambiguator is asked which of several commands a sentence meant, when the
+// phrases matched more than one about equally well.
+//
+// Optional, and found on the Understander rather than installed on its own:
+// both are the same model asked a similar question, and an Understander that
+// cannot do this simply leaves every tie to her.
+//
+// Returning "" means it could not tell either, which is an expected answer --
+// she is asked instead. Anything returned is checked against the candidates,
+// so a model naming a command that was not among them comes to nothing.
+type Disambiguator interface {
+	Disambiguate(ctx context.Context, transcript string, candidates []Match, commands *Set) (string, error)
+}
+
 // SetUnderstander installs the fallback. Nil disables it, which restores the
 // behaviour of refusing anything the phrases do not match.
 func (r *Router) SetUnderstander(understander Understander) {
@@ -298,7 +318,10 @@ func (r *Router) HandleTranscript(text string) string {
 			ids = append(ids, rival.Command)
 		}
 		slog.Info("ambiguous transcript", "text", text, "matched", ids)
-		r.bus.Say(locale.T("listen.ambiguous", i18n.Args{"phrase": trimSpace(text)}), PriorityResult)
+		if chosen := r.disambiguate(text, rivals); chosen != nil {
+			return r.dispatch(*chosen)
+		}
+		r.askWhich(rivals)
 		return ""
 	}
 	if match == nil {
@@ -371,6 +394,157 @@ func (r *Router) understand(text string) (*Match, bool) {
 	return &Match{Command: id, Slots: kept, Transcript: text}, false
 }
 
+// disambiguate asks the model which of several matched commands she meant.
+//
+// Nil means it could not say -- no model, a model that failed, or one that
+// answered with nothing or with a command that was not a candidate -- and she
+// is asked instead. Guessing is never the fallback: these commands end
+// broadcasts, and a tie is exactly the case where a guess is a coin toss.
+func (r *Router) disambiguate(text string, candidates []Match) *Match {
+	r.mu.Lock()
+	understander := r.understander
+	commands := r.commands
+	r.mu.Unlock()
+
+	chooser, ok := understander.(Disambiguator)
+	if !ok || commands == nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), understandTimeout)
+	defer cancel()
+
+	id, err := chooser.Disambiguate(ctx, text, candidates, commands)
+	if err != nil {
+		slog.Warn("the model could not settle an ambiguous command", "error", err)
+		return nil
+	}
+	id = trimSpace(id)
+	for _, candidate := range candidates {
+		if candidate.Command == id {
+			slog.Info("ambiguity settled by the model", "text", text, "command", id)
+			chosen := candidate
+			return &chosen
+		}
+	}
+	if id != "" {
+		slog.Warn("the model chose a command that was not a candidate", "command", id)
+	}
+	return nil
+}
+
+// maxChoices is how many commands are read back to choose from. A tie is two
+// commands, occasionally three; past that it is a sentence that matches
+// nothing in particular, and a long list is worse than asking again.
+const maxChoices = 3
+
+// askWhich reads the tied commands back as a numbered list and waits for a
+// number, the way a list of songs is chosen from.
+//
+// Each is named by the first phrase written for it, which is the plainest way
+// of saying what that command does in words she already uses.
+func (r *Router) askWhich(candidates []Match) {
+	if len(candidates) > maxChoices {
+		candidates = candidates[:maxChoices]
+	}
+
+	r.mu.Lock()
+	locale := r.locale
+	commands := r.commands
+	timeout := r.timeout
+	r.mu.Unlock()
+
+	numbers := locale.NumberWords()
+	parts := make([]string, 0, len(candidates))
+	for index, candidate := range candidates {
+		name := candidate.Command
+		if phrases := commands.PhrasesFor(candidate.Command); len(phrases) > 0 {
+			name = spokenPhrase(phrases[0])
+		}
+		number := fmt.Sprint(index + 1)
+		if index < len(numbers) {
+			number = numbers[index]
+		}
+		parts = append(parts, locale.T("choose.option", i18n.Args{"number": number, "command": name}))
+	}
+	prompt := locale.T("choose.which", i18n.Args{"options": strings.Join(parts, " ")})
+
+	r.mu.Lock()
+	r.waiting = &pending{
+		prompt:   prompt,
+		deadline: time.Now().Add(timeout),
+		choices:  candidates,
+	}
+	r.mu.Unlock()
+
+	r.bus.SayEarcon(prompt, PriorityConfirm, "confirm")
+}
+
+// spokenPhrase turns a written phrase into one that can be read out: a
+// placeholder like {text} is not something to say.
+func spokenPhrase(phrase string) string {
+	fields := strings.Fields(phrase)
+	kept := fields[:0]
+	for _, field := range fields {
+		if strings.HasPrefix(field, "{") && strings.HasSuffix(field, "}") {
+			continue
+		}
+		kept = append(kept, field)
+	}
+	return strings.Join(kept, " ")
+}
+
+// handleChoice takes her answer to "which did you mean".
+//
+// A number picks, and the pick goes through dispatch like any other match, so
+// a command that asks before it acts still asks. "Tidak" or "batal" drops the
+// question. Anything else keeps it open and says what is expected, the same as
+// an unclear yes-or-no.
+func (r *Router) handleChoice(waiting *pending, text string) string {
+	r.mu.Lock()
+	locale := r.locale
+	r.mu.Unlock()
+
+	if number, ok := chosenNumber(text, locale.NumberWords()); ok && number <= len(waiting.choices) {
+		r.mu.Lock()
+		r.waiting = nil
+		r.mu.Unlock()
+		return r.dispatch(waiting.choices[number-1])
+	}
+	if verdict, understood := r.classifyAnswer(text); understood && !verdict {
+		r.mu.Lock()
+		r.waiting = nil
+		r.mu.Unlock()
+		r.bus.Say(locale.T("confirm.cancelled"), PriorityConfirm)
+		return ""
+	}
+	r.bus.Say(locale.T("choose.not_understood", i18n.Args{"count": len(waiting.choices)}), PriorityConfirm)
+	return ""
+}
+
+// chosenNumber reads which one she picked: a digit, or the language's own
+// number word anywhere in what she said, so "nomor dua" and "yang dua" both
+// count. Ordinals are the number word with a prefix -- "kedua", "pertama" is
+// the exception worth knowing -- and are looked for too.
+func chosenNumber(text string, words []string) (int, bool) {
+	cleaned := Normalize(text)
+	for _, field := range strings.Fields(cleaned) {
+		if len(field) == 1 && field[0] >= '1' && field[0] <= '9' {
+			return int(field[0] - '0'), true
+		}
+		if field == "pertama" || field == "first" {
+			return 1, true
+		}
+		for index, word := range words {
+			word = Normalize(word)
+			if word != "" && (field == word || field == "ke"+word) {
+				return index + 1, true
+			}
+		}
+	}
+	return 0, false
+}
+
 // understandTimeout bounds the whole fallback. The client has its own, shorter
 // deadline; this is the backstop that keeps a wedged local server from leaving
 // her waiting with no answer at all.
@@ -392,6 +566,10 @@ func (r *Router) expirePending() {
 }
 
 func (r *Router) handleAnswer(waiting *pending, text string) string {
+	if len(waiting.choices) > 0 {
+		return r.handleChoice(waiting, text)
+	}
+
 	r.mu.Lock()
 	locale := r.locale
 	r.mu.Unlock()

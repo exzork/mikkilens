@@ -20,6 +20,11 @@ func Open() ([]Window, error) { return nil, errUnsupported }
 // AskToClose does nothing off Windows.
 func AskToClose(Window) error { return errUnsupported }
 
+// CloseApp does nothing off Windows.
+func CloseApp(time.Duration, ...string) (found bool, stillOpen bool, err error) {
+	return false, false, errUnsupported
+}
+
 // CloseAll does nothing off Windows.
 func CloseAll(time.Duration) (asked []string, remaining []string, err error) {
 	return nil, nil, errUnsupported

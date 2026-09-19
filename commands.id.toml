@@ -41,6 +41,14 @@ phrases = ["tutup semua aplikasi", "tutup semuanya", "beres-beres", "bersih-bers
 confirm = true
 confirm_prompt = "confirm.close_stream"
 
+# Menutup OBS saja. Kalau masih siaran, siarannya dihentikan dulu -- menutup
+# OBS di tengah siaran sama dengan mencabut kabelnya -- jadi ini juga bertanya
+# dulu.
+[commands.close_obs]
+phrases = ["tutup obs", "tutup aplikasi obs", "keluar dari obs", "matikan obs"]
+confirm = true
+confirm_prompt = "confirm.close_obs"
+
 # --------------------------------------------------------------- channel ----
 
 # Channel di sini artinya profil OBS ditambah login YouTube sekaligus: sekali
@@ -104,6 +112,9 @@ phrases = ["judulnya apa", "apa judul siaran", "judul sekarang apa"]
 
 [commands.viewer_count]
 phrases = ["berapa penontonnya", "ada berapa penonton", "jumlah penonton", "berapa yang nonton"]
+
+[commands.like_count]
+phrases = ["berapa likenya", "ada berapa like", "jumlah like", "berapa yang like"]
 
 # ----------------------------------------------------------------- chat ----
 
@@ -184,7 +195,7 @@ phrases = ["muat ulang perintah", "reload perintah"]
 
 # ----------------------------------------------------------------- musik ----
 
-# Mencari lagu di YouTube Music, lalu memutarnya.
+# Mencari lagu di YouTube, lalu memutarnya.
 #
 # Judul lagu adalah hal yang paling sering salah didengar -- nama penyanyi dan
 # judul album bukan kalimat bahasa Indonesia, dan model suaranya memang tidak

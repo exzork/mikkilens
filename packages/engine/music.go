@@ -32,10 +32,8 @@ import (
 // the same reason the web search has a spoken path: whatever else is or is not
 // running, the thing she said out loud must do something.
 //
-// Playing means opening it in YouTube Music in her browser. MikkiLens has no
-// player of its own and should not grow one: she has an account, a history and
-// a subscription there already, and a second player would be a second thing to
-// control by voice for no gain.
+// The search is the whole of YouTube, sifted to what runs like a song and with
+// music ahead of everything else; see the music package.
 
 // resultsKeptFor is how long a set of results stays pickable.
 //
@@ -370,7 +368,7 @@ func (e *Engine) resumeIfTheListIsRead() {
 // describe is one result as a sentence.
 //
 // The running time is said as minutes and seconds rather than relayed as
-// YouTube Music writes it, because how it writes it depends on the language:
+// YouTube writes it, because how it writes it depends on the language:
 // "6:10" in English and "6.10" in Indonesian, and a voice handed the second
 // one says "six point one zero".
 func (e *Engine) describe(number int, song music.Song) string {
@@ -532,7 +530,7 @@ func spokenCombination(combination string) string {
 	return strings.Join(parts, " ")
 }
 
-// regionFor is which country's YouTube Music to ask.
+// regionFor is which country's YouTube to ask.
 //
 // It changes the answer, and not by a little: the same query ranks differently
 // in Indonesia than in the United States, and hers is the one that should
@@ -545,9 +543,9 @@ func regionFor(language string) string {
 		return "ID"
 	default:
 		// English is not a country, and neither is any language code added
-		// later. The United States is where YouTube Music's default catalogue
-		// lives, so an unmapped language gets the answer everyone gets rather
-		// than a region code that is not one.
+		// later. The United States is YouTube's default region, so an
+		// unmapped language gets the answer everyone gets rather than a region
+		// code that is not one.
 		return "US"
 	}
 }

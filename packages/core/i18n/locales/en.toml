@@ -40,6 +40,7 @@ scene = "Current scene is {scene}."
 mic_muted = "Microphone is muted."
 mic_live = "Microphone is live."
 viewers = "{count} viewers."
+likes = "{count} likes."
 chat_backlog = "{count} chat messages waiting."
 chat_empty = "No chat messages waiting."
 chat_muted = "Chat is muted."
@@ -63,6 +64,7 @@ stop_stream = "Stop the stream and end the YouTube broadcast? Say yes or no."
 # Both halves are named because both happen, and the second cannot be taken
 # back: an application I have closed is not one I can open again.
 close_stream = "Stop the stream and close every open application? Say yes or no."
+close_obs = "Close OBS? If you are live, the stream is stopped first. Say yes or no."
 set_title = "Change the title to {text}? Say yes or no."
 timeout = "No answer. Cancelled."
 cancelled = "Cancelled."
@@ -75,7 +77,18 @@ closing = "Closing everything."
 ready = "Everything is closed. The computer is ready to switch off."
 still_open = "Everything closed except {apps}. One of them may be asking about unsaved work."
 nothing_open = "Nothing was open to close."
+obs_closed = "OBS is closed."
+obs_still_open = "OBS has not closed. It may be asking you something on its screen."
+obs_not_open = "OBS is not open."
 close_failed = "I could not close the applications: {reason}"
+
+# A sentence that matched more than one command, once the model could not
+# settle it either: the candidates read back as a numbered list, the way a
+# list of songs is, and a number picks.
+[choose]
+which = "Which did you mean? {options} Say the number."
+option = "{number}, {command}."
+not_understood = "Say the number, one to {count}, or say cancel."
 
 [listen]
 heard = "I heard: {text}"
@@ -157,7 +170,7 @@ nothing_asked = "Say the song after the command, or press {key} to type it."
 # one thing here she is not meant to have to look at.
 type_it = "Type the song, then press Enter."
 searching = "Searching for {query}."
-failed = "I could not reach YouTube Music just now."
+failed = "I could not search YouTube just now."
 nothing_found = "I could not find anything for {query}."
 found = "{count} songs."
 # One result. Read one at a time, so each is a sentence rather than an item.

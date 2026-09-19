@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell, Tray, nativeImage } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell, Tray, nativeImage } from 'electron'
 import { basename, extname, join } from 'node:path'
 import { readFileSync, statSync } from 'node:fs'
 import { Daemon } from './daemon.js'
@@ -427,6 +427,13 @@ ipcMain.handle('open-external', async (_event, url: unknown) => {
   }
   await shell.openExternal(url)
   return true
+})
+
+// Through the main process rather than navigator.clipboard, which a page only
+// gets while it has focus -- and a button press is exactly when a screen
+// reader may have moved focus somewhere else.
+ipcMain.handle('clipboard:write', (_event, text: unknown) => {
+  clipboard.writeText(typeof text === 'string' ? text : '')
 })
 
 ipcMain.handle('read-log-tail', (_event, lines: unknown) => {

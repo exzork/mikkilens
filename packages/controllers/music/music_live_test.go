@@ -11,9 +11,9 @@ import (
 // and for different reasons: a changed answer shape breaks the fixtures, and a
 // changed client name, key or filter breaks only this -- silently, with a 200
 // and an empty list, which is the failure worth having a test for.
-func TestSearchAgainstYouTubeMusic(t *testing.T) {
+func TestSearchAgainstYouTube(t *testing.T) {
 	if os.Getenv("MIKKILENS_LIVE") != "1" {
-		t.Skip("set MIKKILENS_LIVE=1 to search YouTube Music for real")
+		t.Skip("set MIKKILENS_LIVE=1 to search YouTube for real")
 	}
 
 	for _, test := range []struct{ query, language, region string }{

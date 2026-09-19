@@ -63,3 +63,21 @@ func TestNamesOfNothingIsNothing(t *testing.T) {
 		t.Errorf("Names(nil) = %v, want nothing", got)
 	}
 }
+
+// Closing OBS must close OBS and nothing beside it, however Windows spells it.
+func TestBelongingPicksOnlyTheNamedApplication(t *testing.T) {
+	windows := []Window{
+		{Title: "OBS 31.0.0 - Profile: Mikki", Name: "OBS64.EXE"},
+		{Title: "Chat", Name: "chrome.exe"},
+		{Title: "Projector", Name: "obs64.exe"},
+	}
+	found := Belonging(windows, "obs64.exe", "obs32.exe", "obs.exe")
+	if len(found) != 2 {
+		t.Fatalf("found %d windows, want the two OBS ones", len(found))
+	}
+	for _, window := range found {
+		if window.Name == "chrome.exe" {
+			t.Error("a window of another application must not be closed")
+		}
+	}
+}

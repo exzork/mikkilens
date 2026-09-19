@@ -89,6 +89,10 @@ type Engine struct {
 	// outcome is said whatever it is.
 	chatProblem string
 
+	// obsClosedAt is when she last had OBS closed, so its disconnection is
+	// not announced as a fault; see obsClosedOnPurpose.
+	obsClosedAt time.Time
+
 	// switching serialises channel changes, and expectedProfile is the one
 	// MikkiLens asked OBS for. Both exist because switching a profile makes OBS
 	// announce the change back, and that announcement is indistinguishable from
@@ -1651,6 +1655,11 @@ func (e *Engine) onOBSDisconnected(reason, code string) {
 	// there is anything to look at.
 	if code == obs.ReasonAuth {
 		e.bus.SayKey("obs.password_rejected", feedback.Error)
+		return
+	}
+	// She closed it. It will be reconnected to whenever it opens again, and
+	// that is announced; the going is not news.
+	if e.obsClosedOnPurpose() {
 		return
 	}
 	e.bus.SayKey("obs.disconnected", feedback.Error)

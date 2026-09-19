@@ -69,6 +69,21 @@ func Closable(windows []Window) []Window {
 	return found
 }
 
+// Belonging is the windows of the named processes, matched as Protected is.
+func Belonging(windows []Window, names ...string) []Window {
+	var found []Window
+	for _, window := range windows {
+		name := strings.ToLower(strings.TrimSpace(window.Name))
+		for _, wanted := range names {
+			if name == strings.ToLower(wanted) {
+				found = append(found, window)
+				break
+			}
+		}
+	}
+	return found
+}
+
 // Names is what is left, as a sentence: the applications by name, each one
 // once, in a stable order.
 //

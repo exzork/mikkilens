@@ -57,6 +57,36 @@ func (u *understander) Understand(
 	return intent.Resolution{Command: guess.Command, Slots: guess.Slots}, nil
 }
 
+// Disambiguate implements intent.Disambiguator: the same model, asked to
+// choose only among the commands the phrases tied between.
+//
+// Narrowing the list is the point. Offered every command, a model can wander
+// off to a third one nobody matched; offered two, it is answering the one
+// question actually open. The matcher's own rule -- say nothing rather than
+// guess between two plausible commands -- is exactly the behaviour wanted
+// here, because nothing means she is asked.
+func (u *understander) Disambiguate(
+	ctx context.Context, transcript string, candidates []intent.Match, commands *intent.Set,
+) (string, error) {
+	wanted := map[string]bool{}
+	for _, candidate := range candidates {
+		wanted[candidate.Command] = true
+	}
+	options := []llm.CommandOption{}
+	for _, option := range commandOptions(commands) {
+		if wanted[option.ID] {
+			options = append(options, option)
+		}
+	}
+
+	client := llm.New(u.engine.Config(), u.engine.Locale())
+	guess, err := client.MatchCommand(ctx, transcript, options)
+	if err != nil {
+		return "", err
+	}
+	return guess.Command, nil
+}
+
 // answer runs the command, hands the result back to the model, and speaks what
 // it makes of it.
 //

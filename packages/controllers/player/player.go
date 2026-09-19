@@ -1,4 +1,4 @@
-// Package player turns a YouTube Music page into sound coming out of a
+// Package player turns a YouTube page into sound coming out of a
 // speaker, without a browser and without a file on disk.
 //
 // Two programs do the parts that are genuinely hard. yt-dlp works out which of

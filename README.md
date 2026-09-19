@@ -94,6 +94,8 @@ Menjalankan `install.bat` lagi aman: pengaturan dan perintahmu tidak ditimpa.
 | "ganti channel ke musik" | Pindah profil OBS **dan** akun YouTube sekaligus |
 | "matikan mikrofon" | Mikrofon OBS dimatikan |
 | "berapa penontonnya" | Jumlah penonton dibacakan |
+| "berapa likenya" | Jumlah like dibacakan |
+| "tutup obs" | Tanya dulu, hentikan siaran kalau masih live, lalu tutup OBS |
 | "ganti judul jadi main valorant" | Tanya dulu, lalu ganti judul |
 | "jeda chat" / "lanjutkan chat" | Berhenti dan lanjut membaca chat |
 | "susul chat" | Lompat ke chat terbaru |

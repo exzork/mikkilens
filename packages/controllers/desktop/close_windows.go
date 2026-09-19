@@ -130,6 +130,39 @@ func CloseAll(settle time.Duration) (asked []string, remaining []string, err err
 	return asked, Names(Closable(left)), nil
 }
 
+// CloseApp asks every window of the named executables to close, and reports
+// whether any were open and whether any still are after the wait -- the same
+// polite request as CloseAll, aimed at one application.
+func CloseApp(settle time.Duration, names ...string) (found bool, stillOpen bool, err error) {
+	windows, err := Open()
+	if err != nil {
+		return false, false, err
+	}
+	targets := Belonging(windows, names...)
+	if len(targets) == 0 {
+		return false, false, nil
+	}
+	for _, window := range targets {
+		_ = AskToClose(window)
+	}
+
+	// Checked every half second rather than once at the end: OBS usually goes
+	// in about a second, and the answer should not wait out the whole of a
+	// wait meant for the slow case.
+	deadline := time.Now().Add(settle)
+	for time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+		left, err := Open()
+		if err != nil {
+			return true, false, err
+		}
+		if len(Belonging(left, names...)) == 0 {
+			return true, false, nil
+		}
+	}
+	return true, true, nil
+}
+
 func windowTitle(handle uintptr) string {
 	buffer := make([]uint16, 260)
 	length, _, _ := procGetWindowTextW.Call(handle,

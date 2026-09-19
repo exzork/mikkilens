@@ -14,6 +14,7 @@ package feedback
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -797,6 +798,7 @@ func (b *Bus) speak(utterance Utterance, wanted int) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	started := time.Now()
 	engine := utterance.Engine
 	if engine == "" {
 		engine = settings.Speech.Engine
@@ -819,6 +821,7 @@ func (b *Bus) speak(utterance Utterance, wanted int) bool {
 
 		NoCache: utterance.Priority == Chat || utterance.Priority == Donation,
 	})
+	logTiming(utterance, engine, voice, started, audio, err)
 	if err != nil {
 		slog.Error("could not synthesize speech", "text", clip(utterance.Text, 60), "error", err)
 		b.Earcon("error")
@@ -868,6 +871,40 @@ func (b *Bus) speak(utterance Utterance, wanted int) bool {
 		return true
 	}
 	return completed
+}
+
+// logTiming writes how long one sentence took to become sound, for the engine
+// log on the Catatan page.
+//
+// Queued is the wait behind whatever was being said before it, synth the voice
+// itself, and rtf how that compares to the length of what came out: under one
+// is faster than speaking, and a chat voice drifting towards one is a voice
+// that cannot keep up with chat. A sentence that came back from the cache
+// shows as a synth of a few milliseconds, which is itself worth seeing.
+func logTiming(utterance Utterance, engine, voice string, started time.Time, audio tts.Audio, err error) {
+	synth := time.Since(started)
+	queued := time.Duration(0)
+	if !utterance.created.IsZero() {
+		queued = started.Sub(utterance.created)
+	}
+	fields := []any{
+		"priority", utterance.Priority.String(),
+		"engine", engine, "voice", voice,
+		"chars", len([]rune(utterance.Text)),
+		"queued_ms", queued.Milliseconds(),
+		"synth_ms", synth.Milliseconds(),
+	}
+	if err == nil {
+		seconds := audio.Duration()
+		fields = append(fields, "audio_s", fmt.Sprintf("%.2f", seconds))
+		if seconds > 0 {
+			fields = append(fields, "rtf", fmt.Sprintf("%.2f", synth.Seconds()/seconds))
+		}
+	} else {
+		fields = append(fields, "failed", true)
+	}
+	fields = append(fields, "text", clip(utterance.Text, 40))
+	slog.Info("speech timing", fields...)
 }
 
 // wasCalledOff reports whether the utterance's group has been cleared since it

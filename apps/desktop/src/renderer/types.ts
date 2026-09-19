@@ -17,6 +17,7 @@ export interface MikkiLensBridge {
   applyLocale(language: string): Promise<string>
   openExternal(url: string): Promise<boolean>
   readLogTail(lines: number): Promise<string>
+  copyText(text: string): Promise<void>
   loginItem(enabled?: boolean): Promise<boolean>
   version(): Promise<string>
   checkForUpdate(): Promise<UpdateCheck>
@@ -89,6 +90,7 @@ export interface Snapshot {
   mic_muted?: boolean
   broadcast_title?: string
   viewer_count?: number
+  like_count?: number
   chat_reading?: string
   chat_backlog?: number
   /** The mute key, which is not the reader: muted chat is still being collected. */
