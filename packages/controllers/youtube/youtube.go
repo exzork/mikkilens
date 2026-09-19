@@ -706,20 +706,25 @@ func (c *Controller) ActiveBroadcast(ctx context.Context, refresh bool) (*Broadc
 	}
 
 	for _, status := range []string{"active", "upcoming"} {
+		// All of them rather than the first. YouTube does not say which comes
+		// first, and "active" is not only the stream she is on: a broadcast
+		// whose stream dropped stays live when auto-stop is off, and one in
+		// preview is active too. Taking whichever came first read the chat of
+		// the wrong one.
 		response, err := service.LiveBroadcasts.
 			List([]string{"id", "snippet", "status"}).
 			BroadcastStatus(status).
-			MaxResults(1).
+			MaxResults(50).
 			Context(ctx).Do()
 		c.Quota.Spend("liveBroadcasts.list")
 		if err != nil {
 			return nil, c.classify(err)
 		}
-		if len(response.Items) == 0 {
+		item := pickBroadcast(response.Items)
+		if item == nil {
 			continue
 		}
 
-		item := response.Items[0]
 		found := &Broadcast{ID: item.Id, Status: status}
 		if item.Snippet != nil {
 			found.Title = item.Snippet.Title
@@ -739,6 +744,93 @@ func (c *Controller) ActiveBroadcast(ctx context.Context, refresh bool) (*Broadc
 	c.broadcast, c.broadcastFetched = nil, time.Time{}
 	c.mu.Unlock()
 	return nil, nil
+}
+
+// pickBroadcast chooses the one broadcast she is on out of several.
+//
+// Live beats preview, and the latest to go live beats an earlier one: a
+// broadcast left live after its stream dropped started before the one she has
+// just started, so the newest is the one with anybody watching. One that is
+// only starting has no start time yet, and counts as the newest of all.
+//
+// Among scheduled broadcasts, none of which has started, the one due soonest.
+func pickBroadcast(items []*yt.LiveBroadcast) *yt.LiveBroadcast {
+	var best *yt.LiveBroadcast
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if best == nil || broadcastBefore(best, item) {
+			best = item
+		}
+	}
+	return best
+}
+
+// broadcastBefore reports whether candidate should be preferred to current.
+func broadcastBefore(current, candidate *yt.LiveBroadcast) bool {
+	if a, b := broadcastRank(current), broadcastRank(candidate); a != b {
+		return b > a
+	}
+	started, startedNext := broadcastTime(current, "actual"), broadcastTime(candidate, "actual")
+	if !started.Equal(startedNext) {
+		// Not started yet reads as the newest.
+		if started.IsZero() || startedNext.IsZero() {
+			return startedNext.IsZero()
+		}
+		return startedNext.After(started)
+	}
+	due, dueNext := broadcastTime(current, "scheduled"), broadcastTime(candidate, "scheduled")
+	if due.IsZero() || dueNext.IsZero() {
+		return due.IsZero() && !dueNext.IsZero()
+	}
+	return dueNext.Before(due)
+}
+
+// broadcastRank orders what a broadcast is doing: on air, then going on air,
+// then preview, then everything else.
+func broadcastRank(item *yt.LiveBroadcast) int {
+	if item.Status == nil {
+		return 0
+	}
+	switch item.Status.LifeCycleStatus {
+	case "live", "liveStarting":
+		return 2
+	case "testing", "testStarting":
+		return 1
+	}
+	return 0
+}
+
+func broadcastTime(item *yt.LiveBroadcast, which string) time.Time {
+	if item.Snippet == nil {
+		return time.Time{}
+	}
+	value := item.Snippet.ScheduledStartTime
+	if which == "actual" {
+		value = item.Snippet.ActualStartTime
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed
+}
+
+// IsLive reports whether the broadcast is on air, as against scheduled or in
+// preview. "active" is what one from the active list is called when YouTube
+// leaves out its lifecycle, which it is asked for and does not; counted as
+// live, so that ever happening costs a preview being read rather than chat
+// going quiet.
+func (b *Broadcast) IsLive() bool {
+	if b == nil {
+		return false
+	}
+	switch b.Status {
+	case "live", "liveStarting", "active":
+		return true
+	}
+	return false
 }
 
 // cachedBroadcast returns the cached broadcast and whether it is still fresh.
@@ -855,10 +947,19 @@ func (c *Controller) LiveChatID(ctx context.Context) (string, error) {
 // Both, because the transports disagree about which they need. The page
 // scraper wants only the video id and no credential at all; the Data API
 // transports want the chat id.
+//
+// Only a broadcast that is on air. A scheduled one has a chat too -- the
+// waiting room -- and reading that while she is live somewhere else is reading
+// the wrong chat, so a scheduled or preview broadcast counts as none here. It
+// is still the answer for the title, which can be set before going live.
 func (c *Controller) ChatTarget(ctx context.Context) (string, string, error) {
 	broadcast, err := c.currentBroadcast(ctx)
 	if err != nil {
 		return "", "", err
+	}
+	if !broadcast.IsLive() {
+		return "", "", &NoBroadcastError{Reason: "no broadcast is live yet (the next one is " +
+			broadcast.Status + ")"}
 	}
 	return broadcast.ID, broadcast.LiveChatID, nil
 }
