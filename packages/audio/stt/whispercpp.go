@@ -92,6 +92,36 @@ func recognitionThreads() int {
 	return threads
 }
 
+// DefaultModel is the recognition model a machine gets unless it chooses
+// another.
+//
+// large-v3-turbo, quantised to five bits. Measured against small on her own
+// voice it made half the mistakes (18% of words against 34%), in a little
+// less graphics memory (880 MB against 1 GB) and about the same time per
+// sentence: its decoder is four layers deep where small's is twelve, and the
+// quantisation takes the rest of the size back.
+const DefaultModel = "large-v3-turbo"
+
+// ModelFile is the file downloaded for one model size.
+//
+// Every size is the file of the same name, except turbo, which is fetched
+// quantised: the full-precision file is 1.6 GB for no difference anybody
+// could hear in a voice command.
+func ModelFile(size string) string {
+	if size == "" {
+		size = DefaultModel
+	}
+	if size == "large-v3-turbo" {
+		return "ggml-large-v3-turbo-q5_0.bin"
+	}
+	return "ggml-" + size + ".bin"
+}
+
+// ModelSuffixes are the spellings of one size's file that are accepted as
+// that size, full precision first. Shared with the downloader, because a
+// model this package would happily use is not one to download again.
+var ModelSuffixes = []string{".bin", ".en.bin", "-q5_0.bin", "-q5_1.bin", "-q8_0.bin"}
+
 // findModel looks for a GGML model matching the configured size.
 func findModel(configured, size string) (string, error) {
 	if configured != "" {
@@ -101,18 +131,16 @@ func findModel(configured, size string) (string, error) {
 		return "", &Error{Reason: "the configured speech model was not found: " + configured}
 	}
 	if size == "" {
-		size = "small"
+		size = DefaultModel
 	}
 
 	searchDirs := []string{
 		paths.ModelsDir(),
 		filepath.Join(paths.ModelsDir(), "whisper"),
 	}
-	wanted := []string{
-		"ggml-" + size + ".bin",
-		"ggml-" + size + ".en.bin",
-		"ggml-" + size + "-q5_1.bin",
-		"ggml-" + size + "-q8_0.bin",
+	wanted := make([]string, 0, len(ModelSuffixes))
+	for _, suffix := range ModelSuffixes {
+		wanted = append(wanted, "ggml-"+size+suffix)
 	}
 	for _, directory := range searchDirs {
 		for _, name := range wanted {

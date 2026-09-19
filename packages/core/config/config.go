@@ -201,6 +201,11 @@ type Music struct {
 type STT struct {
 	Backend   string `toml:"backend" json:"backend"` // "auto" | "whispercpp" | "openai"
 	ModelSize string `toml:"model_size" json:"model_size"`
+
+	// DefaultModelGiven is the default model this file has already been moved
+	// onto, once, on upgrading. Bookkeeping rather than a setting; see
+	// migrateToTurbo.
+	DefaultModelGiven string `toml:"default_model_given" json:"default_model_given"`
 	// Device is where recognition runs: "auto" uses the graphics card when
 	// there is a GPU build of whisper.cpp and a driver for it, and the
 	// processor otherwise. "cuda" or "gpu" asks for the card and still falls
@@ -597,8 +602,9 @@ func Default() Config {
 			// gigabyte of memory to fix that. Beam size 0 means "decide from
 			// where it runs" -- wide on a graphics card, narrow on a
 			// processor.
-			Backend: "auto", ModelSize: "small", Device: "auto",
-			ComputeType: "auto", BeamSize: 0, APIKeyEnv: "MIKKILENS_STT_KEY",
+			Backend: "auto", ModelSize: turboModel, Device: "auto",
+			DefaultModelGiven: turboModel,
+			ComputeType:       "auto", BeamSize: 0, APIKeyEnv: "MIKKILENS_STT_KEY",
 			AutoInstall: true,
 		},
 		OBS: OBS{
@@ -656,6 +662,7 @@ func Load(path string) (Config, error) {
 	}
 	migrateVolumes(document)
 	migrateToOwnVoice(document)
+	migrateToTurbo(document)
 	migrateVoiceEngine(document)
 	return FromMap(document), nil
 }

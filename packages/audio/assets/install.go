@@ -1,6 +1,8 @@
 package assets
 
 import (
+	"github.com/exzork/mikkilens/packages/audio/stt"
+
 	"context"
 	"fmt"
 	"os"
@@ -153,12 +155,9 @@ func (i *Installer) fetch(ctx context.Context, stage Stage, modelSize string, on
 			"whisper-engine.zip", modelsDir(), wantedFromWhisper, track)
 
 	case StageModel:
-		if modelSize == "" {
-			modelSize = "small"
-		}
-		name := "ggml-" + modelSize + ".bin"
+		name := stt.ModelFile(modelSize)
 		return download(ctx, whisperModelHost+"/"+name,
-			filepath.Join(modelsDir(), name), Bytes[StageModel], track)
+			filepath.Join(modelsDir(), name), ModelBytes(modelSize), track)
 
 	case StageWake:
 		return i.fetchWake(ctx, track)

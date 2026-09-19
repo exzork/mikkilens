@@ -1421,7 +1421,7 @@ const recognitionDevices: Array<[string, string]> = [
 
 function fillRecognitionChoices(): void {
   const sizes = element<HTMLSelectElement>('stt-model-size')
-  const chosen = settings?.stt?.model_size ?? 'small'
+  const chosen = settings?.stt?.model_size ?? 'large-v3-turbo'
   const names = [...recognitionModels]
   if (chosen && !names.includes(chosen)) {
     names.push(chosen) // a size set by hand is still hers to keep

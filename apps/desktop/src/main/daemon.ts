@@ -24,6 +24,7 @@ export interface DaemonStatus {
 /** How long to wait for a freshly spawned engine to answer. */
 const startupTimeoutMs = 20_000
 const pollIntervalMs = 250
+const stopTimeoutMs = 10_000
 
 export class Daemon {
   private child: ChildProcess | null = null
@@ -111,8 +112,9 @@ export class Daemon {
       return this.status(false)
     }
 
+    let child: ChildProcess
     try {
-      this.child = spawn(executable, ['run'], {
+      child = spawn(executable, ['run'], {
         // The engine is started in her home directory, not next to the
         // binary: packaged, that binary sits in an installation folder it
         // cannot write to, and MIKKILENS_HOME is what stops it looking for
@@ -129,26 +131,40 @@ export class Daemon {
       this.detail = `Could not start the engine: ${String(error)}`
       return this.status(false)
     }
+    this.child = child
     this.owned = true
+
+    // Each handler forgets only its own process. A restart kills one engine
+    // and starts the next before the first has finished exiting, and when the
+    // old one's exit arrived it used to clear the new one -- so the second
+    // restart found nothing to stop, attached to the engine still running,
+    // and reported a restart that never happened.
+    const forget = (): void => {
+      if (this.child === child) {
+        this.child = null
+      }
+    }
 
     // Node reports some launch failures asynchronously rather than by
     // throwing, so this path has to be covered too.
-    this.child.on('error', (error) => {
+    child.on('error', (error) => {
       this.detail = `Could not start the engine: ${error.message}`
-      this.child = null
+      forget()
     })
 
     // The engine logs to data/mikkilens.log as well; mirroring it here is what
     // makes a failed start visible when the window is all she has open.
-    this.child.stdout?.on('data', (chunk: Buffer) => {
+    child.stdout?.on('data', (chunk: Buffer) => {
       process.stdout.write(`[engine] ${chunk}`)
     })
-    this.child.stderr?.on('data', (chunk: Buffer) => {
+    child.stderr?.on('data', (chunk: Buffer) => {
       process.stderr.write(`[engine] ${chunk}`)
     })
-    this.child.on('exit', (code) => {
-      this.detail = `the engine stopped (exit code ${code ?? 'unknown'})`
-      this.child = null
+    child.on('exit', (code) => {
+      if (this.child === child) {
+        this.detail = `the engine stopped (exit code ${code ?? 'unknown'})`
+      }
+      forget()
     })
 
     const started = Date.now()
@@ -173,12 +189,44 @@ export class Daemon {
    * An engine she started herself keeps running when the window closes, which
    * is the whole point: the voice control is the product, the window is not.
    */
-  stop(): void {
-    if (!this.child || !this.owned) {
-      return
+  stop(): Promise<void> {
+    const child = this.child
+    if (!child || !this.owned) {
+      return Promise.resolve()
     }
-    this.child.kill()
     this.child = null
+    if (child.exitCode !== null || child.signalCode !== null) {
+      return Promise.resolve()
+    }
+    const exited = new Promise<void>((resolve) => {
+      child.once('exit', () => resolve())
+      // A process that will not go is not worth waiting on for ever; the
+      // restart then finds the port still taken and says so.
+      setTimeout(resolve, stopTimeoutMs)
+    })
+    child.kill()
+    return exited
+  }
+
+  /**
+   * Stop the engine and start it again.
+   *
+   * Waits for the old one to be gone first. Starting the next while the last
+   * still held the port made it refuse to run -- "an engine is already
+   * running" -- and the window attached to the dying one instead.
+   *
+   * An engine this window did not start is not its to stop: dev mode's, or one
+   * started from run.bat. That is reported rather than called a restart.
+   */
+  async restart(): Promise<DaemonStatus> {
+    if (!this.child && (await this.reachable())) {
+      this.detail =
+        'this engine was not started by the MikkiLens window, so it cannot ' +
+        'restart it. Close it where it was started, then press this again.'
+      return this.status(false)
+    }
+    await this.stop()
+    return this.ensureRunning()
   }
 
   private status(reachable: boolean): DaemonStatus {

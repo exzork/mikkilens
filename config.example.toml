@@ -287,7 +287,7 @@ duck_volume = 25
 backend = "auto"       # "auto" prefers a local whisper.cpp server, then its
                        # one-shot CLI, then base_url below. "whisperserver",
                        # "whispercpp" or "openai" force one.
-model_size = "small"   # tiny / base / small / medium / large-v3-turbo.
+model_size = "large-v3-turbo"   # tiny / base / small / medium / large-v3-turbo (downloaded quantised, 574 MB).
                        #
                        # For a one-and-a-half second command, on a CPU with 8
                        # threads and on an RTX 3070:

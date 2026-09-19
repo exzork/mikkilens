@@ -388,10 +388,7 @@ ipcMain.handle('update:install', async () => {
   return updates.status()
 })
 
-ipcMain.handle('engine:restart', async () => {
-  daemon.stop()
-  return daemon.ensureRunning()
-})
+ipcMain.handle('engine:restart', () => daemon.restart())
 
 /**
  * The page asks for its strings rather than reading them off disk, which keeps
@@ -507,7 +504,7 @@ app.on('before-quit', () => {
   quitting = true
   updates.stop()
   musicBox.stop()
-  daemon.stop()
+  void daemon.stop()
 })
 
 app.on('window-all-closed', () => {

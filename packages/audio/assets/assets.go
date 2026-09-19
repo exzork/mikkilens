@@ -77,7 +77,8 @@ const (
 // used to say "about half a gigabyte", not to verify anything.
 var Bytes = map[Stage]int64{
 	StageEngine: 8_200_000,
-	StageModel:  487_600_000,
+	// The default model; see ModelBytes for the others.
+	StageModel: 574_000_000,
 	// The 1.29 runtime archive is 76 MB, plus a little over two for the two
 	// shared models. Installed copies never reach this stage at all -- the
 	// files ship inside the installer -- so it is what somebody building from
@@ -166,9 +167,23 @@ func Missing(speech, wakeWord bool, modelSize string) Wanted {
 	}
 
 	for _, stage := range wanted.Stages {
+		if stage == StageModel {
+			wanted.Bytes += ModelBytes(modelSize)
+			continue
+		}
 		wanted.Bytes += Bytes[stage]
 	}
 	return wanted
+}
+
+// MissingModel is only the recognition model, for when she has just chosen a
+// different one: the engine and the graphics build are the same whichever
+// model runs on them.
+func MissingModel(modelSize string) Wanted {
+	if modelInstalled(modelSize) {
+		return Wanted{}
+	}
+	return Wanted{Stages: []Stage{StageModel}, Bytes: ModelBytes(modelSize)}
 }
 
 // engineInstalled reports whether any whisper.cpp build is on the machine.
@@ -184,16 +199,30 @@ func engineInstalled() bool {
 	return false
 }
 
+// ModelBytes is roughly how large ModelFile(size) is.
+func ModelBytes(size string) int64 {
+	switch size {
+	case "tiny":
+		return 77_700_000
+	case "base":
+		return 147_900_000
+	case "small":
+		return 487_600_000
+	case "medium":
+		return 1_530_000_000
+	case "large-v3":
+		return 3_100_000_000
+	}
+	return Bytes[StageModel]
+}
+
 // modelInstalled reports whether the GGML model for one size is here.
-//
-// The same four names findModel in the stt package accepts, because a model
-// that package would happily use is not one to download again.
 func modelInstalled(size string) bool {
 	if size == "" {
-		size = "small"
+		size = stt.DefaultModel
 	}
 	for _, directory := range []string{modelsDir(), gpuDir()} {
-		for _, suffix := range []string{".bin", ".en.bin", "-q5_1.bin", "-q8_0.bin"} {
+		for _, suffix := range stt.ModelSuffixes {
 			if exists(filepath.Join(directory, "ggml-"+size+suffix)) {
 				return true
 			}

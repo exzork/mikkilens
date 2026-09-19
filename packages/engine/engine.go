@@ -26,6 +26,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/devices"
 	"github.com/exzork/mikkilens/packages/audio/feedback"
 	"github.com/exzork/mikkilens/packages/audio/hotkey"
+	"github.com/exzork/mikkilens/packages/audio/silero"
 	"github.com/exzork/mikkilens/packages/audio/stt"
 	"github.com/exzork/mikkilens/packages/audio/tts"
 	"github.com/exzork/mikkilens/packages/audio/wake"
@@ -555,6 +556,28 @@ func speechAssets(settings config.Config) assets.Wanted {
 	return assets.WithCUDA(wanted, assets.MissingCUDA(settings.Speech.Engine))
 }
 
+// recognitionModel is the recognition model she has chosen, when it is not
+// here yet.
+//
+// Separate from speechAssets because it answers a different question: that
+// one is about how she sounds, this about how she is heard. Choosing a model on
+// the Audio page used to change the setting and download nothing, so
+// recognition quietly carried on with whichever model was already here.
+func recognitionModel(settings config.Config) assets.Wanted {
+	if !settings.STT.AutoInstall || !wantsLocalRecognition(settings.STT) {
+		return assets.Wanted{}
+	}
+	return assets.MissingModel(settings.STT.ModelSize)
+}
+
+// joinWanted runs one set of downloads and then another.
+func joinWanted(first, second assets.Wanted) assets.Wanted {
+	return assets.Wanted{
+		Stages: append(append([]assets.Stage{}, first.Stages...), second.Stages...),
+		Bytes:  first.Bytes + second.Bytes,
+	}
+}
+
 // EnsureSpeechAssets fetches whatever the chosen voice engine is missing and
 // returns what it started, for the page that asked.
 //
@@ -569,7 +592,7 @@ func speechAssets(settings config.Config) assets.Wanted {
 // started no download can avoid promising one.
 func (e *Engine) EnsureSpeechAssets() assets.Wanted {
 	settings := e.Config()
-	wanted := speechAssets(settings)
+	wanted := joinWanted(recognitionModel(settings), speechAssets(settings))
 	if wanted.Empty() {
 		return assets.Wanted{}
 	}
@@ -613,12 +636,21 @@ func (e *Engine) announceStage(progress assets.Progress, wanted assets.Wanted) {
 		// what she was told it would do.
 		if progress.Stage == assets.StageModel {
 			e.bus.SayKey("assets.can_hear", feedback.Result)
+			// Until now recognition was running on whatever model was already
+			// here, or none. Loaded again so the one just downloaded is the
+			// one that listens, rather than from the next restart.
+			e.transcriber.Unload()
+			go e.loadRecognition(e.context())
 		}
 
 	default:
+		size := assets.Bytes[progress.Stage]
+		if progress.Stage == assets.StageModel {
+			size = assets.ModelBytes(e.Config().STT.ModelSize)
+		}
 		e.bus.Say(locale.T("assets.stage_starting", i18n.Args{
 			"what": e.stageName(progress.Stage),
-			"size": megabytes(assets.Bytes[progress.Stage]),
+			"size": megabytes(size),
 		}), feedback.Result)
 	}
 }
@@ -1986,6 +2018,12 @@ func (e *Engine) answerConfirmation(settings config.Config, microphone *capture.
 	}
 }
 
+// minSpeechSeconds is how much speech a recording needs before it is worth
+// recognising. Measured on her own voice, every spoken clip had more than two
+// and a half seconds of it and every silent or noisy one had none at all, so
+// this sits far from both: a one-word command is still several times longer.
+const minSpeechSeconds = 0.25
+
 // confirmSpeechTimeout caps how long to wait for a question to be spoken
 // before giving up on hearing the answer.
 const confirmSpeechTimeout = 20 * time.Second
@@ -2007,6 +2045,21 @@ func (e *Engine) captureAndRoute(
 		return false
 	}
 
+	// Whisper writes something down for any audio at all, so audio with no
+	// speech in it must not reach it: two seconds of room tone comes back as
+	// "Terima kasih kerana menonton". The recorder's own detector lets plenty
+	// of noise through, so this asks a model trained on exactly that. When it
+	// cannot be asked -- no ONNX runtime on this machine -- recognition runs
+	// as it always did rather than refusing to listen.
+	if seconds, err := silero.Default.SpeechSeconds(utterance.Audio); err != nil {
+		slog.Debug("could not check the recording for speech", "error", err)
+	} else if seconds < minSpeechSeconds {
+		slog.Info("no speech in the recording, not transcribed",
+			"audio_s", utterance.Duration, "speech_s", seconds)
+		e.bus.SayKey("listen.no_speech", feedback.Result)
+		return false
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -2014,6 +2067,13 @@ func (e *Engine) captureAndRoute(
 	if err != nil {
 		slog.Error("could not transcribe", "error", err)
 		e.bus.SayKey("error.generic", feedback.Error, i18n.Args{"reason": err.Error()})
+		return false
+	}
+	// And the lines it invents, for whatever got past the check above.
+	if stt.Phantom(transcript.Text) {
+		slog.Info("dropped a line recognition invents for non-speech",
+			"text", transcript.Text, "audio_s", utterance.Duration)
+		e.bus.SayKey("listen.no_speech", feedback.Result)
 		return false
 	}
 	slog.Info("heard", "text", transcript.Text,

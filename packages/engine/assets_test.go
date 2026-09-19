@@ -60,3 +60,19 @@ func TestTheEnginesWithNoModelsAskForNothing(t *testing.T) {
 		})
 	}
 }
+
+// Choosing a recognition model that is not here downloads it, and only it:
+// the engine and the graphics build are the same whichever model runs.
+func TestChoosingAMissingRecognitionModelDownloadsIt(t *testing.T) {
+	paths.SetRoot(t.TempDir())
+	settings := config.Default()
+	settings.STT.AutoInstall = true
+
+	wanted := recognitionModel(settings)
+	if len(wanted.Stages) != 1 || !wanted.Has(assets.StageModel) {
+		t.Fatalf("stages = %v, want only the model", wanted.Stages)
+	}
+	if wanted.Bytes != assets.ModelBytes(settings.STT.ModelSize) {
+		t.Errorf("bytes = %d, want the chosen model's size", wanted.Bytes)
+	}
+}

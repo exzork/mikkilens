@@ -184,8 +184,10 @@ export class Updates {
     // The installer has to replace mikkilensd.exe, and Windows will not let it
     // while that file is running. Stopping the engine first turns a failed
     // install into an ordinary one.
-    this.daemon.stop()
-    setTimeout(() => autoUpdater.quitAndInstall(false, true), 1500)
+    // Waited for rather than given a second and a half: the installer
+    // replacing a file that is still running fails the whole update.
+    await this.daemon.stop()
+    autoUpdater.quitAndInstall(false, true)
   }
 
   /** Whether she is live right now, according to the engine. */

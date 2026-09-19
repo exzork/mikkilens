@@ -113,3 +113,35 @@ func supertonicVoice(name string) bool {
 	name = strings.TrimSpace(name)
 	return len(name) == 2 && (name[0] == 'F' || name[0] == 'M') && name[1] >= '1' && name[1] <= '9'
 }
+
+// turboModel is the default recognition model, spelled out for the same reason
+// as ownVoice: this package sits under stt, not above it.
+// stt.TestTheDefaultModelIsTurbo keeps the two in step.
+const turboModel = "large-v3-turbo"
+
+// migrateToTurbo moves a file still on the old default model onto the new one,
+// once.
+//
+// The same trap as the voice: the settings page saves the whole [stt] section,
+// so model_size = 'small' is written down on every machine that has ever saved
+// a setting, whether or not anybody chose it. Small was the default, and small
+// is what turns two seconds of silence into "terima kasih kerana menonton", so
+// a file that says small and has not been moved before is moved now.
+// default_model_given records it; anything chosen afterwards, small included,
+// is kept.
+//
+// Only small is moved. Somebody on medium or tiny chose it, because neither
+// was ever the default.
+func migrateToTurbo(document map[string]any) {
+	section, ok := document["stt"].(map[string]any)
+	if !ok {
+		return
+	}
+	if given, ok := section["default_model_given"].(string); ok && given == turboModel {
+		return
+	}
+	if size, ok := section["model_size"].(string); !ok || size == "" || size == "small" {
+		section["model_size"] = turboModel
+	}
+	section["default_model_given"] = turboModel
+}
