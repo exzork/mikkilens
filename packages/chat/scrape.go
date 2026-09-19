@@ -52,6 +52,21 @@ const (
 	minScrapeWait = 1 * time.Second
 	maxScrapeWait = 15 * time.Second
 
+	// pushedScrapeWait is how often to ask when the page would have been told.
+	//
+	// A live chat's continuation is usually an invalidation one, and its
+	// timeout -- ten seconds -- is not a pace to poll at. It is the fallback a
+	// browser uses if the push never comes: the page subscribes to the chat's
+	// topic and fetches the moment a message is posted. There is no push here,
+	// so honouring the fallback meant every message waited up to ten seconds
+	// before MikkiLens had even seen it, which on a stream is long enough to be
+	// answered in the wrong conversation.
+	//
+	// Two seconds: one on average, an empty answer comes back in about forty
+	// milliseconds, and polling a live stream at a second and a half drew no
+	// complaint from YouTube.
+	pushedScrapeWait = 2 * time.Second
+
 	// The page is a few hundred kilobytes of script with the data in the
 	// middle of it. Reading without a limit would let a redirect to something
 	// enormous become a memory problem.
@@ -154,6 +169,15 @@ func (s *scrapeTransport) open(ctx context.Context, videoID string) (*scrapeSess
 		Contents struct {
 			LiveChatRenderer *struct {
 				Continuations []continuation `json:"continuations"`
+				Header        struct {
+					Renderer struct {
+						ViewSelector struct {
+							Menu struct {
+								Items []chatView `json:"subMenuItems"`
+							} `json:"sortFilterSubMenuRenderer"`
+						} `json:"viewSelector"`
+					} `json:"liveChatHeaderRenderer"`
+				} `json:"header"`
 			} `json:"liveChatRenderer"`
 		} `json:"contents"`
 	}
@@ -173,10 +197,19 @@ func (s *scrapeTransport) open(ctx context.Context, videoID string) (*scrapeSess
 				"which is also what a members-only stream looks like from outside"}
 	}
 
-	token, _ := firstContinuation(bootstrap.Contents.LiveChatRenderer.Continuations)
+	renderer := bootstrap.Contents.LiveChatRenderer
+	token, _, _ := firstContinuation(renderer.Continuations)
 	if token == "" {
 		return nil, &youtube.ChatUnavailableError{
 			Reason: "this broadcast's live chat has ended"}
+	}
+
+	// The page opens on Top chat, which is YouTube's filtered view: messages
+	// it judges to be spam or low value are left out, with nothing to say they
+	// were. Every message is what MikkiLens reads, so it asks for Live chat,
+	// the unfiltered view -- the one the Data API transports have always read.
+	if all := liveChatView(renderer.Header.Renderer.ViewSelector.Menu.Items); all != "" {
+		token = all
 	}
 
 	session := &scrapeSession{
@@ -191,6 +224,33 @@ func (s *scrapeTransport) open(ctx context.Context, videoID string) (*scrapeSess
 		session.clientVersion = "2.20250101.00.00"
 	}
 	return session, nil
+}
+
+// chatView is one entry of the page's Top chat / Live chat menu.
+type chatView struct {
+	Title        string       `json:"title"`
+	Selected     bool         `json:"selected"`
+	Continuation continuation `json:"continuation"`
+}
+
+// liveChatView finds the token for the unfiltered view, or "" to stay on
+// whatever the page opened on.
+//
+// By name first, which is what the page is asked for in English. Failing that,
+// by place: the menu has always been Top chat then Live chat, and the second of
+// two is the better guess than giving up and reading the filtered one.
+func liveChatView(items []chatView) string {
+	for _, item := range items {
+		if strings.EqualFold(strings.TrimSpace(item.Title), "Live chat") {
+			token, _, _ := firstContinuation([]continuation{item.Continuation})
+			return token
+		}
+	}
+	if len(items) == 2 {
+		token, _, _ := firstContinuation([]continuation{items[1].Continuation})
+		return token
+	}
+	return ""
 }
 
 // next asks for the batch after the current continuation.
@@ -248,7 +308,7 @@ func (s *scrapeTransport) next(ctx context.Context, session *scrapeSession) ([]M
 	}
 
 	live := answer.ContinuationContents.LiveChatContinuation
-	token, timeout := firstContinuation(live.Continuations)
+	token, timeout, pushed := firstContinuation(live.Continuations)
 	if token == "" {
 		// No token back means there is nothing further to follow: the stream
 		// ended, or chat closed while we were reading it.
@@ -267,6 +327,9 @@ func (s *scrapeTransport) next(ctx context.Context, session *scrapeSession) ([]M
 	}
 
 	wait := time.Duration(timeout) * time.Millisecond
+	if pushed {
+		wait = min(wait, pushedScrapeWait)
+	}
 	switch {
 	case wait < minScrapeWait:
 		wait = minScrapeWait
@@ -318,17 +381,20 @@ type continuationData struct {
 	TimeoutMs    int    `json:"timeoutMs"`
 }
 
-func firstContinuation(items []continuation) (string, int) {
+// firstContinuation returns the token to ask with next, the timeout that came
+// with it, and whether that timeout is only the fallback for a push this
+// transport never receives.
+func firstContinuation(items []continuation) (token string, timeoutMs int, pushed bool) {
 	for _, item := range items {
 		for _, data := range []*continuationData{
 			item.Invalidation, item.Timed, item.Reload, item.Replay,
 		} {
 			if data != nil && data.Continuation != "" {
-				return data.Continuation, data.TimeoutMs
+				return data.Continuation, data.TimeoutMs, data == item.Invalidation
 			}
 		}
 	}
-	return "", 0
+	return "", 0, false
 }
 
 type chatAction struct {

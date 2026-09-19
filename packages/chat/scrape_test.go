@@ -30,6 +30,22 @@ func page(continuation string) string {
 		`var after = {"unrelated":true};</script></head><body></body></html>`
 }
 
+// pageWithViews is a chat page that offers both views, opened on Top chat the
+// way YouTube opens it.
+func pageWithViews(topTitle, liveTitle string) string {
+	view := func(title, token string, selected bool) string {
+		return `{"title":"` + title + `","selected":` + strconv.FormatBool(selected) +
+			`,"continuation":{"reloadContinuationData":{"continuation":"` + token + `"}}}`
+	}
+	return `<!DOCTYPE html><html><head><script>` +
+		`var meta = {"INNERTUBE_API_KEY":"AIzaTest","INNERTUBE_CLIENT_VERSION":"2.20250101.00.00"};` +
+		`window["ytInitialData"] = {"contents":{"liveChatRenderer":{"continuations":` +
+		`[{"invalidationContinuationData":{"timeoutMs":10000,"continuation":"top-token"}}],` +
+		`"header":{"liveChatHeaderRenderer":{"viewSelector":{"sortFilterSubMenuRenderer":` +
+		`{"subMenuItems":[` + view(topTitle, "top-view", true) + `,` + view(liveTitle, "live-view", false) +
+		`]}}}}}}};</script></head><body></body></html>`
+}
+
 // noChatPage is what a video with chat switched off, or an ended stream,
 // actually serves: a valid page with no chat renderer in it.
 const noChatPage = `<html><script>window["ytInitialData"] = ` +
@@ -411,6 +427,80 @@ func TestThePollIntervalIsHeldBetweenItsFloorAndCeiling(t *testing.T) {
 		if wait < minScrapeWait || wait > maxScrapeWait {
 			t.Errorf("%s: wait = %v, outside [%v, %v]", name, wait, minScrapeWait, maxScrapeWait)
 		}
+	}
+}
+
+// The ten seconds on a live chat's continuation is how long a browser waits for
+// a push before asking anyway. Nothing is pushed here, so waiting it out held
+// every message back by up to ten seconds before it was even seen.
+func TestAPushedChatIsNotLeftToItsFallback(t *testing.T) {
+	transport, _ := serve(t, page("first-token"), answer(10000))
+	session, err := transport.open(context.Background(), "abcdefghijk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, wait, err := transport.next(context.Background(), session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wait > pushedScrapeWait {
+		t.Errorf("wait = %v, want at most %v", wait, pushedScrapeWait)
+	}
+}
+
+// A timed continuation is YouTube saying how often to ask, and is kept to.
+func TestATimedChatKeepsThePaceItIsGiven(t *testing.T) {
+	timed := `{"continuationContents":{"liveChatContinuation":{"continuations":` +
+		`[{"timedContinuationData":{"timeoutMs":6000,"continuation":"next-token"}}],` +
+		`"actions":[]}}}`
+	transport, _ := serve(t, page("first-token"), timed)
+	session, err := transport.open(context.Background(), "abcdefghijk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, wait, err := transport.next(context.Background(), session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wait != 6*time.Second {
+		t.Errorf("wait = %v, want the 6s it asked for", wait)
+	}
+}
+
+// Top chat is YouTube's filtered view, and the page opens on it. Reading it
+// left out whatever YouTube judged low value, silently.
+func TestTheUnfilteredLiveChatIsRead(t *testing.T) {
+	transport, _ := serve(t, pageWithViews("Top chat", "Live chat"), answer(5000))
+	session, err := transport.open(context.Background(), "abcdefghijk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.continuation != "live-view" {
+		t.Errorf("continuation = %q, want the Live chat view", session.continuation)
+	}
+}
+
+// Named in another language, the menu is still Top chat then Live chat.
+func TestLiveChatIsFoundByPlaceWhenNotByName(t *testing.T) {
+	transport, _ := serve(t, pageWithViews("Chat teratas", "Chat live"), answer(5000))
+	session, err := transport.open(context.Background(), "abcdefghijk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.continuation != "live-view" {
+		t.Errorf("continuation = %q, want the second view", session.continuation)
+	}
+}
+
+// No menu at all is no reason to stop reading: the page's own chat is used.
+func TestAPageWithNoViewMenuKeepsItsOwnChat(t *testing.T) {
+	transport, _ := serve(t, page("first-token"), answer(5000))
+	session, err := transport.open(context.Background(), "abcdefghijk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.continuation != "first-token" {
+		t.Errorf("continuation = %q, want the page's own", session.continuation)
 	}
 }
 
