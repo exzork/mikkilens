@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -74,14 +75,38 @@ func (c *Controller) MatchCommand(
 		return CommandGuess{}, &Error{Reason: "no command matcher is configured"}
 	}
 
+	// The decision model first, when there is one. It answers the "which
+	// command" half in about half a second and says how sure it is; only a
+	// confident answer is taken, so it can add a match but never remove one
+	// and an install without it behaves exactly as it always did.
+	if decisions := c.DecisionsEndpoint(); decisions.Configured() {
+		guess, decided, err := c.matchByDecision(ctx, transcript, options, decisions, endpoint)
+		switch {
+		case err != nil:
+			// Worth saying once and then carrying on: the text matcher below
+			// still answers, so a decision provider that is down costs a
+			// slower command rather than a command that does not run.
+			slog.Warn("the decision model could not be reached", "error", err)
+		case decided:
+			return guess, nil
+		}
+	}
+
 	timed, cancel := context.WithTimeout(ctx, matchTimeout)
 	defer cancel()
+	return c.matchWithText(timed, transcript, options, endpoint)
+}
 
+// matchWithText is the original path: tools where the provider supports them,
+// a prompt where it does not.
+func (c *Controller) matchWithText(
+	ctx context.Context, transcript string, options []CommandOption, endpoint Endpoint,
+) (CommandGuess, error) {
 	// Tools first, because the provider then constrains the answer to a command
 	// that exists and slots that were declared. The prompt below is the
 	// fallback for endpoints that cannot do it.
 	if toolsSupported(endpoint) {
-		guess, err := c.matchWithTools(timed, transcript, options, endpoint)
+		guess, err := c.matchWithTools(ctx, transcript, options, endpoint)
 		if err == nil {
 			return guess, nil
 		}
@@ -91,7 +116,7 @@ func (c *Controller) MatchCommand(
 		rememberToolsUnsupported(endpoint)
 	}
 
-	answer, err := c.Complete(timed, []Message{
+	answer, err := c.Complete(ctx, []Message{
 		{Role: "system", Content: matchSystemPrompt(options)},
 		{Role: "user", Content: transcript},
 	}, endpoint, MatchLimit)
@@ -99,6 +124,126 @@ func (c *Controller) MatchCommand(
 		return CommandGuess{}, err
 	}
 	return parseGuess(answer), nil
+}
+
+// -- deciding -------------------------------------------------------------
+
+// Which command, asked as a choice rather than as a sentence.
+//
+// This is the half of the question that a decision model is actually for. The
+// command ids are known, the phrases she wrote for them describe when each
+// applies, and "none of these" is one of the options -- so what comes back is
+// always a command that exists or an honest refusal, with a number attached.
+//
+// What it cannot do is the other half. It chooses; it does not write. Asked
+// "ganti judul jadi main minecraft bareng" it answers set_title with complete
+// confidence and has no way to hand back the title, because handing back words
+// that were not among the options is the one thing it is built not to do. So a
+// command that takes a slot still costs a call to the text model -- narrowed
+// to the single command already chosen, which is a far easier question than
+// the one it was being asked before -- and a command that takes none, which is
+// most of them, is finished here.
+
+// matchByDecision asks the decision model which command was meant.
+//
+// Reports whether the answer is good enough to use. False is not a failure: it
+// means "not sure enough", and the caller falls through to the text matcher,
+// which is the same path it would have taken had no decision model been
+// configured at all.
+func (c *Controller) matchByDecision(
+	ctx context.Context, transcript string, options []CommandOption, decisions, text Endpoint,
+) (CommandGuess, bool, error) {
+	choice, err := c.Choose(ctx, decisionState(transcript), decisionInstructions,
+		commandCriteria(options), decisions)
+	if err != nil {
+		return CommandGuess{}, false, err
+	}
+
+	minimum := c.MinConfidence()
+	if !choice.Chose(minimum) {
+		// Logged with the distribution, because this is the line where a
+		// command silently does not run, and the runner-up is what says
+		// whether a phrase needs rewording or the question was fairly unclear.
+		slog.Debug("the decision model was not sure enough",
+			"transcript", transcript, "choice", choice.Key,
+			"confidence", choice.Confidence, "minimum", minimum,
+			"probabilities", choice.Probabilities, "model", choice.Model)
+		return CommandGuess{}, false, nil
+	}
+
+	chosen, found := optionByID(options, choice.Key)
+	if !found {
+		return CommandGuess{}, false, nil
+	}
+
+	slog.Debug("the decision model chose a command",
+		"transcript", transcript, "command", chosen.ID,
+		"confidence", choice.Confidence, "model", choice.Model)
+
+	// Nothing to extract: most commands take no slot, and these are done
+	// without the text model being asked anything at all.
+	if len(chosen.Slots) == 0 {
+		return CommandGuess{Command: chosen.ID, Slots: map[string]string{}}, true, nil
+	}
+
+	timed, cancel := context.WithTimeout(ctx, matchTimeout)
+	defer cancel()
+
+	// Offered only the command already chosen. It may still decline, and a
+	// decline here means falling through to the ordinary path rather than
+	// running a command that takes a title with no title in it.
+	guess, err := c.matchWithText(timed, transcript, []CommandOption{chosen}, text)
+	if err != nil {
+		return CommandGuess{}, false, err
+	}
+	if guess.Command != chosen.ID {
+		return CommandGuess{}, false, nil
+	}
+	return guess, true, nil
+}
+
+// decisionState is the transcript, said to be speech and said to be fallible.
+//
+// The second part is not decoration. These words came from speech recognition
+// and are wrong as often as they are unclear, and a model judging them as
+// written text rules out the reading that was actually meant.
+func decisionState(transcript string) string {
+	return "A voice command spoken by the streamer and transcribed by speech " +
+		"recognition, which may have misheard it: \"" + transcript + "\""
+}
+
+// decisionInstructions carry the one rule no list of options can express.
+const decisionInstructions = "Which command did she mean? Judge the words by " +
+	"what they sound like they were meant to be rather than by exact " +
+	"spelling. Choose none unless one command is clearly what she meant, and " +
+	"never choose between two plausible commands: these start and stop live " +
+	"broadcasts, and doing the wrong one is far worse than doing nothing."
+
+// commandCriteria describes each command by the phrases already written for it.
+//
+// The same reasoning as the tool descriptions: the id says almost nothing,
+// while the phrases say exactly when the command applies, in her own words and
+// her own language, and they stay the one place any of it is written down.
+func commandCriteria(options []CommandOption) map[string]string {
+	criteria := make(map[string]string, len(options))
+	for _, option := range options {
+		description := "The " + option.ID + " command."
+		if len(option.Phrases) > 0 {
+			description = "She said something like: " + strings.Join(option.Phrases, "; ")
+		}
+		criteria[option.ID] = description
+	}
+	return criteria
+}
+
+// optionByID finds the chosen command among the ones that were offered.
+func optionByID(options []CommandOption, id string) (CommandOption, bool) {
+	for _, option := range options {
+		if option.ID == id {
+			return option, true
+		}
+	}
+	return CommandOption{}, false
 }
 
 // MatcherEndpoint is the same provider as everything else, with a timeout of

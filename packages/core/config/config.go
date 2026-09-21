@@ -540,7 +540,11 @@ type Config struct {
 	Model    Model    `toml:"model" json:"model"`
 	Vision   Vision   `toml:"vision" json:"vision"`
 	Matcher  Matcher  `toml:"matcher" json:"matcher"`
-	UI       UI       `toml:"ui" json:"ui"`
+
+	// Decisions is optional and off unless she fills it in, so an install that
+	// has never heard of it behaves exactly as it always did.
+	Decisions Decisions `toml:"decisions" json:"decisions"`
+	UI        UI        `toml:"ui" json:"ui"`
 
 	// Bindings is a list of tables rather than a section, because the same
 	// key name repeats: [[bindings]] once per key. Left out when empty, so a
@@ -637,7 +641,29 @@ func Default() Config {
 		Model:   Model{APIKeyEnv: "MIKKILENS_MODEL_KEY", TimeoutS: 30.0},
 		Vision:  Vision{MaxEdge: 1568, Monitors: "all", MaxAnswerChars: 700},
 		Matcher: Matcher{Enabled: true},
-		UI:      UI{Host: "127.0.0.1", Port: 8760},
+		// Off, but filled in: the address and the model are not hers to guess,
+		// so the default carries them and turning this on is enabling it and
+		// putting a key somewhere, rather than looking any of it up.
+		Decisions: Decisions{
+			Enabled: false,
+			Base:    "https://openrouter.ai/api/alpha",
+			// The floating alias, so a new version is picked up without her
+			// editing anything. The leading tilde is part of the name and not
+			// a typo: "typesafe/jev-latest" without it is not a model that
+			// exists. Pin a dated id here instead if a release ever surprises
+			// her mid-stream.
+			Model:     "~typesafe/jev-latest",
+			APIKeyEnv: "MIKKILENS_DECISIONS_KEY",
+			// Below this she is asked instead. Chosen against the commands
+			// that end broadcasts: a clear match scores near 1.0 and the ones
+			// that come back in the 0.7s are genuinely the ambiguous ones.
+			MinConfidence: 0.7,
+			// Shorter than the matcher's. This sits in front of a command she
+			// has already spoken, the model answers in well under a second,
+			// and past this it is quicker to ask the text model instead.
+			TimeoutS: 5.0,
+		},
+		UI: UI{Host: "127.0.0.1", Port: 8760},
 	}
 }
 
@@ -820,9 +846,57 @@ type Matcher struct {
 	Enabled bool `toml:"enabled" json:"enabled"`
 }
 
+// Decisions is an optional second provider for the questions that are a choice
+// rather than a sentence.
+//
+// Working out which command she meant is not writing: it is picking one name
+// from a list that is already known, and a text model is a strange tool for
+// it. It has to be asked in a prompt, talked out of adding a code fence, and
+// then believed -- and what comes back is prose that says nothing about how
+// close the runner-up was. A decision model answers the same question as a
+// distribution over the commands that exist, which is both faster and the one
+// thing the prompt could never give: a number for how sure it is.
+//
+// Its own section rather than a flag on [model], because it is a different
+// provider and a different protocol. [model] stays whatever she pointed it at,
+// including a local server, and leaving this empty leaves every path exactly
+// as it was -- which is what keeps running everything on her own machine a
+// supported way to use this and not a downgrade.
+type Decisions struct {
+	Enabled   bool   `toml:"enabled" json:"enabled"`
+	Base      string `toml:"base_url" json:"base_url"`
+	Model     string `toml:"model" json:"model"`
+	APIKeyEnv string `toml:"api_key_env" json:"api_key_env"`
+
+	// MinConfidence is how sure it has to be before a command runs.
+	//
+	// The rule these commands are written under is that doing the wrong one is
+	// worse than doing nothing, and a text matcher could only be asked nicely
+	// to honour it. Here it is arithmetic.
+	//
+	// Most of the work is not done by this number. A clear command comes back
+	// near 1.00, and where two commands genuinely compete -- "stop", with both
+	// the stream and the music stoppable -- it declines on its own rather than
+	// choosing, at around 0.38. What this catches is the leftover: an answer it
+	// was willing to give and not sure enough of.
+	MinConfidence float64 `toml:"min_confidence" json:"min_confidence"`
+
+	TimeoutS float64 `toml:"timeout_s" json:"timeout_s"`
+}
+
+// Configured reports whether the decision model can actually be called.
+func (d Decisions) Configured() bool {
+	return d.Enabled && d.Base != "" && d.Model != ""
+}
+
 // ModelEndpoint is the one provider MikkiLens calls, whatever it is asking.
 func (c Config) ModelEndpoint() (base, model, key string) {
 	return c.Model.Base, c.Model.Model, ResolveSecret(c.Model.APIKeyEnv)
+}
+
+// DecisionsEndpoint is the provider for choices, when one is configured.
+func (c Config) DecisionsEndpoint() (base, model, key string) {
+	return c.Decisions.Base, c.Decisions.Model, ResolveSecret(c.Decisions.APIKeyEnv)
 }
 
 // ModelAPIKey resolves the key for that provider.

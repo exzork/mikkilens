@@ -438,6 +438,38 @@
           </p>
           <p class="result" id="model-result" role="status"></p>
         </fieldset>
+
+        <fieldset class="full">
+          <legend data-i18n="decisions.legend">Decision model</legend>
+          <p class="hint" data-i18n="decisions.hint"></p>
+          <p>
+            <input type="checkbox" id="decisions-enabled" />
+            <label for="decisions-enabled" data-i18n="decisions.enabledLabel">
+              Use a decision model to work out which command you meant
+            </label>
+          </p>
+          <p class="hint" data-i18n="decisions.enabledHint"></p>
+          <p><label for="decisions-url" data-i18n="decisions.baseURL">Base URL</label> <input type="text" id="decisions-url" size="40" /></p>
+          <p><label for="decisions-name" data-i18n="decisions.model">Model</label> <input type="text" id="decisions-name" size="30" /></p>
+          <p class="hint" data-i18n="decisions.modelHint"></p>
+          <p><label for="decisions-key" data-i18n="decisions.apiKey">API key</label> <input type="password" id="decisions-key" size="40" /></p>
+          <p class="hint" data-i18n="decisions.apiKeyHint"></p>
+          <p>
+            <label for="decisions-confidence" data-i18n="decisions.minConfidence">How sure it must be</label>
+            <input type="number" id="decisions-confidence" min="0" max="1" step="0.05" />
+          </p>
+          <p class="hint" data-i18n="decisions.minConfidenceHint"></p>
+          <p>
+            <label for="decisions-timeout" data-i18n="decisions.timeout">Give up after (seconds)</label>
+            <input type="number" id="decisions-timeout" min="1" max="60" step="0.5" />
+          </p>
+          <p class="hint" data-i18n="decisions.timeoutHint"></p>
+          <p class="buttons">
+            <button type="button" id="save-decisions" class="primary" data-i18n="common.save">Save</button>
+            <button type="button" id="test-decisions" data-i18n="decisions.test">Test the decision model</button>
+          </p>
+          <p class="result" id="decisions-result" role="status"></p>
+        </fieldset>
         </div>
       </section>
 

@@ -259,6 +259,21 @@ export interface AppConfig {
   model: { base_url: string; model: string; api_key_env: string; [key: string]: unknown }
   vision: { max_edge: number; monitors: string; [key: string]: unknown }
   matcher: { enabled: boolean }
+  /**
+   * The optional decision model, asked which command she meant. It chooses
+   * from a list rather than writing, so it answers faster and says how sure it
+   * is -- and a command that takes a value still needs `model` above for the
+   * words. Off unless she fills it in.
+   */
+  decisions: {
+    enabled: boolean
+    base_url: string
+    model: string
+    api_key_env: string
+    min_confidence: number
+    timeout_s: number
+    [key: string]: unknown
+  }
   youtube: { enabled: boolean; [key: string]: unknown }
   chat: { max_gift_recipients: number; [key: string]: unknown }
   /** Donations, watched so chat is not read over the top of an alert. */

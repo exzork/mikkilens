@@ -16,6 +16,7 @@ import (
 	"github.com/exzork/mikkilens/packages/audio/feedback"
 	"github.com/exzork/mikkilens/packages/audio/tts"
 	"github.com/exzork/mikkilens/packages/audio/wake"
+	"github.com/exzork/mikkilens/packages/controllers/llm"
 	"github.com/exzork/mikkilens/packages/controllers/music"
 	"github.com/exzork/mikkilens/packages/controllers/vision"
 	"github.com/exzork/mikkilens/packages/controllers/youtube"
@@ -66,6 +67,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/test/obs", only(http.MethodPost, s.testOBS))
 	mux.HandleFunc("/api/obs/stream", only(http.MethodPost, s.setStreaming))
 	mux.HandleFunc("/api/test/model", only(http.MethodPost, s.testModel))
+	mux.HandleFunc("/api/test/decisions", only(http.MethodPost, s.testDecisions))
 
 	mux.HandleFunc("/api/youtube/status", only(http.MethodGet, s.youtubeStatus))
 	mux.HandleFunc("/api/youtube/connect", only(http.MethodPost, s.youtubeConnect))
@@ -833,6 +835,19 @@ func (s *Server) testModel(writer http.ResponseWriter, request *http.Request) {
 	defer cancel()
 	respond(writer, http.StatusOK,
 		vision.New(s.engine.Config(), s.engine.Locale()).SelfTest(ctx))
+}
+
+// testDecisions checks the decision provider, by asking it something with one
+// obvious answer rather than merely by reaching it.
+//
+// A short timeout on purpose. This endpoint is only ever used in front of a
+// command she has already spoken, so a provider that needs a minute to answer
+// is a provider she should be told about here rather than mid-stream.
+func (s *Server) testDecisions(writer http.ResponseWriter, request *http.Request) {
+	ctx, cancel := context.WithTimeout(request.Context(), 30*time.Second)
+	defer cancel()
+	respond(writer, http.StatusOK,
+		llm.New(s.engine.Config(), s.engine.Locale()).DecisionsSelfTest(ctx))
 }
 
 // -- youtube ------------------------------------------------------------------

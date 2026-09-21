@@ -616,6 +616,78 @@ max_answer_chars = 700       # Keeps spoken answers from running on forever.
 # other way to have both.
 enabled = true
 
+[decisions]
+# An optional second model, for the half of the question that is a choice
+# rather than a sentence.
+#
+# "Which of these twenty commands did she mean" is not writing. The commands
+# are already known and the answer is one of their names, but a text model has
+# to be asked for it in a prompt, talked out of wrapping it in a code fence,
+# and then taken at its word -- and what comes back is one name with nothing to
+# say about how close the runner-up was.
+#
+# A decision model answers that question directly. The commands go up as a
+# list, and what comes back is a probability for each one. Nothing has to be
+# parsed, nothing can come back that was not on the list, and how sure it is
+# arrives as a number. It is also quicker and far cheaper: about half a second
+# and a fraction of a cent per thousand commands, against a second or more.
+#
+# What it cannot do is write. Asked "ganti judul jadi main minecraft bareng" it
+# picks set_title with complete confidence and has no way to hand back the
+# title, because producing words that were not on the list is the one thing it
+# is built not to do. So a command that takes a value still costs one call to
+# [model] -- asked only about the command already chosen, which is a much
+# easier question -- and a command that takes none, which is most of them, is
+# finished without [model] being asked anything at all.
+#
+# This is off unless you switch it on, and leaving it off changes nothing: the
+# matcher above works exactly as it always did. It is also the only part of
+# MikkiLens tied to one provider, since Jev is on OpenRouter and nowhere else,
+# which is the other reason it is its own section -- [model] stays free to be a
+# local Ollama that has never heard of any of this.
+#
+# When it is on, it can only ever add a match. An answer it is not sure enough
+# about, a command it declines, or a provider that is having a bad day all fall
+# through to the matcher above, so the worst case is a command that takes as
+# long as it used to.
+enabled = false
+base_url = "https://openrouter.ai/api/alpha"
+
+# The leading "~" is part of the name, not a typo: it means "whatever the
+# current Jev is", and "typesafe/jev-latest" without it is not a model that
+# exists. Pin a dated id here instead -- "typesafe/jev-1.13" -- if you would
+# rather a new release never surprised you mid-stream.
+model = "~typesafe/jev-latest"
+
+# Your OpenRouter key, from the environment or data/secrets.toml.
+#
+# Worth making a second key for this rather than reusing the one in [model].
+# In Workspaces > Guardrails on openrouter.ai you can attach a model allowlist
+# to a single key, so a key that can only ever call Jev is a key that cannot
+# quietly spend anything if it leaks.
+api_key_env = "MIKKILENS_DECISIONS_KEY"
+
+# How sure it has to be before the command runs.
+#
+# This is the rule your commands are written under -- doing the wrong one is
+# worse than doing nothing -- as arithmetic rather than as a polite request in
+# a prompt.
+#
+# Most of the work is not done by this number. A clear command comes back near
+# 1.00, and where two of your commands genuinely compete -- "stop", when both
+# the stream and the music can be stopped -- it declines on its own rather than
+# choosing, and you are asked. What this catches is the leftover: an answer it
+# was willing to give and not sure enough of.
+#
+# Raise it if it acts when you would rather it checked; lower it if it checks
+# when the command was obvious.
+min_confidence = 0.7
+
+# Shorter than the matcher's. This sits in front of a command you have already
+# spoken, the model answers in well under a second, and past this it is quicker
+# to let [model] answer instead.
+timeout_s = 5.0
+
 [ui]
 host = "127.0.0.1"
 port = 8760

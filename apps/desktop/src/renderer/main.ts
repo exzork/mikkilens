@@ -1298,6 +1298,79 @@ element('save-model').addEventListener('click', async () => {
   }
 })
 
+// The decision model, saved the same way and for the same reason: the key goes
+// to /secret rather than into config.toml, so the file stays safe to hand to
+// someone for help.
+element('save-decisions').addEventListener('click', async () => {
+  const confidence = Number(element<HTMLInputElement>('decisions-confidence').value)
+  const timeout = Number(element<HTMLInputElement>('decisions-timeout').value)
+
+  await saveConfig(
+    {
+      decisions: {
+        enabled: element<HTMLInputElement>('decisions-enabled').checked,
+        base_url: element<HTMLInputElement>('decisions-url').value.trim(),
+        model: element<HTMLInputElement>('decisions-name').value.trim(),
+        // Guarded here as well as in the engine. A blank box reads as 0, and a
+        // threshold of zero would run whichever command scored highest however
+        // unsure it was -- which is the one failure this whole section exists
+        // to make impossible.
+        min_confidence:
+          Number.isFinite(confidence) && confidence > 0 && confidence <= 1 ? confidence : 0.7,
+        timeout_s: Number.isFinite(timeout) && timeout > 0 ? timeout : 5,
+      },
+    },
+    t('decisions.saved'),
+  )
+
+  const keyField = element<HTMLInputElement>('decisions-key')
+  if (keyField.value && settings) {
+    try {
+      await api('/secret', {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: settings.decisions.api_key_env,
+          value: keyField.value,
+        }),
+      })
+      keyField.value = ''
+      announce(t('decisions.keySaved'))
+    } catch (error) {
+      alarm(reason(error))
+    }
+  }
+})
+
+element('test-decisions').addEventListener('click', async () => {
+  const result = element('decisions-result')
+  result.textContent = t('decisions.testing')
+
+  try {
+    const answer = await api<{
+      ok: boolean
+      model?: string
+      choice?: string
+      confidence?: number
+      error?: string
+    }>('/test/decisions', { method: 'POST' })
+
+    const text = answer.ok
+      ? t('decisions.connected', {
+          model: answer.model ?? '',
+          // Shown as a percentage because that is what it means, and because
+          // the same number is what the threshold above is set in.
+          confidence: Math.round((answer.confidence ?? 0) * 100).toString(),
+        })
+      : t('decisions.failed', { reason: answer.error ?? '' })
+    result.textContent = text
+    answer.ok ? announce(text) : alarm(text)
+  } catch (error) {
+    const text = t('decisions.failed', { reason: reason(error) })
+    result.textContent = text
+    alarm(text)
+  }
+})
+
 element('test-model').addEventListener('click', async () => {
   const result = element('model-result')
   result.textContent = t('model.testing')
@@ -2471,6 +2544,14 @@ async function boot(): Promise<void> {
   element<HTMLInputElement>('model-url').value = settings.model.base_url
   element<HTMLInputElement>('model-name').value = settings.model.model
   element<HTMLInputElement>('matcher-enabled').checked = settings.matcher.enabled
+
+  element<HTMLInputElement>('decisions-enabled').checked = settings.decisions?.enabled ?? false
+  element<HTMLInputElement>('decisions-url').value = settings.decisions?.base_url ?? ''
+  element<HTMLInputElement>('decisions-name').value = settings.decisions?.model ?? ''
+  element<HTMLInputElement>('decisions-confidence').value = String(
+    settings.decisions?.min_confidence ?? 0.7,
+  )
+  element<HTMLInputElement>('decisions-timeout').value = String(settings.decisions?.timeout_s ?? 5)
 
   const languageSelect = element<HTMLSelectElement>('lang-output')
   languageSelect.replaceChildren()
