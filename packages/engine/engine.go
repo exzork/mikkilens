@@ -19,7 +19,9 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/exzork/mikkilens/packages/audio/assets"
 	"github.com/exzork/mikkilens/packages/audio/capture"
@@ -122,6 +124,17 @@ type Engine struct {
 	playing   playback
 	duckTimer *time.Timer
 
+	// wakeGated remembers whether the utterance now being spoken is one the
+	// wake word was switched off for.
+	//
+	// Switching it back on is not the mirror of switching it off: the detector
+	// stays deaf for a tail afterwards, so calling it for an utterance that
+	// never gated anything would make her deaf for a second and a half at the
+	// end of every sentence MikkiLens speaks -- which is the opposite of what
+	// this is for. So the decision is made once, when speech starts, and read
+	// back when it ends.
+	wakeGated atomic.Bool
+
 	listening  sync.Mutex
 	listenBusy bool
 	release    chan struct{}
@@ -163,25 +176,99 @@ func New(settings config.Config, locale *i18n.Locale) *Engine {
 	})
 	engine.duckTimer.Stop()
 
-	// One hook, two jobs. The wake word goes deaf while MikkiLens talks --
-	// her name is the trigger, and it comes back through the microphone like
-	// anyone else saying it -- and the music steps back so the voice is not
-	// competing with it.
-	//
-	// A list of results is the exception, and it has to be: the detector stays
-	// off for a second and a half after each utterance, which is longer than
-	// the gap between two results, so a list left it deaf from the first line
-	// to the last. Hands-free, that is not "she has to wait" -- it is no way
-	// in at all, on the one thing MikkiLens says that exists to be answered
-	// while it is still being said. Nothing in a list of songs says her name,
-	// which is the whole reason the gate is there.
+	// One hook, two jobs: the wake word goes deaf for speech that could set it
+	// off, and the music steps back so the voice is not competing with it.
 	bus.OnSpeaking(func(speaking bool) {
-		if detector := engine.Wake(); detector != nil && !engine.readingAList() {
-			detector.SetSpeaking(speaking)
-		}
+		engine.gateWakeWord(speaking)
 		engine.duckMusic(speaking)
 	})
 	return engine
+}
+
+// Going deaf only for the speech that could actually set the wake word off.
+//
+// The gate exists for one thing: her name is the trigger, so a sentence
+// MikkiLens speaks that says her name comes out of the speakers and back into
+// the microphone, where the detector cannot tell that voice from hers.
+//
+// It used to be applied to everything MikkiLens said, which made her deaf for
+// the whole of it and for a second and a half afterwards. Reading chat, that
+// is most of a stream: messages arrive closer together than the tail is long,
+// so from the first message to the last there was no way in at all -- and
+// "jeda chat" is exactly the command someone wants while chat is being read
+// over them. It was already the wrong rule for a list of songs, which is why
+// that had an exception of its own; chat is the same problem, much bigger.
+//
+// So the question is asked of the sentence rather than assumed of all of them.
+// Nothing in "budi123: halo kak" can trigger a detector listening for her
+// name, and while it is read she stays reachable. A message that does say her
+// name -- and viewers say it constantly -- still closes the gate, so this
+// costs nothing on a machine whose speakers do feed the microphone, and on
+// headphones, where none of it feeds back at all, it simply never gets in her
+// way.
+func (e *Engine) gateWakeWord(speaking bool) {
+	detector := e.Wake()
+	if detector == nil {
+		return
+	}
+
+	if !speaking {
+		// Only undo what was done. See Engine.wakeGated.
+		if e.wakeGated.Swap(false) {
+			detector.SetSpeaking(false)
+		}
+		return
+	}
+
+	gate := e.speechCanWake()
+	e.wakeGated.Store(gate)
+	if gate {
+		detector.SetSpeaking(true)
+	}
+}
+
+// speechCanWake reports whether what is being said could trigger the detector.
+func (e *Engine) speechCanWake() bool {
+	// A list of results is answered while it is still being read, and is the
+	// one place where being deaf is worse than a false trigger would be.
+	if e.readingAList() {
+		return false
+	}
+
+	word := e.Config().Wake.Model
+	if strings.TrimSpace(word) == "" {
+		// No wake word to compare against. Deafness is the safe answer: a
+		// detector that fires on its own voice is worse than one that waits.
+		return true
+	}
+	return mentionsWakeWord(e.bus.SpeakingText(), word)
+}
+
+// mentionsWakeWord reports whether text says the wake word.
+//
+// Compared with everything but letters and digits thrown away, because the two
+// sides are written differently for different reasons: the wake word is a
+// model name -- "mikkilens", and someone's own model may well be "hey_mikki"
+// -- while the text is a sentence, with capitals, punctuation and a comma
+// after her name. Stripping both to bare characters is what lets "Hey Mikki,
+// halo!" match a model called "hey_mikki" without either having to know how
+// the other is spelled.
+func mentionsWakeWord(text, word string) bool {
+	stripped := func(value string) string {
+		var builder strings.Builder
+		for _, letter := range strings.ToLower(value) {
+			if unicode.IsLetter(letter) || unicode.IsDigit(letter) {
+				builder.WriteRune(letter)
+			}
+		}
+		return builder.String()
+	}
+
+	needle := stripped(word)
+	if needle == "" {
+		return true
+	}
+	return strings.Contains(stripped(text), needle)
 }
 
 func outputDevice(settings config.Config) *devices.Device {

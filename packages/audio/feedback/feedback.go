@@ -528,6 +528,21 @@ func (b *Bus) SpeakingGroup() string {
 	return b.current.Group
 }
 
+// SpeakingText is the text of the utterance being spoken, or "" for none.
+//
+// The wake word asks this. Her name is the trigger, so the only speech that
+// can set the detector off is speech that says her name -- and that is
+// something this knows and can be asked, rather than something to be assumed
+// of everything MikkiLens ever says.
+func (b *Bus) SpeakingText() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.current == nil {
+		return ""
+	}
+	return b.current.Text
+}
+
 // ClearAll drops everything pending.
 func (b *Bus) ClearAll() int {
 	b.mu.Lock()

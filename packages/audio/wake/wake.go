@@ -208,6 +208,17 @@ func (d *Detector) Enabled() bool {
 	return d.enabled
 }
 
+// Speaking reports whether the detector is switched off for speech.
+//
+// Worth being able to read back: switching it off and on again are not the
+// same operation -- coming back imposes a tail of deafness -- so the caller
+// has to know which of the two it is in before doing either.
+func (d *Detector) Speaking() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.speaking
+}
+
 // SetSpeaking switches the detector off while MikkiLens is talking, and back
 // on a moment after it stops.
 //
@@ -216,6 +227,10 @@ func (d *Detector) Enabled() bool {
 // the speakers and straight back into the microphone, and the detector cannot
 // tell that voice from hers. Nothing is gained by scoring MikkiLens against
 // its own name.
+//
+// Which is why the caller asks this of the sentence rather than of MikkiLens
+// in general. Speech that cannot say her name cannot set this off, and going
+// deaf through it buys nothing -- see Engine.gateWakeWord.
 //
 // The buffer and the pipeline are cleared on the way out rather than the way
 // in, because what has to be thrown away is the audio recorded during the
