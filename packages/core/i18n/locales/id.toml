@@ -152,6 +152,17 @@ unreachable = "Saya tidak bisa menghubungi overlay donasi Trakteer, jadi saya ti
 donation = "{donor} memberi {count} {unit}, {price}. {text}"
 donation_no_message = "{donor} memberi {count} {unit}, {price}."
 
+[hello]
+# Perkenalan singkat, diucapkan waktu diminta.
+#
+# Pendek dengan sengaja: ini dibacakan di tengah siaran, ke penonton yang baru
+# masuk, dan perkenalan yang panjang justru jadi jeda yang canggung.
+#
+# Namanya ada di dalam kalimat ini, jadi kata pemicunya ikut terucap -- itu
+# memang sudah diurus: kata pemicu dimatikan sebentar selama kalimat yang
+# menyebut namanya, supaya MikkiLens tidak memanggil dirinya sendiri.
+intro = "Halo semuanya, aku MikkiLens, siap membantu!"
+
 [clock]
 # Dua puluh empat jam: sama seperti jadwal dan alat siaran, dan tidak bisa
 # tertukar pagi atau sore seperti "2:35".

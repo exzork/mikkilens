@@ -149,6 +149,17 @@ unreachable = "I cannot reach the Trakteer donation overlay, so I will not know 
 donation = "{donor} gave {count} {unit}, {price}. {text}"
 donation_no_message = "{donor} gave {count} {unit}, {price}."
 
+[hello]
+# A short introduction, said when she is asked for one.
+#
+# Short on purpose: it is read out mid-stream, to viewers who have just
+# arrived, and a long introduction is an awkward pause rather than a welcome.
+#
+# Her name is inside it, so saying this says the wake word -- which is already
+# handled: the wake word is switched off for the sentences that mention it, so
+# MikkiLens does not answer itself.
+intro = "Hello everyone, I'm MikkiLens, here to help!"
+
 [clock]
 # Twenty-four hour: it matches the schedule and the broadcast tools, and it
 # cannot be the wrong half of the day the way "2:35" can.

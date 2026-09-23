@@ -193,6 +193,14 @@ phrases = ["apa saja perintahnya", "perintah apa saja", "bantuan", "aku bisa bil
 [commands.reload_commands]
 phrases = ["muat ulang perintah", "reload perintah"]
 
+# Perkenalan singkat, buat penonton yang baru masuk.
+#
+# Kalimatnya ada di locales/id.toml, di bawah [hello]. Kalau mau ganti kata-
+# katanya, salin bagian itu ke berkas locales/id.toml di folder MikkiLens --
+# yang di sana menang atas bawaannya.
+[commands.say_hello]
+phrases = ["katakan halo", "bilang halo", "sapa penonton", "perkenalkan dirimu", "kenalan dong"]
+
 # ----------------------------------------------------------------- musik ----
 
 # Mencari lagu di YouTube, lalu memutarnya.

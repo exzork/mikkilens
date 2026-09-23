@@ -449,6 +449,7 @@ func (e *Engine) registerBuiltinHandlers() {
 	e.router.RegisterAll(obsHandlers(e))
 	e.router.RegisterAll(channelHandlers(e))
 	e.router.RegisterAll(clockHandlers(e))
+	e.router.RegisterAll(helloHandlers(e))
 	e.router.RegisterAll(searchHandlers(e))
 	e.router.RegisterAll(musicHandlers(e))
 	e.router.RegisterAll(musicPlaybackHandlers(e))

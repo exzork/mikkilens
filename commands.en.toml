@@ -192,6 +192,14 @@ phrases = ["what can i say", "list my commands", "help me", "what are my command
 [commands.reload_commands]
 phrases = ["reload my commands", "reload the commands"]
 
+# A short introduction, for viewers who have just arrived.
+#
+# The sentence itself lives in locales/en.toml under [hello]. To reword it,
+# copy that section into a locales/en.toml in your MikkiLens folder -- one
+# there wins over the built-in one.
+[commands.say_hello]
+phrases = ["say hello", "say hi", "introduce yourself", "say hello to everyone"]
+
 # ----------------------------------------------------------------- music ----
 
 # Searching YouTube for a song, then playing what you pick.
