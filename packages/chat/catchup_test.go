@@ -29,6 +29,7 @@ func (b *sayingBus) SayChat(text string, _ bool, onSpoken func(bool)) {
 		onSpoken(true)
 	}
 }
+func (b *sayingBus) PrepareChat(string, bool)           {}
 func (b *sayingBus) Say(text string, _ intent.Priority) { b.said = append(b.said, text) }
 func (b *sayingBus) SayKey(key string, _ intent.Priority, _ ...i18n.Args) {
 	b.said = append(b.said, key)

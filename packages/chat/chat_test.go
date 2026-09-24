@@ -2,6 +2,7 @@ package chat_test
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +28,7 @@ type fakeBus struct {
 	cleared    []intent.Priority
 	interrupts int
 	hurry      float32
+	prepared   []string
 }
 
 func newFakeBus() *fakeBus { return &fakeBus{locale: i18n.Load("id")} }
@@ -38,6 +40,12 @@ func (b *fakeBus) SayChat(text string, _ bool, onSpoken func(bool)) {
 	if onSpoken != nil {
 		onSpoken(true)
 	}
+}
+
+func (b *fakeBus) PrepareChat(text string, _ bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.prepared = append(b.prepared, text)
 }
 
 func (b *fakeBus) Say(text string, _ intent.Priority) {
@@ -87,6 +95,12 @@ func (b *fakeBus) clearOther() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.otherSaid = nil
+}
+
+func (b *fakeBus) preparedTexts() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]string(nil), b.prepared...)
 }
 
 func (b *fakeBus) clearedPriorities() []intent.Priority {
@@ -302,6 +316,26 @@ func TestResumeReadsTheWholeBacklogInOrder(t *testing.T) {
 	}
 	if reader.Backlog() != 0 {
 		t.Errorf("backlog = %d", reader.Backlog())
+	}
+}
+
+// The reader tells the bus what it will most likely read next, so the voice
+// can be rendered while the line before it is heard. The guess has to be
+// exactly the sentence that is later said -- anything else is rendered for
+// nothing -- and making it must not use up the message.
+func TestTheNextMessageIsAnnouncedAheadWithoutBeingTaken(t *testing.T) {
+	ingest, bus, reader := setup(t)
+	reader.Start(true)
+	reader.Pause()
+	ingest.Accept([]chat.Message{message(1), message(2), message(3)})
+	reader.Notify()
+	time.Sleep(200 * time.Millisecond)
+	reader.Resume()
+
+	waitFor(t, "the backlog to be read", func() bool { return len(bus.chat()) == 3 })
+	said, prepared := bus.chat(), bus.preparedTexts()
+	if !reflect.DeepEqual(prepared, said[1:]) {
+		t.Errorf("prepared %q, want exactly what was said after the first: %q", prepared, said[1:])
 	}
 }
 

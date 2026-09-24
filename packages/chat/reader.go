@@ -37,6 +37,12 @@ const minGap = 500 * time.Millisecond
 // Bus is the part of the speech bus the reader needs.
 type Bus interface {
 	SayChat(text string, paid bool, onSpoken func(bool))
+
+	// PrepareChat says which message is likely to be read next, so its voice
+	// can be rendered while the one before it is still being heard. It queues
+	// nothing; the message is still said with SayChat when its turn comes.
+	PrepareChat(text string, paid bool)
+
 	Say(text string, priority intent.Priority)
 	SayKey(key string, priority intent.Priority, args ...i18n.Args)
 	Clear(priority intent.Priority) int
@@ -521,26 +527,54 @@ func (r *Reader) next() (Message, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	pending, total := r.ingest.From(r.cursor)
-	if r.cursor >= total || len(pending) == 0 {
+	message, offset, jumped, ok := r.upcomingLocked()
+	if !ok {
 		return Message{}, false
 	}
-
-	if r.settings.ReadSuperchatsFirst {
-		for offset, message := range pending {
-			if !message.IsSuperchat {
-				continue
-			}
-			// Pull it out of the queue without disturbing the rest, so the
-			// ordinary messages behind it keep their place.
-			r.ingest.Remove(r.cursor + offset)
-			return message, true
-		}
+	if jumped {
+		// Pull it out of the queue without disturbing the rest, so the
+		// ordinary messages behind it keep their place.
+		r.ingest.Remove(r.cursor + offset)
+		return message, true
 	}
-
-	message := pending[0]
 	r.cursor++
 	return message, true
+}
+
+// upcomingLocked finds the message next would take, without taking it: where
+// it sits past the cursor, and whether it was chosen out of order because it
+// is a super chat.
+func (r *Reader) upcomingLocked() (message Message, offset int, jumped, ok bool) {
+	pending, total := r.ingest.From(r.cursor)
+	if r.cursor >= total || len(pending) == 0 {
+		return Message{}, 0, false, false
+	}
+	if r.settings.ReadSuperchatsFirst {
+		for offset, message := range pending {
+			if message.IsSuperchat {
+				return message, offset, true, true
+			}
+		}
+	}
+	return pending[0], 0, false, true
+}
+
+// prepareNext tells the bus which message will most likely be read after the
+// one being read now, and reports whether there was one to tell it about.
+//
+// Only a guess: a super chat can arrive in front of it, catching up can drop
+// it, a pause can come first. Nothing moves the cursor here, so a wrong guess
+// costs a rendering the bus throws away and never a message.
+func (r *Reader) prepareNext() bool {
+	r.mu.Lock()
+	message, _, _, ok := r.upcomingLocked()
+	r.mu.Unlock()
+
+	if !ok || !r.shouldRead(message) {
+		return false
+	}
+	r.bus.PrepareChat(r.Render(message), message.IsPaid())
+	return true
 }
 
 func (r *Reader) run(stop <-chan struct{}, done chan struct{}) {
@@ -608,7 +642,8 @@ func (r *Reader) run(stop <-chan struct{}, done chan struct{}) {
 		r.reportBacklog()
 
 		// Wait for it to finish, so messages cannot pile up faster than they
-		// can be heard, but stay responsive to a pause.
+		// can be heard, but stay responsive to a pause. The next one is
+		// rendered meanwhile, if it has arrived by then.
 		if r.waitSpoken(spoken, stop) {
 			return
 		}
@@ -618,10 +653,15 @@ func (r *Reader) run(stop <-chan struct{}, done chan struct{}) {
 
 // waitSpoken blocks until the message has been read, the reader is paused, or
 // the reader stops. It reports whether the reader is shutting down.
+//
+// It also tells the bus what comes next, as soon as there is something: at
+// once if the next message is already waiting, or on the first tick after it
+// arrives if it was said while this one was being read.
 func (r *Reader) waitSpoken(spoken <-chan struct{}, stop <-chan struct{}) bool {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
+	prepared := r.prepareNext()
 	for {
 		select {
 		case <-spoken:
@@ -631,6 +671,9 @@ func (r *Reader) waitSpoken(spoken <-chan struct{}, stop <-chan struct{}) bool {
 		case <-ticker.C:
 			if !r.Playing() {
 				return false
+			}
+			if !prepared {
+				prepared = r.prepareNext()
 			}
 		}
 	}

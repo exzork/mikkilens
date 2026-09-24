@@ -670,8 +670,10 @@ func (e *Engine) decodeTokens(ctx context.Context, built *prompt,
 	schedule := unmaskSchedule(steps, Codebooks*frames)
 	scores := make([]float64, Codebooks*frames)
 	predicted := make([]int32, Codebooks*frames)
-	withText := make([]float32, AudioVocab)
-	without := make([]float32, AudioVocab)
+	scratches := make([]*scratch, scoringWorkers)
+	for index := range scratches {
+		scratches[index] = newScratch()
+	}
 
 	for step := 0; step < steps; step++ {
 		settling := schedule[step]
@@ -697,9 +699,9 @@ func (e *Engine) decodeTokens(ctx context.Context, built *prompt,
 			return nil, err
 		}
 
-		for row := 0; row < Codebooks; row++ {
-			for column := 0; column < frames; column++ {
-				at := row*frames + column
+		score := func(from, to int, work *scratch) {
+			for at := from; at < to; at++ {
+				row, column := at/frames, at%frames
 				if tokens[row][column] != MaskID {
 					// Already decided. Nothing reopens a decision; that is
 					// what makes this terminate.
@@ -709,10 +711,10 @@ func (e *Engine) decodeTokens(ctx context.Context, built *prompt,
 
 				// The conditioned pass returns logits for the whole sequence,
 				// and only its tail is about the audio being made.
-				conditioned.at(row, built.targetAt+column, withText)
-				unconditioned.at(row, column, without)
+				conditioned.at(row, built.targetAt+column, work.withText)
+				unconditioned.at(row, column, work.without)
 
-				code, confidence := choose(withText, without, guidance)
+				code, confidence := choose(work, guidance)
 				predicted[at] = code
 
 				// Settle the coarse codebooks before the corrections to them,
@@ -725,6 +727,21 @@ func (e *Engine) decodeTokens(ctx context.Context, built *prompt,
 				scores[at] = confidence
 			}
 		}
+
+		// Split into contiguous runs, one per worker. Every slot is written by
+		// exactly one of them and read only after all have finished, so there
+		// is nothing to lock.
+		var scoring sync.WaitGroup
+		total := Codebooks * frames
+		for worker, work := range scratches {
+			from, to := total*worker/len(scratches), total*(worker+1)/len(scratches)
+			scoring.Add(1)
+			go func() {
+				defer scoring.Done()
+				score(from, to, work)
+			}()
+		}
+		scoring.Wait()
 
 		for _, at := range highest(scores, settling) {
 			tokens[at/frames][at%frames] = predicted[at]
@@ -786,12 +803,14 @@ func unmaskSchedule(steps, total int) []int {
 // contributed and leaves whatever the model would have done anyway behind.
 // Everything is in log space, and the mask token is ruled out afterwards
 // rather than before -- it takes part in the normalisation, it just cannot win.
-func choose(conditioned, unconditioned []float32, guidance float32) (int32, float64) {
-	combined := chooseScratch
-	logSoftmaxInto(conditioned, combined)
-	logSoftmaxInto(unconditioned, guidanceScratch)
+//
+// The two sets of logits are read from work.withText and work.without.
+func choose(work *scratch, guidance float32) (int32, float64) {
+	combined, without := work.combined, work.guidance
+	logSoftmaxInto(work.withText, combined)
+	logSoftmaxInto(work.without, without)
 	for index := range combined {
-		combined[index] += float64(guidance) * (combined[index] - guidanceScratch[index])
+		combined[index] += float64(guidance) * (combined[index] - without[index])
 	}
 	normalizeLog(combined)
 	combined[MaskID] = math.Inf(-1)
@@ -809,14 +828,33 @@ func choose(conditioned, unconditioned []float32, guidance float32) (int32, floa
 	return int32(bestAt), best
 }
 
-// The two buffers choose works in. It is called once per undecided slot per
-// step -- tens of thousands of times for one sentence -- and the engine holds
-// a lock across the whole utterance, so reusing them is safe and is the
-// difference between a few megabytes of garbage per sentence and none.
-var (
-	chooseScratch   = make([]float64, AudioVocab)
-	guidanceScratch = make([]float64, AudioVocab)
-)
+// scratch is the buffers one scoring worker works in. choose is called once
+// per undecided slot per step -- tens of thousands of times for one sentence --
+// so reusing them is the difference between a few megabytes of garbage per
+// sentence and none. One set per worker, because the workers run at once.
+type scratch struct {
+	withText, without  []float32
+	combined, guidance []float64
+}
+
+func newScratch() *scratch {
+	return &scratch{
+		withText: make([]float32, AudioVocab),
+		without:  make([]float32, AudioVocab),
+		combined: make([]float64, AudioVocab),
+		guidance: make([]float64, AudioVocab),
+	}
+}
+
+// scoringWorkers is how many cores read the logits after each pass.
+//
+// Scoring is the processor's share of every step: two softmaxes over 1025
+// codes for each of the several hundred undecided slots, which on one core was
+// about a quarter of the whole sentence -- as long as both passes on the card
+// put together. Four is the same number the model is allowed when it falls
+// back to the processor, and the work comes in bursts of a few milliseconds
+// per step rather than as a sustained load the game or the encoder would feel.
+const scoringWorkers = 4
 
 // sampleTopK picks among the most likely tenth rather than taking the best.
 //

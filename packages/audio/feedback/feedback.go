@@ -148,6 +148,24 @@ type Bus struct {
 	// the trigger, and it comes back through the microphone like anyone else
 	// saying it.
 	onSpeaking func(bool)
+
+	// synthesizing is whether the worker is rendering right now, and upcoming
+	// is a chat message waiting for it to finish so its own rendering can
+	// start. ahead is that rendering once it has started. See PrepareChat.
+	synthesizing bool
+	upcoming     *Utterance
+	ahead        *rendering
+}
+
+// rendering is one utterance being synthesized ahead of being asked for.
+type rendering struct {
+	text    string
+	options tts.Options
+	cancel  context.CancelFunc
+
+	done  chan struct{} // closed once audio and err are set
+	audio tts.Audio
+	err   error
 }
 
 // OnSpeaking installs the hook. Nil removes it.
@@ -211,6 +229,11 @@ func (b *Bus) Stop() {
 	}
 	b.running = false
 	b.queue = nil
+	b.upcoming = nil
+	if b.ahead != nil {
+		b.ahead.cancel()
+		b.ahead = nil
+	}
 	close(b.stopping)
 	b.markIdleLocked()
 	b.cond.Broadcast()
@@ -316,6 +339,12 @@ func (b *Bus) SayDonation(text string, onSpoken func(bool)) {
 // Super chats keep theirs. They are rare, and someone paying to be heard is
 // worth distinguishing from the stream of ordinary messages.
 func (b *Bus) SayChat(text string, paid bool, onSpoken func(bool)) {
+	b.Enqueue(b.chatUtterance(text, paid, onSpoken))
+}
+
+// chatUtterance is what SayChat queues, built apart from queueing it so that
+// PrepareChat renders exactly the same thing.
+func (b *Bus) chatUtterance(text string, paid bool, onSpoken func(bool)) Utterance {
 	settings, locale := b.Config(), b.Locale()
 
 	priority, earcon := Chat, ""
@@ -329,7 +358,7 @@ func (b *Bus) SayChat(text string, paid bool, onSpoken func(bool)) {
 		priority, earcon = Donation, "superchat"
 	}
 
-	b.Enqueue(Utterance{
+	return Utterance{
 		Text:                 text,
 		Priority:             priority,
 		Earcon:               earcon,
@@ -338,7 +367,123 @@ func (b *Bus) SayChat(text string, paid bool, onSpoken func(bool)) {
 		Volume:               At(settings.Speech.ChatVolume),
 		RequeueIfInterrupted: true,
 		OnSpoken:             onSpoken,
-	})
+	}
+}
+
+// PrepareChat renders the chat message the reader expects to read next, while
+// the one before it is still being heard.
+//
+// Chat is read one message at a time, and until now each one was rendered
+// only once the one before it had finished: the whole of the voice's work was
+// heard as silence between two people. OmniVoice on a card that is also
+// running a game and an encoder takes a second or more for a line, which is
+// longer than the gap itself. Rendering the next line while this one plays
+// puts that second where nobody hears it.
+//
+// It is a hint, not a promise, and nothing is queued by it. The reader still
+// says the message with SayChat when its turn comes; if the text matches, the
+// audio is already there. If it does not -- the message was skipped, muted,
+// or overtaken by a super chat -- the rendering is thrown away and the only
+// cost was work the card did while the voice was talking anyway.
+//
+// One message of lookahead and no more. A second would be a second render
+// competing with the first for the same card, and chat that moves on makes
+// every message after the next one a guess.
+func (b *Bus) PrepareChat(text string, paid bool) {
+	utterance := b.chatUtterance(text, paid, nil)
+	if trimmed := trimSpace(utterance.Text); trimmed == "" {
+		return
+	} else {
+		utterance.Text = trimmed
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.running {
+		return
+	}
+	if b.ahead != nil && b.ahead.text == unmention(utterance.Text) {
+		return // already under way
+	}
+	if b.synthesizing || len(b.queue) > 0 {
+		// Waits for the worker to render what is in front of it. Starting now
+		// would have the two take turns on the same card, and delay the line
+		// that is about to be heard for the sake of one that is not. The
+		// reader asks the moment it has queued a line, which is usually before
+		// the worker has even picked that line up -- so something still queued
+		// counts as busy too.
+		b.upcoming = &utterance
+		return
+	}
+	b.startAheadLocked(utterance)
+}
+
+// startAheadLocked begins rendering one utterance in the background,
+// replacing any rendering already under way.
+func (b *Bus) startAheadLocked(utterance Utterance) {
+	if b.ahead != nil {
+		b.ahead.cancel()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), synthesisTimeout)
+	started := &rendering{
+		text:    unmention(utterance.Text),
+		options: optionsFor(utterance, b.settings, b.locale),
+		cancel:  cancel,
+		done:    make(chan struct{}),
+	}
+	b.ahead = started
+
+	go func() {
+		defer cancel()
+		started.audio, started.err = b.synthesize(ctx, started.text, started.options)
+		close(started.done)
+	}()
+}
+
+// takeAhead hands over the rendering made ahead of time for this text, or nil
+// when there is none that fits. A rendering that does not fit is cancelled:
+// whatever it was for is not what is being said next.
+func (b *Bus) takeAhead(text string, options tts.Options) *rendering {
+	b.mu.Lock()
+	prepared := b.ahead
+	b.ahead = nil
+	b.mu.Unlock()
+
+	if prepared == nil {
+		return nil
+	}
+	if prepared.text != text || !sameRendering(prepared.options, options) {
+		select {
+		case <-prepared.done:
+			// Finished, so keeping it costs nothing, and the line it is for
+			// may well come next anyway -- an error said in between a chat
+			// line and the next is not a reason to render the next one twice.
+			b.mu.Lock()
+			if b.ahead == nil {
+				b.ahead = prepared
+			}
+			b.mu.Unlock()
+		default:
+			// Still running, and in the way of what is wanted now.
+			prepared.cancel()
+		}
+		return nil
+	}
+	return prepared
+}
+
+// sameRendering reports whether audio rendered with one set of options can be
+// played for another.
+//
+// The rate is left out. Chat is hurried by how far behind it is, which moves a
+// few percent with every message that arrives, so it is almost never the same
+// between the moment a line is prepared and the moment it is read. Hearing one
+// line at the rate chosen a message earlier is not something anybody can
+// notice; rendering it again from the start because of that would throw away
+// the whole reason for preparing it.
+func sameRendering(prepared, wanted tts.Options) bool {
+	prepared.Rate, wanted.Rate = "", ""
+	return prepared == wanted
 }
 
 // Enqueue adds an utterance, preempting anything less important that is
@@ -769,6 +914,7 @@ func (b *Bus) run() {
 		entry := heap.Pop(&b.queue).(queued)
 		utterance := entry.what
 		b.current = &utterance
+		b.synthesizing = true // cleared by render; see there
 		// Taken under the same lock that a clearing would need, so a group
 		// cleared from here on is one this utterance can see.
 		wanted := b.calledOff[utterance.Group]
@@ -794,9 +940,11 @@ func (b *Bus) run() {
 	}
 }
 
-func (b *Bus) speak(utterance Utterance, wanted int) bool {
-	settings, locale := b.Config(), b.Locale()
+// synthesisTimeout is the longest one utterance is given to become audio.
+const synthesisTimeout = 60 * time.Second
 
+// optionsFor is how one utterance is to be rendered under the given settings.
+func optionsFor(utterance Utterance, settings config.Config, locale *i18n.Locale) tts.Options {
 	voice := utterance.Voice
 	if voice == "" {
 		voice = settings.Voice(locale.DefaultVoice())
@@ -805,24 +953,11 @@ func (b *Bus) speak(utterance Utterance, wanted int) bool {
 	if rate == "" {
 		rate = settings.Speech.Rate
 	}
-	volume := settings.Speech.Volume
-	if utterance.Volume != nil {
-		volume = *utterance.Volume
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	started := time.Now()
 	engine := utterance.Engine
 	if engine == "" {
 		engine = settings.Speech.Engine
 	}
-
-	// unmention, not utterance.Text: the "@" in front of a name is punctuation
-	// the voice should not read. Everything that keeps a record of this --
-	// the history, the callbacks -- keeps the original.
-	audio, err := b.synthesize(ctx, unmention(utterance.Text), tts.Options{
+	return tts.Options{
 		Engine: engine,
 		Voice:  voice,
 		Rate:   rate,
@@ -835,8 +970,29 @@ func (b *Bus) speak(utterance Utterance, wanted int) bool {
 		OnlineVoice: locale.DefaultVoice(),
 
 		NoCache: utterance.Priority == Chat || utterance.Priority == Donation,
-	})
-	logTiming(utterance, engine, voice, started, audio, err)
+	}
+}
+
+func (b *Bus) speak(utterance Utterance, wanted int) bool {
+	settings, locale := b.Config(), b.Locale()
+
+	volume := settings.Speech.Volume
+	if utterance.Volume != nil {
+		volume = *utterance.Volume
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), synthesisTimeout)
+	defer cancel()
+
+	// unmention, not utterance.Text: the "@" in front of a name is punctuation
+	// the voice should not read. Everything that keeps a record of this --
+	// the history, the callbacks -- keeps the original.
+	text := unmention(utterance.Text)
+	options := optionsFor(utterance, settings, locale)
+
+	started := time.Now()
+	audio, prepared, err := b.render(ctx, text, options)
+	logTiming(utterance, options.Engine, options.Voice, started, audio, prepared, err)
 	if err != nil {
 		slog.Error("could not synthesize speech", "text", clip(utterance.Text, 60), "error", err)
 		b.Earcon("error")
@@ -888,6 +1044,45 @@ func (b *Bus) speak(utterance Utterance, wanted int) bool {
 	return completed
 }
 
+// render is the audio for one utterance: the rendering PrepareChat started, if
+// it was for this, and otherwise a fresh one. It reports which.
+//
+// Either way the line after this one is started the moment this one is
+// rendered, if the reader has said what it will be: from here until the end
+// of playback, the card has nothing else to do.
+//
+// The worker marks itself as synthesizing when it takes the utterance off the
+// queue, not here, so that PrepareChat never sees the gap between the two as a
+// moment when nothing is being rendered.
+func (b *Bus) render(ctx context.Context, text string, options tts.Options) (tts.Audio, bool, error) {
+	defer func() {
+		b.mu.Lock()
+		b.synthesizing = false
+		if next := b.upcoming; next != nil && b.running {
+			b.upcoming = nil
+			b.startAheadLocked(*next)
+		}
+		b.mu.Unlock()
+	}()
+
+	if prepared := b.takeAhead(text, options); prepared != nil {
+		select {
+		case <-prepared.done:
+			if prepared.err == nil {
+				return prepared.audio, true, nil
+			}
+			// Failed or ran out of time on its own. Worth one more try now
+			// that it is actually wanted, rather than an error for a line the
+			// voice may well be able to say.
+		case <-ctx.Done():
+			prepared.cancel()
+			return tts.Audio{}, true, ctx.Err()
+		}
+	}
+	audio, err := b.synthesize(ctx, text, options)
+	return audio, false, err
+}
+
 // logTiming writes how long one sentence took to become sound, for the engine
 // log on the Catatan page.
 //
@@ -895,8 +1090,11 @@ func (b *Bus) speak(utterance Utterance, wanted int) bool {
 // itself, and rtf how that compares to the length of what came out: under one
 // is faster than speaking, and a chat voice drifting towards one is a voice
 // that cannot keep up with chat. A sentence that came back from the cache
-// shows as a synth of a few milliseconds, which is itself worth seeing.
-func logTiming(utterance Utterance, engine, voice string, started time.Time, audio tts.Audio, err error) {
+// shows as a synth of a few milliseconds, which is itself worth seeing. So
+// does one rendered ahead by PrepareChat, and ahead says which it was: synth is
+// then only what was still left to wait for.
+func logTiming(utterance Utterance, engine, voice string, started time.Time,
+	audio tts.Audio, ahead bool, err error) {
 	synth := time.Since(started)
 	queued := time.Duration(0)
 	if !utterance.created.IsZero() {
@@ -908,6 +1106,9 @@ func logTiming(utterance Utterance, engine, voice string, started time.Time, aud
 		"chars", len([]rune(utterance.Text)),
 		"queued_ms", queued.Milliseconds(),
 		"synth_ms", synth.Milliseconds(),
+	}
+	if ahead {
+		fields = append(fields, "ahead", true)
 	}
 	if err == nil {
 		seconds := audio.Duration()
