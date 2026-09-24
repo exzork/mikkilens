@@ -35,9 +35,10 @@
 //	a wav file somebody recorded, and the model's own quality depends far
 //	more on that recording than on anything in this file.
 //
-// What it costs: about two gigabytes on disk for the models, about another
-// gigabyte for the graphics runtime, and about 1.4 GB resident once the
-// language model and the decoder are open. Nothing here loads until something
+// What it costs: about two gigabytes on disk for the models, about two more for
+// the graphics runtime and cuDNN, and about 1.4 GB resident once the language
+// model and the decoder are open -- on a card, about 1.8 GB of its memory, of
+// which the decoder is 0.4. Nothing here loads until something
 // asks it to speak, and switching away unloads -- the same rules Supertonic
 // plays by, for the same reason, only more so.
 package omnivoice
@@ -46,6 +47,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -389,16 +391,23 @@ func Open() (*Engine, error) {
 		return nil, err
 	}
 
-	// The decoder stays on the processor even when the card took the language
-	// model, and that is the whole point rather than an oversight.
+	// The decoder goes to the card too when cuDNN is there to run its
+	// convolutions, and stays on the processor when it is not.
 	//
-	// It runs once per sentence against the language model's thirty-two passes,
-	// so it is a rounding error in the total either way. What it is not a
-	// rounding error in is the download: it is the only graph here with
-	// convolutions in it, convolutions on the card need cuDNN, and cuDNN is
-	// about a gigabyte of libraries that nothing else in MikkiLens would ever
-	// load. Paying a fraction of a second per sentence to not ship that is an
-	// easy trade on a machine that is also streaming.
+	// It was left on the processor at first on the belief that it was a
+	// rounding error -- one run per line against the language model's dozens.
+	// Measured, it was the largest single part of every line: 0.6 s for four
+	// seconds of speech and 1.5 s for ten, against 10-30 ms on the card.
+	if accelerated && onnx.CuDNNInstalled() {
+		if engine.decoder, err = openCardDecoder(); err == nil {
+			return engine, nil
+		}
+		// A card that took the language model and then refused the decoder
+		// is worth knowing about, and not worth losing the voice over.
+		slog.Warn("the audio decoder could not use the graphics card; "+
+			"using the processor", "reason", err)
+	}
+
 	processor, err := onnx.Options(2)
 	if err != nil {
 		engine.Close()
@@ -412,6 +421,47 @@ func Open() (*Engine, error) {
 		return nil, err
 	}
 	return engine, nil
+}
+
+// openCardDecoder loads the decoder onto the graphics card and runs it once.
+//
+// The run is not a formality. cuDNN loads most of itself, and chooses how to
+// do each convolution, the first time one is asked for: about a quarter of a
+// second on a card it has kernels for, and on a card newer than its kernels,
+// half a minute of compiling -- once, cached by the driver after that. Paid
+// here, it is part of the load she already waits for rather than a pause
+// before the first chat message of a stream. It is also where a cuDNN that
+// is present but broken says so, while there is still a processor to fall
+// back to.
+func openCardDecoder() (*ort.DynamicAdvancedSession, error) {
+	options, _, err := onnx.Accelerated(2, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer options.Destroy()
+
+	decoder, err := load(options, "audio_decoder.onnx",
+		[]string{"audio_codes"}, []string{"audio_values"})
+	if err != nil {
+		return nil, err
+	}
+
+	const warmFrames = FrameRate // one second of silence's worth of codes
+	codes, err := ort.NewTensor(ort.NewShape(1, Codebooks, warmFrames),
+		make([]int32, Codebooks*warmFrames))
+	if err != nil {
+		_ = decoder.Destroy()
+		return nil, err
+	}
+	defer codes.Destroy()
+
+	outputs := []ort.Value{nil}
+	if err := decoder.Run([]ort.Value{codes}, outputs); err != nil {
+		_ = decoder.Destroy()
+		return nil, err
+	}
+	_ = outputs[0].Destroy()
+	return decoder, nil
 }
 
 func load(options *ort.SessionOptions, file string,

@@ -116,6 +116,33 @@ func Found() error {
 // Supertonic nothing.
 func CUDADir() string { return filepath.Join(paths.ModelsDir(), "cuda") }
 
+// cudnnLibraries are the parts of cuDNN a graph of convolutions loads. cuDNN
+// opens most of them only when the first convolution runs, so a download that
+// stopped halfway does not fail when a session is created -- it fails in the
+// middle of a sentence. Checking every one of them first is what keeps that
+// from happening.
+var cudnnLibraries = []string{
+	"cudnn64_9.dll",
+	"cudnn_cnn64_9.dll",
+	"cudnn_engines_precompiled64_9.dll",
+	"cudnn_engines_runtime_compiled64_9.dll",
+	"cudnn_graph64_9.dll",
+	"cudnn_heuristic64_9.dll",
+	"cudnn_ops64_9.dll",
+}
+
+// CuDNNInstalled reports whether cuDNN is beside the graphics runtime, which is
+// what decides whether a model with convolutions can be given to the card.
+func CuDNNInstalled() bool {
+	for _, name := range cudnnLibraries {
+		info, err := os.Stat(filepath.Join(CUDADir(), name))
+		if err != nil || info.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
 func findLibrary() (string, error) {
 	names := []string{"onnxruntime.dll", "libonnxruntime.so", "libonnxruntime.dylib"}
 	directories := []string{

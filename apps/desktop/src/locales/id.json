@@ -76,6 +76,7 @@
   "install.stage.gpu": "versi kartu grafis",
   "install.stage.omnivoice": "OmniVoice",
   "install.stage.cuda": "runtime kartu grafis",
+  "install.stage.cudnn": "pustaka audio kartu grafis",
   "label.sttBackend": "Pengenalan suara",
   "label.wakeModel": "Kata pemicu",
   "label.hotkey": "Tombol pintasan",

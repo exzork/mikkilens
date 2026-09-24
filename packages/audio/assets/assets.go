@@ -105,6 +105,7 @@ func init() {
 	// only alongside OmniVoice, and only on a machine with a card to use it.
 	// Summed from the four downloads rather than written out; see cudaBytes.
 	Bytes[StageCUDA] = cudaBytes()
+	Bytes[StageCuDNN] = cudnnFile.bytes
 }
 
 // modelsDir is where everything lands. A variable so tests can contain it.

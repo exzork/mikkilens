@@ -76,6 +76,7 @@
   "install.stage.gpu": "graphics card build",
   "install.stage.omnivoice": "OmniVoice",
   "install.stage.cuda": "graphics card runtime",
+  "install.stage.cudnn": "graphics card audio library",
   "label.sttBackend": "Speech recognition",
   "label.wakeModel": "Wake word",
   "label.hotkey": "Hotkey",

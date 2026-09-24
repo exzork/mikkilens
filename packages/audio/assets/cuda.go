@@ -31,11 +31,8 @@ const StageCUDA Stage = "cuda"
 // falls back to the processor, and the only symptom is that every sentence
 // suddenly takes half a minute.
 //
-// cuDNN is deliberately absent, and is the reason the audio decoder stays on
-// the processor. It is another gigabyte of libraries, and the only thing in
-// this application that would load it is that one graph's convolutions, which
-// run once per sentence against the language model's thirty-two passes. See
-// the note in omnivoice.Open.
+// cuDNN is not among them: it is a stage of its own, StageCuDNN, so that a
+// machine which already has all of this fetches only that.
 var cudaFiles = []struct {
 	url   string
 	as    string
@@ -107,6 +104,10 @@ func wantedFromCUDALibrary(name string) bool {
 // voice, because nothing else would use this. There has to be an NVIDIA driver,
 // because without one this is a gigabyte that will never be loaded. And it has
 // to not already be here.
+//
+// cuDNN is asked after separately. Somebody who installed OmniVoice before it
+// was part of this has the rest already, and should be asked for the one piece
+// that is new rather than the whole gigabyte again.
 func MissingCUDA(engine string) Wanted {
 	if engine != "omnivoice" || runtime.GOOS != "windows" {
 		return Wanted{}
@@ -114,10 +115,20 @@ func MissingCUDA(engine string) Wanted {
 	if !graphicsDriver() {
 		return Wanted{}
 	}
-	if cudaInstalled() {
-		return Wanted{}
+	var wanted Wanted
+	for _, stage := range []struct {
+		stage     Stage
+		installed func() bool
+	}{
+		{StageCUDA, cudaInstalled},
+		{StageCuDNN, cudnnInstalled},
+	} {
+		if !stage.installed() {
+			wanted.Stages = append(wanted.Stages, stage.stage)
+			wanted.Bytes += Bytes[stage.stage]
+		}
 	}
-	return Wanted{Stages: []Stage{StageCUDA}, Bytes: Bytes[StageCUDA]}
+	return wanted
 }
 
 // cudaInstalled reports whether the graphics runtime is already in place.
@@ -179,4 +190,59 @@ func cudaBytes() int64 {
 		total += file.bytes
 	}
 	return total
+}
+
+// StageCuDNN is NVIDIA's library of convolutions for the card, which is what
+// lets OmniVoice's audio decoder leave the processor.
+//
+// The decoder runs once per line, and on the processor it was the largest
+// single part of every line: about 0.6 s for four seconds of speech and 1.5 s
+// for ten, on a processor the game and the encoder are also using. On the card
+// the same work is 10-30 ms. The language model had moved to the card long
+// before; this was what was left.
+//
+// It was left out at first for its size, and it is still large: a 746 MB
+// download. It is fetched only where the rest of the graphics runtime is, and
+// the decoder simply stays on the processor wherever it is missing.
+const StageCuDNN Stage = "cudnn"
+
+// cudnnFile is the one download: NVIDIA's own wheel, pinned for the same
+// reason the rest are.
+var cudnnFile = struct {
+	url   string
+	as    string
+	bytes int64
+}{
+	url: "https://files.pythonhosted.org/packages/c5/ee/" +
+		"baebebf270df5a57830e40879b4016de47ca43961095cf18b7749452150f/" +
+		"nvidia_cudnn_cu12-9.26.0.51-py3-none-win_amd64.whl",
+	as:    "cudnn.zip",
+	bytes: 746_465_599,
+}
+
+// wantedFromCuDNN keeps every library in the wheel but one. cudnn_adv is the
+// recurrent and attention half of cuDNN, 271 MB that a graph made of
+// convolutions never loads. The precompiled engines look just as optional and
+// are not: without them the first convolution fails outright.
+func wantedFromCuDNN(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasSuffix(lower, ".dll") && !strings.HasPrefix(lower, "cudnn_adv")
+}
+
+// cudnnInstalled reports whether cuDNN is in place, by the same list the
+// voice checks before it trusts the card with the decoder; see
+// onnx.CuDNNInstalled.
+func cudnnInstalled() bool { return onnx.CuDNNInstalled() }
+
+// fetchCuDNN downloads cuDNN into the graphics runtime's directory, where the
+// CUDA provider looks for it.
+func (i *Installer) fetchCuDNN(ctx context.Context, track func(int64, int64, float64)) error {
+	if runtime.GOOS != "windows" {
+		return &Error{Reason: "the graphics runtime is only fetched automatically on Windows"}
+	}
+	if err := i.fetchArchive(ctx, cudnnFile.url, cudnnFile.as,
+		onnx.CUDADir(), wantedFromCuDNN, track); err != nil {
+		return fmt.Errorf("fetching %s: %w", cudnnFile.as, err)
+	}
+	return nil
 }

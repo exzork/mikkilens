@@ -180,6 +180,9 @@ func (i *Installer) fetch(ctx context.Context, stage Stage, modelSize string, on
 
 	case StageCUDA:
 		return i.fetchCUDA(ctx, track)
+
+	case StageCuDNN:
+		return i.fetchCuDNN(ctx, track)
 	}
 	return &Error{Reason: "unknown download stage " + string(stage)}
 }
